@@ -202,3 +202,29 @@ export function useInjectMaddoxReminder(campaignId: string) {
         onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível enviar a lembrança")),
     })
 }
+
+/** Lista do menu "Turnos" (DND-44): só o dono; carregada quando o menu abre. */
+export interface MaddoxRewindTurnsDto {
+    turns: { turnNumber: number; excerpt: string }[]
+    undoTarget: number | null
+    originTurn: number
+    atTurn: number
+}
+
+export function useMaddoxRewindTurns(campaignId: string, enabled: boolean) {
+    return useQuery({
+        queryKey: [...maddoxGameKey(campaignId), "rewind-turns"],
+        queryFn: async () => unwrapApi((await api.get<ApiResponse<MaddoxRewindTurnsDto>>(`${gamePath(campaignId)}/rewind`)).data),
+        enabled,
+        staleTime: 0,
+        retry: false,
+    })
+}
+
+/** Dono leva a mesa ao turno X ("Desfazer turno" e "Voltar ao turno…"). */
+export const useRewindMaddoxTurn = (campaignId: string) =>
+    useGameMutation<number>(campaignId, async (turnNumber) => unwrapApi((await api.post<ApiResponse<MaddoxGameStateDto>>(`${gamePath(campaignId)}/rewind`, { turnNumber })).data), "Não foi possível voltar a mesa", (turnNumber) => `A mesa voltou ao turno ${turnNumber}`)
+
+/** Dono retoma o turno de origem ("Voltar ao turno atual (N)"). */
+export const useResumeMaddoxTurn = (campaignId: string) =>
+    useGameMutation<number>(campaignId, async () => unwrapApi((await api.post<ApiResponse<MaddoxGameStateDto>>(`${gamePath(campaignId)}/rewind/resume`, {})).data), "Não foi possível voltar ao turno atual", (origin) => `A mesa voltou ao turno ${origin}`)

@@ -12,7 +12,8 @@ import { engramindLog, messageOf, publishEngramind } from "./shared"
 /**
  * Rotina das campanhas (cron `engramind-campaign-memories-sync`, 15 min, e "Sincronizar agora"): a rede de
  * cada campanha (categorias e canais), o ciclo de vida dos canais (`archived` arquiva; fora disso, restaura)
- * e a entrega da fila temporária de gravações. Não há espelho: o Engramind é a única fonte das memórias.
+ * a entrega da fila temporária de gravações e os reparos da volta a um turno das campanhas (DND-44). Não há espelho:
+ * o Engramind é a única fonte das memórias.
  */
 
 const sync = globalThis as typeof globalThis & { __engramindCampaignSync?: Promise<string> | null }
@@ -35,6 +36,10 @@ async function run(actorId: string): Promise<string> {
             await syncCampaignChannelLifecycle(input, actorId)
         }
         const queue = await flushPendingWrites()
+        // Volta a um turno (DND-44): memórias que ficaram pela metade e exclusões pendentes da perda definitiva.
+        await import("@/features/maddox/server/rewind")
+            .then(({ processRewindRepairs }) => processRewindRepairs())
+            .catch((error: unknown) => engramindLog.warn({ err: messageOf(error) }, "[engramind] reparos da volta a um turno não processados"))
         const lastResult = { ...queue, channels }
         await EngramindState.updateOne({ _id: ENGRAMIND_STATE_ID }, { $set: { campaignSync: { lastRunAt: startedAt, lastOkAt: new Date(), lastError: null, lastResult } } }, { upsert: true })
         return `${queue.delivered} entregues, ${queue.failed} recusadas, ${queue.remaining} na fila`

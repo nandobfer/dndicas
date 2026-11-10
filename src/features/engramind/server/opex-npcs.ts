@@ -8,6 +8,7 @@ import { clientFor, engramindAppClient, engramindConnection } from "./client"
 import { ensureAgentSubscription, tidyChannel } from "./bootstrap"
 import { globalMemoriesFor, type OpexGlobalMemory, type OpexGlobalMemoryInput } from "./global-memories"
 import { PendingWrite, pendingWriteId } from "./pending-writes"
+import { rewindTags } from "../campaign-memory-format"
 import { AcaoAuditoria, auditEngramind, engramindLog, messageOf } from "./shared"
 
 /**
@@ -149,7 +150,7 @@ interface KeyedMemory {
 }
 
 /** Grava (upsert pela chave) no canal individual; sem token ou com a rede fora, vai para a fila com `agentNpcId`. */
-async function writeKeyed(ref: OpexNpcRef, memories: readonly KeyedMemory[], label: string): Promise<{ saved: number; pending: number }> {
+async function writeKeyed(ref: OpexNpcRef, memories: readonly KeyedMemory[], label: string, turnNumber: number | null): Promise<{ saved: number; pending: number }> {
     let saved = 0
     let pending = 0
     if (!memories.length || !(await engramindConnection().catch(() => null))) return { saved, pending }
@@ -158,7 +159,7 @@ async function writeKeyed(ref: OpexNpcRef, memories: readonly KeyedMemory[], lab
     const { textMaxOf } = await import("./campaign-memories")
     const max = client ? await textMaxOf(client, channel).catch(() => null) : null
     for (const memory of memories) {
-        const body = { channel, key: memory.key, upsert: true, title: memory.title.slice(0, 120), text: max && memory.text.length > max ? memory.text.slice(0, max).trimEnd() : memory.text, tags: ["npc-opex"], origin: { source: "maddox", label } }
+        const body = { channel, key: memory.key, upsert: true, title: memory.title.slice(0, 120), text: max && memory.text.length > max ? memory.text.slice(0, max).trimEnd() : memory.text, tags: ["npc-opex", ...rewindTags(turnNumber)], origin: { source: "maddox", label } }
         try {
             if (!client) throw new Error("Token do NPC Opex indisponível")
             await client.call("POST", "/v1/memories", { body })
@@ -180,17 +181,17 @@ async function writeKeyed(ref: OpexNpcRef, memories: readonly KeyedMemory[], lab
  * Memórias que o agente do NPC (ou o Maddox, fora de cena) decidiu guardar: chave do título (`opex:<título>`, upsert),
  * então o mesmo assunto atualiza em vez de duplicar. Nunca lança.
  */
-export async function saveOpexNpcMemories(ref: OpexNpcRef, memories: readonly OpexNpcMemoryInput[], label = ref.npcName || "NPC Opex"): Promise<{ saved: number; pending: number }> {
+export async function saveOpexNpcMemories(ref: OpexNpcRef, memories: readonly OpexNpcMemoryInput[], label = ref.npcName || "NPC Opex", turnNumber: number | null = null): Promise<{ saved: number; pending: number }> {
     const keyed = memories.map((memory) => ({ key: opexNpcMemoryKey(memory.title), title: memory.title, text: memory.text })).filter((memory) => memory.key !== "opex:" && memory.text.trim())
-    return writeKeyed(ref, keyed, label)
+    return writeKeyed(ref, keyed, label, turnNumber)
 }
 
 /** Memória inicial na promoção: a descrição pública ("Quem eu sou") e as notas do mestre ("Meus segredos"), se houver. */
-export async function seedOpexNpcInitialMemories(ref: OpexNpcRef, input: { publicDescription: string; masterNotes: string }): Promise<{ saved: number; pending: number }> {
+export async function seedOpexNpcInitialMemories(ref: OpexNpcRef, input: { publicDescription: string; masterNotes: string }, turnNumber: number | null = null): Promise<{ saved: number; pending: number }> {
     const memories: KeyedMemory[] = []
     if (input.publicDescription.trim()) memories.push({ key: OPEX_NPC_INITIAL_KEYS.description, title: "Quem eu sou", text: input.publicDescription.trim() })
     if (input.masterNotes.trim()) memories.push({ key: OPEX_NPC_INITIAL_KEYS.secrets, title: "Meus segredos", text: input.masterNotes.trim() })
-    return writeKeyed(ref, memories, "Promoção a NPC Opex")
+    return writeKeyed(ref, memories, "Promoção a NPC Opex", turnNumber)
 }
 
 /** NPC desfeito (ou morto): arquiva o canal individual, desativa o agente e revoga o token. Nunca lança. */

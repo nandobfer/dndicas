@@ -16,6 +16,7 @@ import {
     type MaddoxTurnPhase,
 } from "../constants"
 import type { CombatPrepChange, IMaddoxCombatAction, IMaddoxCombatReaction, IMaddoxCombatRoll } from "../combat-types"
+import { applyDiscardFilter, type IMaddoxDiscardMark } from "./discard-filter"
 
 /**
  * Teste pedido pelo Maddox (Maddox 5) para o personagem da mensagem (`memberId`/`characterId`). A CD é sempre gravada
@@ -120,6 +121,10 @@ export interface IMaddoxCampaignMessage {
      * `content` fica vazio (fora da transcrição do narrador e do Diário).
      */
     combatPrep: { combatId: Types.ObjectId; actorKey: string; characterName: string; changes: CombatPrepChange[] } | null
+    /** Linha de aviso da volta a um turno (DND-44, `kind: "rewind"`): ida ao turno X ou retomada do turno N. */
+    rewindNotice?: { event: "goto" | "resume"; turnNumber: number; originTurn: number } | null
+    /** Descartada por uma volta pendente (DND-44): some de todas as leituras (`discard-filter.ts`). */
+    discardedBy?: IMaddoxDiscardMark | null
     createdAt: Date
     updatedAt: Date
 }
@@ -179,6 +184,7 @@ const MaddoxCampaignMessageSchema = new Schema<IMaddoxCampaignMessage>(
         combatTurn: { type: Boolean, default: false },
         reminder: { type: Schema.Types.Mixed, default: null },
         combatPrep: { type: Schema.Types.Mixed, default: null },
+        rewindNotice: { type: new Schema({ event: { type: String, enum: ["goto", "resume"], required: true }, turnNumber: Number, originTurn: Number }, { _id: false }), default: null },
         actionOptions: {
             type: [
                 new Schema<IMaddoxActionOptions>(
@@ -209,6 +215,8 @@ const MaddoxCampaignMessageSchema = new Schema<IMaddoxCampaignMessage>(
     },
     { collection: "maddox_campaign_messages", timestamps: true, versionKey: false },
 )
+
+applyDiscardFilter(MaddoxCampaignMessageSchema)
 
 // Paginação da mesa (mais recentes primeiro, `_id` como cursor).
 MaddoxCampaignMessageSchema.index({ campaignId: 1, _id: -1 })

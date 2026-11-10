@@ -79,6 +79,8 @@ export function opexBannerText(state: Pick<MaddoxGameStateDto, "turn" | "status"
 
 /** Faixa do turno do mestre: narrando, esperando os testes (Maddox 5) ou, depois de uma falha, a espera da nova tentativa. */
 export function masterBannerText(state: Pick<MaddoxGameStateDto, "turn"> & { me?: Pick<MaddoxGameStateDto["me"], "memberId"> }): string {
+    // Volta a um turno em andamento (DND-44): a trava é do dono, não do Maddox.
+    if (state.turn.rewinding) return "O dono está voltando a mesa a outro turno…"
     if (state.turn.awaitingChecks) {
         // Combate tático: as rolagens e reações pendentes contam junto com os testes.
         const waits = [...state.turn.pendingChecks.map((check) => ({ memberId: check.memberId, characterName: check.characterName })), ...(state.turn.pendingCombat ?? []).map((item) => ({ memberId: item.memberId, characterName: item.characterName }))]

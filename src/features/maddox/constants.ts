@@ -274,9 +274,10 @@ export const MADDOX_GAME_CHANGED_EVENT = "maddox.game.changed"
  * mestre (não encerra o turno), a resposta dele, o teste pedido pelo Maddox (`check`, Maddox 5), o card de
  * início/fim de combate (`combat`, Maddox 6) e, no combate tático (Maddox 7), a ação de um combatente (`combat-action`),
  * uma rolagem avulsa (`combat-roll`: iniciativa, salvaguarda, teste contra a morte, concentração, dano) e a janela de
- * reação (`combat-reaction`).
+ * reação (`combat-reaction`). `rewind` (DND-44) é a linha de aviso "O dono voltou a mesa para o turno X" / "O dono retomou o
+ * turno N": nunca é descartada e fica fora da transcrição do narrador, do Opex e da busca do Diário.
  */
-export const MADDOX_GAME_MESSAGE_KINDS = ["narration", "declaration", "pass", "question", "answer", "check", "combat", "combat-action", "combat-roll", "combat-reaction", "reminder", "combat-prep"] as const
+export const MADDOX_GAME_MESSAGE_KINDS = ["narration", "declaration", "pass", "question", "answer", "check", "combat", "combat-action", "combat-roll", "combat-reaction", "reminder", "combat-prep", "rewind"] as const
 export type MaddoxGameMessageKind = (typeof MADDOX_GAME_MESSAGE_KINDS)[number]
 
 /** O que o jogador envia no próprio turno. */
@@ -479,8 +480,11 @@ export const MADDOX_SCENE_IMAGE_AUTO_PORTRAITS_DEF = {
 export const MADDOX_SCENE_IMAGE_SOURCES = ["tool", "combat-end", "manual", "npc-portrait"] as const
 export type MaddoxSceneImageSource = (typeof MADDOX_SCENE_IMAGE_SOURCES)[number]
 
-/** Vaga ocupada: só as automáticas (`auto`) respeitam o intervalo e a regra de uma por turno. */
-export const MADDOX_SCENE_IMAGE_SLOTS = ["auto", "manual", "portrait"] as const
+/**
+ * Vaga ocupada: só as automáticas (`auto`) respeitam o intervalo e a regra de uma por turno. `discarded` (DND-44) é a lápide
+ * da imagem de um trecho perdido de vez ao voltar a um turno: sai da regra de uma por turno e continua no teto diário.
+ */
+export const MADDOX_SCENE_IMAGE_SLOTS = ["auto", "manual", "portrait", "discarded"] as const
 export type MaddoxSceneImageSlot = (typeof MADDOX_SCENE_IMAGE_SLOTS)[number]
 
 export const MADDOX_SCENE_IMAGE_STATUSES = ["pending", "generating", "done", "failed", "skipped"] as const

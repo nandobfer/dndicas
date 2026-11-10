@@ -365,7 +365,7 @@ async function generate(args: GenerateArgs, sink: MaddoxMasterSink): Promise<str
     const { settings, model } = await loadNarrator(context.campaign.rigor)
     const transcript = narratorTranscript(
         context.messages
-            .filter((message) => !args.excludeIds.has(String(message._id)) && !message.error && message.kind !== "reminder")
+            .filter((message) => !args.excludeIds.has(String(message._id)) && !message.error && message.kind !== "reminder" && message.kind !== "rewind")
             .map((message) => {
                 const check = checkResultOf(message)
                 if (message.kind === "combat") return { turnNumber: message.turnNumber, kind: message.kind, characterName: null, content: combatTranscriptLine(message, context.combats.get(String(message.combat?.combatId))) }

@@ -1085,7 +1085,7 @@ export const MADDOX_OPEX_NPC_TOOLS: readonly MaddoxMasterTool[] = [
             const fit = fitter()
             const { saveOpexNpcMemories } = await import("@/features/engramind/server/opex-npcs")
             const { MADDOX_OPEX_MEMORY_TITLE_MAX } = await import("../constants")
-            const result = await saveOpexNpcMemories({ campaignId: String(context.campaignId), npcId: String(npc._id), npcName: npc.name }, [{ title: clip(input.titulo, MADDOX_OPEX_MEMORY_TITLE_MAX), text: fit.fit("texto", input.texto) }], "Maddox")
+            const result = await saveOpexNpcMemories({ campaignId: String(context.campaignId), npcId: String(npc._id), npcName: npc.name }, [{ title: clip(input.titulo, MADDOX_OPEX_MEMORY_TITLE_MAX), text: fit.fit("texto", input.texto) }], "Maddox", context.turnNumber)
             if (!result.saved && !result.pending) return { npc: npc.name, gravada: false, nota: "A rede de memórias não está configurada: a memória não foi gravada. Siga sem ela." }
             return { npc: npc.name, gravada: true, ...(result.pending ? { nota: "A rede de memórias está fora: a memória fica na fila e entra quando ela voltar." } : {}), ...fit.notice() }
         },

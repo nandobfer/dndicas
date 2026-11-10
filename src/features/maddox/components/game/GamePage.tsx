@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react"
 import Link from "next/link"
 import { motion } from "framer-motion"
-import { ArrowLeft, Dices, Hourglass, MessageCircle, Swords } from "lucide-react"
+import { ArrowLeft, Dices, History, Hourglass, MessageCircle, Swords } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/opex/button"
 import { Skeleton } from "@/components/ui/opex/skeleton"
@@ -44,6 +44,8 @@ import { InjectReminderButton } from "./InjectReminderButton"
 import { SceneImageButton } from "./SceneImageButton"
 import { useRequestMaddoxNpcPortrait, useRequestMaddoxSceneImage } from "../../hooks/useMaddoxSceneImages"
 import { TurnPanel } from "./TurnPanel"
+import { TurnsMenu } from "./TurnsMenu"
+import { rewindBannerText } from "../../rewind-plan"
 import { CampaignChatHeader } from "../CampaignChatHeader"
 import { JournalSearchDialog } from "../journal/JournalSearchDialog"
 import { JournalLinkButton } from "../journal/JournalLinkButton"
@@ -123,6 +125,14 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
     const [olderHasMore, setOlderHasMore] = useState<boolean | null>(null)
     const [loadingMore, setLoadingMore] = useState(false)
     const [invalidReason, setInvalidReason] = useState<string | null>(null)
+    // Volta a um turno (DND-44): as páginas anteriores carregadas podem ter mensagens que saíram da mesa; recomeça.
+    const rewindKey = [...state.messages].reverse().find((message) => message.kind === "rewind")?.id ?? ""
+    const [olderKey, setOlderKey] = useState(rewindKey)
+    if (olderKey !== rewindKey) {
+        setOlderKey(rewindKey)
+        setOlder([])
+        setOlderHasMore(null)
+    }
 
     // Mensagens novas chegam pelo estado; as anteriores carregadas ficam guardadas (sem duplicar).
     const recentIds = new Set(state.messages.map((message) => message.id))
@@ -196,6 +206,7 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
                     <>
                         <RigorChip rigor={state.rigor} />
                         <RarityChip color={color}>Turno {state.turn.number}</RarityChip>
+                        {state.me.isOwner && state.me.rewind && <TurnsMenu campaignId={state.campaignId} control={state.me.rewind} turn={state.turn} />}
                         {state.combat && (
                             <RarityChip color={COMBAT_COLOR}>
                                 <Swords className="h-3 w-3" aria-hidden />
@@ -225,6 +236,12 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
                               ? combatBannerText(state)
                               : `${MADDOX_TURN_PHASE_LABELS.players} — ${progress.declared} de ${progress.total} ${presence.available ? "jogador(es) online" : "jogador(es)"} já declararam`}
                     </p>
+                    {state.turn.rewind && (
+                        <p className="flex items-center gap-2 text-xs text-amber-200/90" role="status" data-testid="rewind-banner">
+                            <History className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                            {rewindBannerText(state.turn.rewind)}
+                        </p>
+                    )}
                     {tactical && state.combat && <InitiativeTracker combat={tactical} title={state.combat.title} color={color} compact />}
                     {state.me.isOwner && state.turn.opexActor?.failed && <OpexFailureBanner actor={state.turn.opexActor} retrying={opexActions.retry.isPending} skipping={opexActions.skip.isPending} onRetry={() => opexActions.retry.mutate(state.turn.opexActor!.memberId)} onSkip={() => opexActions.skip.mutate(state.turn.opexActor!.memberId)} />}
                     </>

@@ -1,4 +1,4 @@
-export { MaddoxCampaignModel, type IMaddoxCampaign } from "./maddox-campaign"
+export { MaddoxCampaignModel, type IMaddoxCampaign, type MaddoxRewindOp } from "./maddox-campaign"
 export { MaddoxCampaignMemberModel, type IMaddoxCampaignMember, type IMaddoxOpexMember } from "./maddox-campaign-member"
 export { MaddoxCharacterModel, type IMaddoxCharacter } from "./maddox-character"
 export { MaddoxNpcModel, type IMaddoxNpc, type IMaddoxNpcOpex } from "./maddox-npc"
@@ -10,3 +10,6 @@ export { MaddoxCombatModel, type IMaddoxCombat, type IMaddoxCombatant, type IMad
 export { MaddoxCombatOptionProfileModel, type IMaddoxCombatOptionProfile } from "./maddox-combat-option-profile"
 export { MaddoxSceneImageModel, type IMaddoxSceneImage, type IMaddoxSceneImageCatalogRef } from "./maddox-scene-image"
 export { MaddoxCombatPrepModel, type IMaddoxCombatPrep } from "./maddox-combat-prep"
+export { MaddoxCampaignSnapshotModel, type IMaddoxCampaignSnapshot, type IMaddoxSheetSnapshot, type MaddoxMemoryChannelRef } from "./maddox-campaign-snapshot"
+export { MaddoxMemoryRepairModel, type IMaddoxMemoryRepair } from "./maddox-memory-repair"
+export { INCLUDE_DISCARDED, type IMaddoxDiscardMark } from "./discard-filter"

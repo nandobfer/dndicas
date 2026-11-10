@@ -172,7 +172,7 @@ export async function loadCombatSheets(sheetIds: readonly string[]): Promise<Map
     return result
 }
 
-async function publishPatched(sheetId: string) {
+export async function publishPatched(sheetId: string) {
     try {
         const [{ CharacterSheet }, { CharacterSheetPusherService }] = await Promise.all([import("@/features/character-sheets/models/character-sheet"), import("@/features/character-sheets/realtime/character-sheet-pusher-service")])
         const sheet = await CharacterSheet.findById(sheetId).lean()

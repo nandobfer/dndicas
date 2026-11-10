@@ -44,7 +44,7 @@ export async function armReactionWindows(campaignId: Types.ObjectId): Promise<vo
             continue
         }
         const delay = new Date(message.combatReaction.deadline).getTime() - Date.now()
-        scheduleTimer(`reaction:${String(message._id)}`, delay, async () => {
+        scheduleTimer(`reaction:${String(campaignId)}:${String(message._id)}`, delay, async () => {
             const fresh = await MaddoxCampaignMessageModel.findById(message._id).lean<MessageDoc>()
             if (fresh?.combatReaction?.status === "pending") await settleReaction(campaignId, fresh, { choice: null, status: "expired", decidedBy: null, reason: "O prazo da reação passou." })
         })

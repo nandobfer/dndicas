@@ -103,7 +103,7 @@ async function joinedMembers(campaignId: Types.ObjectId) {
     return members.map((member) => ({ member, character: member.characterId ? (byId.get(String(member.characterId)) ?? null) : null }))
 }
 
-const readyMemberIds = async (campaignId: Types.ObjectId) => (await joinedMembers(campaignId)).filter(({ character }) => isMemberReadyToPlay(character)).map(({ member }) => member._id)
+export const readyMemberIds = async (campaignId: Types.ObjectId) => (await joinedMembers(campaignId)).filter(({ character }) => isMemberReadyToPlay(character)).map(({ member }) => member._id)
 
 /** Avisa todos os membros ativos (e quem mais for indicado) que a mesa mudou. Nunca lança. */
 export async function publishGameChanged(campaignId: Types.ObjectId, extraUserIds: string[] = []) {
@@ -140,6 +140,8 @@ async function runMasterTurn(campaignId: Types.ObjectId, token: string, turnNumb
     heartbeat.unref?.()
     let live: ReturnType<typeof beginLive> | null = null
     try {
+        // Volta pendente (DND-44): a nova narração a partir do turno em que a mesa está apaga o trecho descartado de vez.
+        if (campaign.rewind) await (await import("./rewind")).commitRewind(campaignId)
         const existing = await MaddoxCampaignMessageModel.findOne({ campaignId, turnNumber, kind: "narration", ...segmentFilter(round) }).select("_id").lean()
         if (!existing) {
             const actions = await MaddoxCampaignMessageModel.find({ campaignId, turnNumber: turnNumber - 1, turnAction: true }).sort({ _id: 1 }).lean<MessageDoc[]>()
@@ -259,6 +261,8 @@ async function runMasterTurn(campaignId: Types.ObjectId, token: string, turnNumb
                 },
             )
             if (reopened.modifiedCount === 0) log.info({ campaignId: String(campaignId), turnNumber }, "[maddox] Turno do mestre já retomado por outra chamada")
+            // Retrato do turno (DND-44): o ponto para onde o dono pode voltar a mesa depois.
+            else await (await import("./turn-snapshots")).captureTurnSnapshot(campaignId, turnNumber)
         }
     } catch (error) {
         // Libera a trava e marca a falha: a retomada só acontece depois de `MADDOX_MASTER_RETRY_MS` (no `GET`/`check`).
@@ -405,6 +409,7 @@ async function openCombatTurn(campaign: CampaignDoc, token: string, turnNumber: 
             },
         },
     )
+    if (opened.modifiedCount > 0) await (await import("./turn-snapshots")).captureTurnSnapshot(campaign._id, turnNumber)
     if (opened.modifiedCount > 0 && next.offline) tactical.scheduleAbsenceCheck(String(campaign._id))
     return "done"
 }
@@ -465,6 +470,11 @@ async function resumeMasterTurn(campaign: CampaignDoc): Promise<boolean> {
         if (advanced) log.info({ campaignId: String(campaign._id), turnNumber: campaign.turn.number }, "[maddox] Testes da rodada já rolados: retomando a continuação")
         return advanced
     }
+    // Volta a um turno em andamento (DND-44): a trava é dela; sem processo vivo, a própria volta é refeita.
+    if (campaign.turn.generating?.rewind) {
+        ;(await import("./rewind")).recoverRewind(campaign)
+        return false
+    }
     // Geração na fila ou rodando neste processo: a trava é dela (o pulso a mantém), nada a retomar.
     if (isCampaignBusy(String(campaign._id))) return false
     const generating = campaign.turn.generating
@@ -481,6 +491,7 @@ async function resumeMasterTurn(campaign: CampaignDoc): Promise<boolean> {
             "turn.phase": "master",
             "turn.number": campaign.turn.number,
             "turn.awaitingChecks": { $ne: true },
+            "turn.generating.rewind.kind": { $exists: false },
             $or: [{ "turn.generating": null, $or: [{ "turn.failedAt": null }, { "turn.failedAt": { $lt: retryAfter } }] }, { "turn.generating.startedAt": { $lt: stale } }],
         },
         { $set: { "turn.generating": { token, startedAt: new Date() } } },
@@ -882,6 +893,7 @@ async function messagesDto(all: MessageDoc[], viewer: MessagesViewer): Promise<M
             // O motivo bruto do provedor só vai ao dono; para os demais o campo nem é serializado (DND-27).
             ...opexNpcFailuresDto(message, viewer, knownFailureNpcs),
             ...(message.kind === "combat-prep" && message.combatPrep ? { combatPrep: { characterName: message.combatPrep.characterName, changes: message.combatPrep.changes ?? [] } } : {}),
+            ...(message.kind === "rewind" && message.rewindNotice ? { rewindNotice: { event: message.rewindNotice.event, turnNumber: message.rewindNotice.turnNumber, originTurn: message.rewindNotice.originTurn } } : {}),
             createdAt: new Date(message.createdAt).toISOString(),
         }
     })
@@ -1046,6 +1058,10 @@ export async function getGameState(campaignId: string, userId: string): Promise<
         .sort((a, b) => (a.role === "owner" ? 0 : a.opex ? 2 : 1) - (b.role === "owner" ? 0 : b.opex ? 2 : 1))
     const mine = participants.find((participant) => participant.memberId === String(loaded.member._id))
     const opexActor = opexActorDto(campaign, members, combatActor, loaded.member.role === "owner")
+    // Volta a um turno (DND-44): a faixa vai a todos; o botão "Turnos" só ao dono.
+    const rewindModule = await import("./rewind")
+    const rewindBanner = await rewindModule.rewindBanner(campaign)
+    const rewindControl = campaign.ownerId === userId ? await rewindModule.rewindControl(campaign, mine?.ready ?? false) : null
     return {
         campaignId: String(campaign._id),
         name: campaign.name,
@@ -1057,7 +1073,9 @@ export async function getGameState(campaignId: string, userId: string): Promise<
             number: campaign.turn?.number ?? 0,
             phase: campaign.turn?.phase ?? "master",
             startedAt: campaign.turn?.startedAt ? new Date(campaign.turn.startedAt).toISOString() : null,
-            generating: Boolean(campaign.turn?.generating),
+            generating: Boolean(campaign.turn?.generating) && !campaign.turn?.generating?.rewind,
+            rewinding: Boolean(campaign.turn?.generating?.rewind),
+            rewind: rewindBanner,
             failed: campaign.turn?.phase === "master" && !campaign.turn?.generating && !campaign.turn?.awaitingChecks && Boolean(campaign.turn?.failedAt),
             awaitingChecks: campaign.turn?.phase === "master" && Boolean(campaign.turn?.awaitingChecks),
             pendingChecks: pendingChecks.map((check) => ({ checkId: String(check._id), memberId: String(check.memberId), characterName: check.characterName ?? "Personagem" })),
@@ -1088,6 +1106,7 @@ export async function getGameState(campaignId: string, userId: string): Promise<
             declared: mine?.declared ?? false,
             sheet: await mySheet(members.find(({ member }) => String(member._id) === String(loaded.member._id))?.character ?? null),
             combat: tacticalCombat && tacticalModule ? await tacticalModule.myCombatDto(tacticalCombat, String(loaded.member._id), Boolean(combatActor && String(combatActor.memberId) === String(loaded.member._id)), campaign._id, campaign.ownerId === userId) : null,
+            rewind: rewindControl,
         },
         messages: page.messages,
         hasMore: page.hasMore,

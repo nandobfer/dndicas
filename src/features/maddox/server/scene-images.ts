@@ -17,7 +17,7 @@ import {
     type MaddoxSceneImageSource,
 } from "../constants"
 import type { MaddoxGameSceneImageDto, MaddoxSceneImageControlDto } from "../game-types"
-import { MaddoxCampaignMessageModel, MaddoxCampaignModel, MaddoxNpcModel, MaddoxSceneImageModel, type IMaddoxCampaign, type IMaddoxNpc, type IMaddoxSceneImage } from "../models"
+import { INCLUDE_DISCARDED, MaddoxCampaignMessageModel, MaddoxCampaignModel, MaddoxNpcModel, MaddoxSceneImageModel, type IMaddoxCampaign, type IMaddoxNpc, type IMaddoxSceneImage } from "../models"
 import { DEFAULT_MADDOX_SCENE_IMAGES, type MaddoxSettings, type MaddoxSceneImagesSettings } from "../schemas"
 import { appearanceBlock, appearanceRecap, type CharacterAppearance } from "./scene-image-appearance"
 
@@ -105,7 +105,8 @@ const windowStart = () => new Date(Date.now() - MADDOX_SCENE_IMAGE_WINDOW_MS)
 
 /** Cota da campanha para um pedido: teto diário (todas as origens) e, nas automáticas, intervalo e uma por turno. */
 export async function sceneImageQuota(campaignId: Types.ObjectId, turnNumber: number, settings: MaddoxSceneImagesSettings, slot: MaddoxSceneImageSlot): Promise<SceneImageQuota> {
-    const today = await MaddoxSceneImageModel.countDocuments({ campaignId, counts: true, createdAt: { $gte: windowStart() } })
+    // As imagens descartadas por uma volta a um turno (DND-44) continuam no teto diário.
+    const today = await MaddoxSceneImageModel.countDocuments({ campaignId, counts: true, createdAt: { $gte: windowStart() } }).setOptions(INCLUDE_DISCARDED)
     const remainingToday = Math.max(0, settings.maxPerDay - today)
     if (remainingToday === 0) return { allowed: false, reason: `Limite de ${settings.maxPerDay} imagens por dia desta campanha atingido.`, nextTurn: null, remainingToday }
     if (slot !== "auto") return { allowed: true, reason: null, nextTurn: null, remainingToday }
@@ -210,7 +211,7 @@ export async function reserveSceneImage(request: SceneImageRequest, scene: Maddo
         return null
     }
     // Pedidos simultâneos: só os primeiros (pela ordem do `_id`) dentro do teto ficam com a vaga.
-    const rank = await MaddoxSceneImageModel.countDocuments({ campaignId: request.campaignId, counts: true, createdAt: { $gte: windowStart() }, _id: { $lte: created._id } })
+    const rank = await MaddoxSceneImageModel.countDocuments({ campaignId: request.campaignId, counts: true, createdAt: { $gte: windowStart() }, _id: { $lte: created._id } }).setOptions(INCLUDE_DISCARDED)
     if (rank > scene.maxPerDay) {
         await MaddoxSceneImageModel.updateOne({ _id: created._id }, { $set: { status: "skipped", counts: false, skipReason: "daily-limit" } })
         log.info({ campaignId: String(request.campaignId), source: request.source }, "[maddox] imagem descartada: teto diário atingido")

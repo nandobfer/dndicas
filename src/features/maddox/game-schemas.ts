@@ -34,3 +34,12 @@ export type MaddoxReminderInput = z.infer<typeof maddoxReminderSchema>
 /** Rolar um teste pedido pelo Maddox: sem campos (dado e modificador são do servidor). */
 export const maddoxRollCheckSchema = z.strictObject({}, { error: "A rolagem não aceita dados nem modificadores." })
 export type MaddoxRollCheckInput = z.infer<typeof maddoxRollCheckSchema>
+
+/** Voltar a mesa ao turno X (DND-44): cobre "Desfazer turno" e andar entre os turnos dentro da volta pendente. */
+export const maddoxRewindSchema = z.strictObject({
+    turnNumber: z.number({ error: "Informe o turno" }).int({ error: "O turno deve ser um número inteiro" }).min(1, { error: "O turno deve ser 1 ou maior" }),
+})
+export type MaddoxRewindInput = z.infer<typeof maddoxRewindSchema>
+
+/** "Voltar ao turno atual (N)": sem campos. */
+export const maddoxResumeTurnSchema = z.strictObject({}, { error: "A retomada não aceita campos." })

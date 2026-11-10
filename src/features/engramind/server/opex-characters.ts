@@ -7,6 +7,7 @@ import { clientFor, engramindAppClient, engramindConnection } from "./client"
 import { globalMemoriesFor, type OpexGlobalMemory } from "./global-memories"
 import { ensureAgentSubscription, tidyChannel } from "./bootstrap"
 import { provisionCampaignMemoryNetworkSafely } from "./campaign-channels"
+import { rewindTags } from "../campaign-memory-format"
 import { PendingWrite, pendingWriteId } from "./pending-writes"
 import { AcaoAuditoria, auditEngramind, engramindLog, messageOf } from "./shared"
 
@@ -145,7 +146,7 @@ const keyOf = (title: string) =>
  * mesmo assunto é atualizado, nunca duplicado). Com a rede fora ou o token recusado, vai para a fila
  * `engramind_pending_writes` (entregue pelo cron com o token do Opex). Nunca lança.
  */
-export async function saveOpexCharacterMemories(ref: OpexMemberRef, memories: readonly OpexMemoryInput[]): Promise<{ saved: number; pending: number }> {
+export async function saveOpexCharacterMemories(ref: OpexMemberRef, memories: readonly OpexMemoryInput[], turnNumber: number | null = null): Promise<{ saved: number; pending: number }> {
     let saved = 0
     let pending = 0
     if (!memories.length || !(await engramindConnection().catch(() => null))) return { saved, pending }
@@ -157,7 +158,7 @@ export async function saveOpexCharacterMemories(ref: OpexMemberRef, memories: re
     for (const memory of memories) {
         const key = keyOf(memory.title)
         if (key === "opex:") continue
-        const body = { channel, key, upsert: true, title: memory.title.slice(0, 120), text: max && memory.text.length > max ? memory.text.slice(0, max).trimEnd() : memory.text, tags: ["personagem-opex"], origin: { source: "maddox", label: ref.characterName || "Personagem Opex" } }
+        const body = { channel, key, upsert: true, title: memory.title.slice(0, 120), text: max && memory.text.length > max ? memory.text.slice(0, max).trimEnd() : memory.text, tags: ["personagem-opex", ...rewindTags(turnNumber)], origin: { source: "maddox", label: ref.characterName || "Personagem Opex" } }
         try {
             if (!client) throw new Error("Token do Personagem Opex indisponível")
             await client.call("POST", "/v1/memories", { body })

@@ -17,6 +17,7 @@ import {
     type MaddoxTurnPhase,
 } from "../constants"
 import type { IMaddoxWorldCatalog } from "./maddox-interview"
+import type { MaddoxMemoryChannelRef } from "./maddox-campaign-snapshot"
 
 /**
  * Campanha Maddox — `maddox_campaigns`. Nasce no lobby (Maddox 1), passa pela entrevista de cenário
@@ -49,7 +50,11 @@ export interface IMaddoxCampaign {
         startedAt: Date | null
         eligibleMemberIds: Types.ObjectId[]
         declaredMemberIds: Types.ObjectId[]
-        generating: { token: string; startedAt: Date } | null
+        /**
+         * Trava do turno do mestre. `rewind` (DND-44) marca a trava tomada por uma volta a um turno (ou a retomada do turno
+         * de origem): o turno do mestre não a retoma, e a trava velha refaz a mesma operação (idempotente).
+         */
+        generating: { token: string; startedAt: Date; rewind?: MaddoxRewindOp | null } | null
         /** Última falha do turno do mestre: a retomada espera `MADDOX_MASTER_RETRY_MS` desde ela. */
         failedAt: Date | null
         /** Rodada de testes do turno do mestre (Maddox 5): 0 = narração das declarações; cada continuação soma 1. */
@@ -69,6 +74,27 @@ export interface IMaddoxCampaign {
          */
         opexActor?: { memberId: Types.ObjectId; startedAt: Date; questions: number; failedAt: Date | null; error: string | null } | null
     }
+    /**
+     * Volta pendente (DND-44): a mesa foi levada ao turno `atTurn` a partir do turno de origem `originTurn`. Enquanto o Maddox
+     * não narrar de novo, o dono anda entre os turnos já jogados ou retoma a origem (retrato `originSnapshotId`); a nova
+     * narração apaga o trecho descartado de vez (`commitRewind`). `positionAt` = quando a mesa chegou ao turno atual
+     * (as ações feitas depois disso são "declarações novas", apagadas ao trocar de turno).
+     */
+    rewind?: {
+        id: string
+        originTurn: number
+        originPhase: MaddoxTurnPhase
+        atTurn: number
+        positionAt: Date
+        startedAt: Date
+        byUserId: string
+        originSnapshotId: Types.ObjectId
+    } | null
+    /**
+     * Memórias que ficaram pela metade numa volta que falhou (DND-44): antes da próxima volta, retomada ou narração, elas
+     * são levadas ao alvo gravado (`asOf` nulo = o estado mais novo). A rotina de sincronização das memórias também tenta.
+     */
+    memoryRepair?: { asOf: number | null; keepAfter: number | null; known: { id: string; ref: MaddoxMemoryChannelRef }[]; at: Date } | null
     /** Mostra a CD dos testes aos jogadores (Maddox 5); padrão = secreta. */
     showCheckDc: boolean
     /** Imagens automáticas nas cenas (Maddox 10): o dono desliga na campanha; o pedido manual continua. */
@@ -113,6 +139,15 @@ export interface IMaddoxCampaign {
     updatedAt: Date
 }
 
+/** Operação da volta em andamento (gravada na trava para a retomada depois de um reinício). */
+export interface MaddoxRewindOp {
+    kind: "goto" | "resume"
+    target: number | null
+    userId: string
+    /** Turno e fase de antes da operação (a trava devolve a mesa a eles quando a rede de memórias falha). */
+    before: { number: number; phase: MaddoxTurnPhase; failedAt: Date | null }
+}
+
 const MaddoxCampaignSchema = new Schema<IMaddoxCampaign>(
     {
         name: { type: String, required: true, trim: true },
@@ -136,7 +171,7 @@ const MaddoxCampaignSchema = new Schema<IMaddoxCampaign>(
             startedAt: { type: Date, default: null },
             eligibleMemberIds: { type: [Schema.Types.ObjectId], default: [] },
             declaredMemberIds: { type: [Schema.Types.ObjectId], default: [] },
-            generating: { type: new Schema({ token: String, startedAt: Date }, { _id: false }), default: null },
+            generating: { type: new Schema({ token: String, startedAt: Date, rewind: { type: Schema.Types.Mixed, default: null } }, { _id: false }), default: null },
             failedAt: { type: Date, default: null },
             checkRound: { type: Number, default: 0 },
             awaitingChecks: { type: Boolean, default: false },
@@ -147,6 +182,23 @@ const MaddoxCampaignSchema = new Schema<IMaddoxCampaign>(
                 default: null,
             },
         },
+        rewind: {
+            type: new Schema(
+                {
+                    id: { type: String, required: true },
+                    originTurn: { type: Number, required: true },
+                    originPhase: { type: String, enum: MADDOX_TURN_PHASES, required: true },
+                    atTurn: { type: Number, required: true },
+                    positionAt: { type: Date, required: true },
+                    startedAt: { type: Date, required: true },
+                    byUserId: { type: String, required: true },
+                    originSnapshotId: { type: Schema.Types.ObjectId, required: true },
+                },
+                { _id: false },
+            ),
+            default: null,
+        },
+        memoryRepair: { type: Schema.Types.Mixed, default: null },
         showCheckDc: { type: Boolean, default: false },
         sceneImages: { type: Boolean, default: true },
         hidePlayerActions: { type: Boolean, default: false },
