@@ -132,6 +132,31 @@ describe("aba Agente Maddox", () => {
         expect(screen.getByText("Avatar")).toBeTruthy()
     })
 
+    it("Geral (DND-40): instruções gerais do entrevistador valem para as duas entrevistas e o padrão não fixa quantidade", async () => {
+        renderTab()
+        const field = (await screen.findByLabelText("Entrevistador (instruções gerais)")) as HTMLTextAreaElement
+        expect(document.getElementById(field.getAttribute("aria-describedby") ?? "")?.textContent).toMatch(/Valem para as duas entrevistas/)
+        fireEvent.change(field, { target: { value: "Outra." } })
+        const restore = within(field.parentElement!).getByRole("button", { name: /Restaurar padrão/ })
+        fireEvent.click(restore)
+        const restored = (screen.getByLabelText("Entrevistador (instruções gerais)") as HTMLTextAreaElement).value
+        expect(restored).toBe(DEFAULT_MADDOX_SETTINGS.interviewerInstructions)
+        expect(restored).not.toMatch(/uma a três|duas perguntas/)
+    })
+
+    it("roteiro (DND-40): o guia explica que é específico da entrevista e versionado; Restaurar padrão não fixa quantidade", async () => {
+        renderTab()
+        fireEvent.click(screen.getByRole("tab", { name: "Entrevista: personagem" }))
+        const guide = (await screen.findByLabelText("Guia da entrevista")) as HTMLTextAreaElement
+        expect(document.getElementById(guide.getAttribute("aria-describedby") ?? "")?.textContent).toMatch(/Específico desta entrevista e versionado/)
+        expect(screen.getByText(/se soma às instruções gerais do entrevistador/)).toBeTruthy()
+        fireEvent.change(guide, { target: { value: "Faça uma pergunta por vez." } })
+        fireEvent.click(within(guide.parentElement!).getByRole("button", { name: /Restaurar padrão/ }))
+        const restored = (screen.getByLabelText("Guia da entrevista") as HTMLTextAreaElement).value
+        expect(restored).toBe(defaultMaddoxScript("character").guide)
+        expect(restored).not.toMatch(/uma a três|duas perguntas/)
+    })
+
     it("trocar o provedor para OpenCode salva com o modelo limpo", async () => {
         renderTab()
         const [mainProviders] = screen.getAllByRole("radiogroup")

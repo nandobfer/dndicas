@@ -25,7 +25,7 @@ roteiros e as memórias salvam à parte.
 
 | Seção | Conteúdo |
 | --- | --- |
-| Geral | Ativo; **Avatar** (upload/substituição pelo `GlassImageUploader` ou "Gerar com o Gerador de imagens" a partir da persona — 1:1, do peito para cima; só vale depois de salvar); modelo do **Maddox (narrador)** e do **Entrevistador** ("Mesmo do Maddox" = sem provedor próprio), cada um com blocos **"Por rigor"** (DND-32, abaixo); instruções de cada um com "Restaurar padrão" |
+| Geral | Ativo; **Avatar** (upload/substituição pelo `GlassImageUploader` ou "Gerar com o Gerador de imagens" a partir da persona — 1:1, do peito para cima; só vale depois de salvar); modelo do **Maddox (narrador)** e do **Entrevistador** ("Mesmo do Maddox" = sem provedor próprio), cada um com blocos **"Por rigor"** (DND-32, abaixo); instruções de cada um com "Restaurar padrão" (as do **Entrevistador (instruções gerais)** valem para as duas entrevistas) |
 | Entrevista: cenário / Entrevista: personagem | Roteiros versionados (abaixo), cada um com "Salvar nova versão do roteiro" e "Desfazer roteiro" |
 | Imagens | Imagens nas cenas (Maddox 10): chave geral, situações fixas e personalizadas, intervalo, teto diário, proporção e estilo (seção "Imagens nas cenas (Maddox 10)") |
 | JEV | Uma chave por decisão (`MADDOX_JEV_DECISIONS`): pergunta ou ação do jogador, validade de ação livre, pedir teste, início/fim de combate, conhecimento do mestre, fim da entrevista, gerar imagem na cena. Em uso: **"Fim da entrevista"** (Maddox 2), **"Validade de ação livre"** (Maddox 4, só Rigoroso e Fiel ao D&D), **"Pedir teste"** (Maddox 5, orientação ao narrador nos graus com testes) e **"Início ou fim de combate"** (Maddox 6, orientação ao narrador nos graus com combate narrativo), **"Custo de ação no combate"** (Maddox 7) e **"Gerar imagem na cena"** (Maddox 10, filtro da imagem pedida pelo narrador); as demais ainda sem uso |
@@ -80,6 +80,12 @@ Versionamento copiado do roteiro do Agente Entrevistador do Ciliar: coleção `m
 (`{ kind, version }` único, documentos imutáveis); a v0 é o padrão do código; cada gravação cria
 `version + 1` com notas; versão desatualizada → **409 `VERSION_CONFLICT`**; histórico com "Ver". A
 entrevista (Maddox 2) usa a versão com que começou (`campaign.scriptVersions`, `character.interview.scriptVersion`).
+
+O guia é **específico daquela entrevista** e se soma às instruções gerais do entrevistador (aba Geral), que valem
+para as duas. **O código não define quantidade de perguntas por mensagem (DND-40):** o ritmo ("uma pergunta por vez",
+"duas por vez"…) é o que estiver escrito nas instruções ou no guia; sem regra escrita, não há limite fixo. Os textos
+padrão (Restaurar padrão) não trazem quantidade. Instruções e roteiros já gravados mantêm o texto que o dono escreveu
+(sem migração).
 
 ## Sessões do OpenCode
 
@@ -258,7 +264,9 @@ status `active` são do Maddox 3 (seção abaixo).
 **Instruções** (`buildInterviewInstructions`): instruções do entrevistador + entrevista atual + rigor (colunas
 `rules`/`free`) + no personagem o cenário, a situação inicial e os outros personagens (e, a partir de Equilibrado, o
 pedido de raça/classe/origem/atributos) + o guia da **versão gravada** + os **tópicos ativos numerados na ordem
-do roteiro** + o protocolo de conclusão. Modelo: o do entrevistador para o rigor da campanha (bloco "Por rigor" ou
+do roteiro** + o formato da resposta + a seção fixa **"Ritmo da conversa"** (`MADDOX_PACE_RULE`: a quantidade de
+perguntas por mensagem é a das instruções e do guia; sem regra, nenhum limite fixo) + o protocolo de conclusão. A
+abertura (`openingPrompt`) pede "a primeira rodada de perguntas seguindo as instruções e o guia", sem plural nem número. Modelo: o do entrevistador para o rigor da campanha (bloco "Por rigor" ou
 provedor próprio) ou, em "Mesmo do Maddox", o do Maddox no mesmo rigor (com temperatura e tokens; DND-32). Indisponível = 409 `MADDOX_UNAVAILABLE`. Consumo medido na origem `maddox-interview`.
 
 **Conversa.** Os provedores sem sessão recebem o histórico gravado (`messages`, abertura como primeira fala do
@@ -316,7 +324,7 @@ ele vira o card da história, ver "Card da história no lobby (DND-37)"), chips 
 `src/lib/ai/stream.ts` ganhou `messages` (conversa) e `opencodeSessionId` (sessão fixa) no `AiStreamRequest`.
 
 **Formato e menções do catálogo.** As instruções do entrevistador têm uma seção fixa "Formato da resposta"
-(`MADDOX_RESPONSE_FORMAT`, no código, independente da aba): Markdown em blocos curtos, `###` por assunto, listas,
+(`MADDOX_RESPONSE_FORMAT`, no código, independente da aba), só de renderização (sem quantidade de perguntas): Markdown em blocos curtos, `###` por assunto, listas,
 citação para ambientação e **negrito** para nomes próprios do mundo e ênfase. **Negrito nunca vira menção.** Para
 citar uma entidade do catálogo, o modelo escreve a marcação explícita com o tipo `{{Tipo:Nome oficial}}` (ex.:
 `{{Raça:Elfo}}`, `{{Magia:Bola de Fogo}}`; tipos = `catalogEntityTypes`), e é proibido usá-la para personagens,

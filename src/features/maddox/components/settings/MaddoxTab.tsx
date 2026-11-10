@@ -178,7 +178,7 @@ export function MaddoxTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) =
                             <Card>
                                 <CardHeader>
                                     <CardTitle className="text-base">Instruções</CardTitle>
-                                    <CardDescription>Prompt de sistema do Maddox e do entrevistador. O grau de rigor da campanha, o roteiro da entrevista e as memórias entram sozinhos.</CardDescription>
+                                    <CardDescription>Prompt de sistema do Maddox e do entrevistador. O grau de rigor da campanha, o roteiro da entrevista e as memórias entram sozinhos. As instruções do entrevistador valem para as duas entrevistas; o guia de cada uma fica nas abas de entrevista.</CardDescription>
                                 </CardHeader>
                                 <CardContent className="space-y-5">
                                     <Field id="maddox-instructions" label="Maddox (narrador)" error={errors.instructions?.message}>
@@ -189,8 +189,11 @@ export function MaddoxTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) =
                                             </Button>
                                         </div>
                                     </Field>
-                                    <Field id="maddox-interviewer-instructions" label="Entrevistador" error={errors.interviewerInstructions?.message}>
-                                        <Textarea id="maddox-interviewer-instructions" rows={8} className="font-mono text-xs" {...form.register("interviewerInstructions")} />
+                                    <Field id="maddox-interviewer-instructions" label="Entrevistador (instruções gerais)" error={errors.interviewerInstructions?.message}>
+                                        <p id="maddox-interviewer-instructions-help" className="text-xs text-muted-foreground">
+                                            Valem para as duas entrevistas (cenário e personagem). Regras de ritmo, como quantas perguntas por mensagem, podem ser escritas aqui ou no guia de cada entrevista; sem regra escrita, o Maddox não segue um número fixo.
+                                        </p>
+                                        <Textarea id="maddox-interviewer-instructions" aria-describedby="maddox-interviewer-instructions-help" rows={8} className="font-mono text-xs" {...form.register("interviewerInstructions")} />
                                         <div className="flex justify-end">
                                             <Button type="button" variant="ghost" size="sm" className="gap-1.5" onClick={() => form.setValue("interviewerInstructions", DEFAULT_MADDOX_INTERVIEWER_INSTRUCTIONS, { shouldDirty: true, shouldValidate: true })}>
                                                 <RotateCcw className="h-3.5 w-3.5" aria-hidden /> Restaurar padrão

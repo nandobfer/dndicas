@@ -187,6 +187,7 @@ export function buildInterviewInstructions(context: InterviewPromptContext): str
             : "## Tópicos\nO roteiro não tem tópicos ativos: siga só o guia.",
     )
     parts.push(MADDOX_RESPONSE_FORMAT)
+    parts.push(MADDOX_PACE_RULE)
     parts.push(
         [
             "## Conclusão",
@@ -251,12 +252,12 @@ export const CATALOG_CITATION_RULE = [
 ].join("\n")
 
 /**
- * Formato fixo das falas do entrevistador (não depende do texto configurado na aba): Markdown que a tela pinta
- * como o Agente Opex e citações explícitas do catálogo, que o servidor transforma em menções clicáveis.
+ * Formato fixo das falas do entrevistador (não depende do texto configurado na aba), só de renderização: Markdown que
+ * a tela pinta como o Agente Opex e citações explícitas do catálogo, que o servidor transforma em menções clicáveis.
  */
 export const MADDOX_RESPONSE_FORMAT = [
     "## Formato da resposta",
-    "- Responda em Markdown, em blocos curtos e fáceis de ler; termine com no máximo duas perguntas por vez.",
+    "- Responda em Markdown, em blocos curtos e fáceis de ler.",
     "- Use **negrito** para nomes próprios do mundo (personagens, lugares, facções) e para ênfase.",
     CATALOG_CITATION_RULE,
     "- Use `###` para separar blocos quando houver mais de um assunto e listas para opções e sugestões.",
@@ -264,11 +265,21 @@ export const MADDOX_RESPONSE_FORMAT = [
     "- Evite tabelas longas. Na síntese final, use um título (`###`) por tópico combinado.",
 ].join("\n")
 
+/**
+ * Ritmo da conversa (DND-40): seção fixa que NÃO define quantidade de perguntas por mensagem; remete às instruções
+ * do entrevistador e ao guia do roteiro (editáveis), e sem regra escrita não há limite fixo.
+ */
+export const MADDOX_PACE_RULE = [
+    "## Ritmo da conversa",
+    "- A quantidade de perguntas por mensagem é a definida nas instruções do entrevistador e no guia do roteiro (acima). Siga exatamente o que estiver escrito ali.",
+    "- Se nenhum dos dois definir uma quantidade, não aplique um limite fixo: pergunte o que fizer sentido para o andamento da conversa.",
+].join("\n")
+
 /** Pedido de abertura (primeira mensagem do Maddox, antes de qualquer resposta). */
 export function openingPrompt(kind: MaddoxScriptKind): string {
     return kind === "scenario"
-        ? "Comece a entrevista de cenário: apresente-se brevemente como Maddox e faça as primeiras perguntas."
-        : "Comece a entrevista de personagem: apresente-se brevemente como Maddox, lembre em uma frase o cenário da campanha e faça as primeiras perguntas."
+        ? "Comece a entrevista de cenário: apresente-se brevemente como Maddox, inicie a conversa e faça a primeira rodada de perguntas seguindo as instruções e o guia."
+        : "Comece a entrevista de personagem: apresente-se brevemente como Maddox, lembre em uma frase o cenário da campanha, inicie a conversa e faça a primeira rodada de perguntas seguindo as instruções e o guia."
 }
 
 /** Dica acrescentada ao turno quando o JEV indica que já há base suficiente. */
