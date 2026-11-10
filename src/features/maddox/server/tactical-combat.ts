@@ -703,6 +703,22 @@ export function scheduleAbsenceCheck(campaignId: string, delayMs = MADDOX_COMBAT
     timers.set(key, timer)
 }
 
+/**
+ * Cancela todos os prazos do combate da campanha (DND-44: a mesa voltou a outro turno; os prazos do trecho descartado não
+ * podem disparar). As chaves são `<tipo>:<campanha>` ou `reaction:<campanha>:<mensagem>`.
+ */
+export function cancelCampaignTimers(campaignId: string): number {
+    let cancelled = 0
+    for (const [key, timer] of timers) {
+        const [, owner] = key.split(":")
+        if (owner !== campaignId) continue
+        clearTimeout(timer)
+        timers.delete(key)
+        cancelled++
+    }
+    return cancelled
+}
+
 /** Há um prazo da sequência do combate (dado dos inimigos ou pausa entre blocos) agendado para a campanha. */
 export const hasSequenceTimer = (campaignId: string) => timers.has(`enemy-init:${campaignId}`) || timers.has(`npc-block:${campaignId}`)
 

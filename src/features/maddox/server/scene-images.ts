@@ -17,7 +17,7 @@ import {
     type MaddoxSceneImageSource,
 } from "../constants"
 import type { MaddoxGameSceneImageDto, MaddoxSceneImageControlDto } from "../game-types"
-import { MaddoxCampaignMessageModel, MaddoxCampaignModel, MaddoxNpcModel, MaddoxSceneImageModel, type IMaddoxCampaign, type IMaddoxNpc, type IMaddoxSceneImage } from "../models"
+import { INCLUDE_DISCARDED, MaddoxCampaignMessageModel, MaddoxCampaignModel, MaddoxNpcModel, MaddoxSceneImageModel, type IMaddoxCampaign, type IMaddoxNpc, type IMaddoxSceneImage } from "../models"
 import { DEFAULT_MADDOX_SCENE_IMAGES, type MaddoxSettings, type MaddoxSceneImagesSettings } from "../schemas"
 import { appearanceBlock, appearanceRecap, type CharacterAppearance } from "./scene-image-appearance"
 
@@ -105,7 +105,8 @@ const windowStart = () => new Date(Date.now() - MADDOX_SCENE_IMAGE_WINDOW_MS)
 
 /** Cota da campanha para um pedido: teto diário (todas as origens) e, nas automáticas, intervalo e uma por turno. */
 export async function sceneImageQuota(campaignId: Types.ObjectId, turnNumber: number, settings: MaddoxSceneImagesSettings, slot: MaddoxSceneImageSlot): Promise<SceneImageQuota> {
-    const today = await MaddoxSceneImageModel.countDocuments({ campaignId, counts: true, createdAt: { $gte: windowStart() } })
+    // As imagens descartadas por uma volta a um turno (DND-44) continuam no teto diário.
+    const today = await MaddoxSceneImageModel.countDocuments({ campaignId, counts: true, createdAt: { $gte: windowStart() } }).setOptions(INCLUDE_DISCARDED)
     const remainingToday = Math.max(0, settings.maxPerDay - today)
     if (remainingToday === 0) return { allowed: false, reason: `Limite de ${settings.maxPerDay} imagens por dia desta campanha atingido.`, nextTurn: null, remainingToday }
     if (slot !== "auto") return { allowed: true, reason: null, nextTurn: null, remainingToday }
@@ -210,7 +211,7 @@ export async function reserveSceneImage(request: SceneImageRequest, scene: Maddo
         return null
     }
     // Pedidos simultâneos: só os primeiros (pela ordem do `_id`) dentro do teto ficam com a vaga.
-    const rank = await MaddoxSceneImageModel.countDocuments({ campaignId: request.campaignId, counts: true, createdAt: { $gte: windowStart() }, _id: { $lte: created._id } })
+    const rank = await MaddoxSceneImageModel.countDocuments({ campaignId: request.campaignId, counts: true, createdAt: { $gte: windowStart() }, _id: { $lte: created._id } }).setOptions(INCLUDE_DISCARDED)
     if (rank > scene.maxPerDay) {
         await MaddoxSceneImageModel.updateOne({ _id: created._id }, { $set: { status: "skipped", counts: false, skipReason: "daily-limit" } })
         log.info({ campaignId: String(request.campaignId), source: request.source }, "[maddox] imagem descartada: teto diário atingido")
@@ -339,11 +340,14 @@ export function buildSceneImagePrompt(input: {
 
 /** Gera uma imagem reservada: JEV (só a ferramenta), referências, gerador, gravação e aviso à mesa. */
 export async function runSceneImage(imageId: string): Promise<void> {
-    const claimed = await MaddoxSceneImageModel.findOneAndUpdate({ _id: imageId, status: "pending" }, { $set: { status: "generating", startedAt: new Date() } }, { returnDocument: "after" }).lean<IMaddoxSceneImage>()
+    // Inclui a descartada por uma volta a um turno (DND-44): a vaga já foi contada, e a retomada a traz pronta.
+    const claimed = await MaddoxSceneImageModel.findOneAndUpdate({ _id: imageId, status: "pending", slot: { $ne: "discarded" } }, { $set: { status: "generating", startedAt: new Date() } }, { returnDocument: "after", ...INCLUDE_DISCARDED }).lean<IMaddoxSceneImage>()
     if (!claimed) return
     const campaignId = claimed.campaignId
+    // A mesa pode ter voltado a um turno anterior durante a geração (DND-44): o resultado é gravado também na imagem
+    // descartada (a retomada a traz pronta; a perda definitiva exclui o arquivo pela `key`).
     const fail = async (reason: string) => {
-        await MaddoxSceneImageModel.updateOne({ _id: claimed._id }, { $set: { status: "failed", counts: false, error: MADDOX_SCENE_IMAGE_FAILED_MESSAGE, completedAt: new Date() } })
+        await MaddoxSceneImageModel.updateOne({ _id: claimed._id }, { $set: { status: "failed", counts: false, error: MADDOX_SCENE_IMAGE_FAILED_MESSAGE, completedAt: new Date() } }).setOptions(INCLUDE_DISCARDED)
         log.warn({ campaignId: String(campaignId), imageId, source: claimed.source, err: reason }, "[maddox] a imagem da cena falhou")
     }
     try {
@@ -359,12 +363,12 @@ export async function runSceneImage(imageId: string): Promise<void> {
             const { sceneImageMatches } = await import("./scene-image-hints")
             const score = await sceneImageMatches(campaign, situation, message?.content ?? "")
             if (score !== null && score < 0.5) {
-                await MaddoxSceneImageModel.updateOne({ _id: claimed._id }, { $set: { status: "skipped", counts: false, skipReason: "jev", jevScore: score, completedAt: new Date() } })
+                await MaddoxSceneImageModel.updateOne({ _id: claimed._id }, { $set: { status: "skipped", counts: false, skipReason: "jev", jevScore: score, completedAt: new Date() } }).setOptions(INCLUDE_DISCARDED)
                 log.info({ campaignId: String(campaignId), imageId, score }, "[maddox] JEV descartou a imagem da cena")
                 await notify(campaignId)
                 return
             }
-            if (score !== null) await MaddoxSceneImageModel.updateOne({ _id: claimed._id }, { $set: { jevScore: score } })
+            if (score !== null) await MaddoxSceneImageModel.updateOne({ _id: claimed._id }, { $set: { jevScore: score } }).setOptions(INCLUDE_DISCARDED)
         }
 
         const { buildSceneReferences } = await import("./scene-image-references")
@@ -399,7 +403,15 @@ export async function runSceneImage(imageId: string): Promise<void> {
                 }),
             MADDOX_SCENE_IMAGE_TIMEOUT_MS,
         )
-        await MaddoxSceneImageModel.updateOne({ _id: claimed._id }, { $set: { status: "done", url: stored.url, key: stored.key, referencesUsed: stored.referencesUsed ?? 0, completedAt: new Date() } })
+        const written = await MaddoxSceneImageModel.updateOne(
+            { _id: claimed._id, slot: { $ne: "discarded" } },
+            { $set: { status: "done", url: stored.url, key: stored.key, referencesUsed: stored.referencesUsed ?? 0, completedAt: new Date() } },
+        ).setOptions(INCLUDE_DISCARDED)
+        // Já perdida de vez (a nova narração apagou o trecho durante a geração): o arquivo não fica órfão no armazenamento.
+        if (written.matchedCount === 0) {
+            await (await import("@/lib/storage/s3")).deleteFile(stored.key).catch((error: unknown) => log.warn({ err: error instanceof Error ? error.message : String(error), imageId }, "[maddox] arquivo da imagem perdida não excluído"))
+            return
+        }
         if (portrait && claimed.npcId) await MaddoxNpcModel.updateOne({ _id: claimed.npcId, campaignId }, { $set: { portraitUrl: stored.url } })
         log.info({ campaignId: String(campaignId), imageId, source: claimed.source, situation: claimed.situation, referencesUsed: stored.referencesUsed ?? 0 }, "[maddox] imagem da cena gerada")
     } catch (error) {
@@ -411,11 +423,12 @@ export async function runSceneImage(imageId: string): Promise<void> {
 /** Imagens presas (processo reiniciado no meio da geração) viram falha e liberam a vaga. */
 export async function expireStaleSceneImages(campaignId: Types.ObjectId): Promise<number> {
     const limit = new Date(Date.now() - MADDOX_SCENE_IMAGE_STALE_MS)
-    const stale = await MaddoxSceneImageModel.find({ campaignId, status: { $in: ["pending", "generating"] }, updatedAt: { $lt: limit } }).select("_id").lean<{ _id: Types.ObjectId }[]>()
+    // Inclui as descartadas por uma volta a um turno (DND-44): retomadas, não podem voltar presas.
+    const stale = await MaddoxSceneImageModel.find({ campaignId, status: { $in: ["pending", "generating"] }, slot: { $ne: "discarded" }, updatedAt: { $lt: limit } }).setOptions(INCLUDE_DISCARDED).select("_id").lean<{ _id: Types.ObjectId }[]>()
     // As que estão gerando ou esperando a vez na fila da campanha (pedido manual) neste processo não estão presas.
     const ids = stale.map((item) => item._id).filter((id) => !runtime.running.has(String(id)) && !runtime.queued.has(String(id)))
     if (!ids.length) return 0
-    const result = await MaddoxSceneImageModel.updateMany({ _id: { $in: ids }, status: { $in: ["pending", "generating"] } }, { $set: { status: "failed", counts: false, error: MADDOX_SCENE_IMAGE_FAILED_MESSAGE, completedAt: new Date() } })
+    const result = await MaddoxSceneImageModel.updateMany({ _id: { $in: ids }, status: { $in: ["pending", "generating"] } }, { $set: { status: "failed", counts: false, error: MADDOX_SCENE_IMAGE_FAILED_MESSAGE, completedAt: new Date() } }).setOptions(INCLUDE_DISCARDED)
     if (result.modifiedCount) log.warn({ campaignId: String(campaignId), expired: result.modifiedCount }, "[maddox] imagens da cena presas marcadas como falha")
     return result.modifiedCount
 }

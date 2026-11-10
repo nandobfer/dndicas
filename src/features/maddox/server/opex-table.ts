@@ -70,7 +70,7 @@ async function opexTranscript(campaign: CampaignDoc, member: MemberDoc): Promise
     return narratorTranscript(
         recent
             // Declaração oculta dos outros (DND-36): some da transcrição; o Opex só descobre o que fizeram pela narração.
-            .filter((message) => !message.error && message.kind !== "reminder" && !isHiddenPlayerAction(message, viewer))
+            .filter((message) => !message.error && message.kind !== "reminder" && message.kind !== "rewind" && !isHiddenPlayerAction(message, viewer))
             .map((message) => {
                 const check = checkResultOf(message)
                 if (message.combatAction) return { turnNumber: message.turnNumber, kind: message.kind, characterName: null, content: message.combatAction.status === "cancelled" ? "" : message.combatAction.summary }
@@ -187,7 +187,7 @@ async function runOpexTurn(campaignId: Types.ObjectId, memberId: Types.ObjectId,
             const memories = opexMemoriesOf(action)
             if (memories.length) {
                 void import("@/features/engramind/server/opex-characters")
-                    .then(({ saveOpexCharacterMemories }) => saveOpexCharacterMemories({ campaignId: String(campaignId), memberId: String(memberId), characterName: character?.name ?? "" }, memories))
+                    .then(({ saveOpexCharacterMemories }) => saveOpexCharacterMemories({ campaignId: String(campaignId), memberId: String(memberId), characterName: character?.name ?? "" }, memories, turnNumber))
                     .catch((error: unknown) => log.warn({ memberId: String(memberId), err: errorText(error) }, "[maddox] memórias do Personagem Opex não gravadas"))
             }
             await MaddoxCampaignModel.updateOne({ _id: campaignId, "turn.number": turnNumber, "turn.opexActor.memberId": memberId }, { $set: { "turn.opexActor": null } })

@@ -225,6 +225,23 @@ export async function releaseCampaignSessions(campaignId: string): Promise<numbe
     return removed
 }
 
+/**
+ * Volta a um turno (DND-44): a sessão do narrador guarda a conversa dos turnos descartados. Ela sai de uso na hora
+ * (a próxima narração cria outra, com a transcrição já filtrada) e é excluída em segundo plano. Nunca lança.
+ */
+export async function rotateNarratorSession(campaignId: string): Promise<void> {
+    try {
+        await dbConnect()
+        const rows = await MaddoxOpencodeSessionModel.find({ campaignId: new Types.ObjectId(campaignId), purpose: "narrator", status: "active" }).lean<SessionRow[]>()
+        for (const row of rows) {
+            await MaddoxOpencodeSessionModel.updateOne({ _id: row._id }, { $set: { status: "pending-deletion" } })
+            void releaseRow(row).catch((error: unknown) => log.warn({ err: errorText(error), campaignId }, "[maddox] falha ao excluir a sessão do narrador"))
+        }
+    } catch (error) {
+        log.warn({ err: errorText(error), campaignId }, "[maddox] falha ao trocar a sessão do narrador")
+    }
+}
+
 /** Fim de uma entrevista: libera a sessão própria dela (a do narrador nunca é tocada). Nunca lança. */
 export async function releaseInterviewSession(campaignId: string, purpose: Exclude<MaddoxSessionPurpose, "narrator">, memberId: string | null): Promise<void> {
     try {

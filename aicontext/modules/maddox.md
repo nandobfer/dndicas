@@ -136,7 +136,9 @@ continua.
 | `maddox_interview_scripts` | versões dos roteiros |
 | `maddox_interviews` | entrevistas (Maddox 2): conversa (`messages`), versão do roteiro, status, trava `generating`, resultado consolidado, `build` (ficha) e `world` (povos e classes do cenário no Fiel); única por `{ campaignId, kind, memberId }` |
 | `maddox_opencode_sessions` | sessões do OpenCode do Maddox |
-| `maddox_scene_images` | imagens nas cenas (Maddox 10): origem, vaga (`auto`/`manual`/`portrait`), situação, descrição (só servidor), legenda, referências, situação da geração, `counts` (ocupa a cota), URL; uma automática por turno (índice único parcial) |
+| `maddox_scene_images` | imagens nas cenas (Maddox 10): origem, vaga (`auto`/`manual`/`portrait`; `discarded` = lápide de uma imagem perdida ao voltar a um turno, DND-44), situação, descrição (só servidor), legenda, referências, situação da geração, `counts` (ocupa a cota), URL, `discardedBy`; uma automática por turno (índice único parcial) |
+| `maddox_campaign_snapshots` | retratos da mesa (DND-44): um por turno jogado (vez dos jogadores aberta) e o de origem da volta pendente |
+| `maddox_memory_repairs` | exclusões de memória pendentes da perda definitiva de uma volta (DND-44) |
 
 Os índices (inclusive os únicos que sustentam regras: `{ kind, version }` dos roteiros, uma sessão `active`
 por campanha/finalidade/membro, `sessionId`, `{ campaignId, userId }` dos membros) são garantidos pela migração
@@ -153,7 +155,8 @@ As memórias das campanhas existem **só no Engramind** (sem cópia no MongoDB; 
 
 - canais `dndicas/maddox/campanhas/<campaignId>/jogadores` e `…/mestre` (`visibility`), criados **na criação
   da campanha** junto com as categorias `FATO`, `EVENTO`, `LOCAL`, `MISSAO`, `RELACAO` e `OUTRO` (`kind`);
-- `save_memory` grava pelo tipo + título (chave `mx:<tipo>:<título>`), com a situação da missão e o turno em tags;
+- `save_memory` grava pelo tipo + título (chave `mx:<tipo>:<título>`), com a situação da missão, o turno e o instante da
+  gravação (`gravado:<ms>`, DND-44) em tags;
   o marco do combate usa a chave do combate; com a rede fora, a gravação espera na fila temporária e o narrador é
   avisado;
 - `search_memories` e o prompt do narrador leem os dois canais; o **Diário** lê só o canal dos jogadores (ordem
@@ -388,7 +391,43 @@ em andamento, o lobby mostra "Em andamento · Turno N · fase" e **"Entrar na me
 | Saída/remoção | `removeMember` grava, audita e avisa a saída e só depois chama `onMemberLeftGame` (o membro sai dos elegíveis e o turno é reavaliado); falha nessa reavaliação é logada e não desfaz a saída |
 | Campanha fora de `active` | Ações = 409 `CAMPAIGN_NOT_ACTIVE` |
 
-Ainda fora do escopo: pausar/encerrar a campanha, editar uma declaração enviada.
+Ainda fora do escopo: pausar/encerrar a campanha, editar uma declaração enviada. Desfazer turnos já tem caminho (DND-44,
+abaixo).
+
+### Voltar a um turno (DND-44)
+
+Código: `server/rewind.ts` (operações, perda definitiva e reparos), `server/turn-snapshots.ts` (retratos),
+`rewind-plan.ts` (regras puras e textos), `models/discard-filter.ts` (marca de descarte), `models/maddox-campaign-snapshot.ts`,
+`models/maddox-memory-repair.ts`, `src/features/engramind/server/campaign-rewind.ts` (memórias), `components/game/TurnsMenu.tsx`
+e `RewindNoticeLine.tsx`. API: `GET/POST /api/maddox/campaigns/[id]/game/rewind` (lista; `{ turnNumber }` vai ao turno) e
+`POST …/game/rewind/resume` (corpo `{}`), todas com `maddox.play` + dono (403) + `assertMemberCanPlay` (409
+`INTERVIEW_REQUIRED`). Sem chave nova no Perfix.
+
+| Regra | Comportamento |
+| --- | --- |
+| Retrato | Ao abrir a vez dos jogadores de um turno (fim do turno do mestre ou vez de um personagem no combate tático, `captureTurnSnapshot`), `maddox_campaign_snapshots` guarda: `state`, NPCs (com o token cifrado), `currentState`/`status` dos personagens, **fichas inteiras** (`CharacterSheet` + itens, ataques, traços, talentos e magias), combates ativos (e os ids de todos), `maddox_combat_preps`, as mensagens que ainda mudam (testes, rolagens, reações, ações, lembranças), `opex.run` dos Personagens Opex, a última mensagem (`boundaryMessageId`), o instante (`takenAt`) e o começo da narração (`excerpt`). Falha na captura só tira o turno da lista. Turnos jogados antes da DND-44 não têm retrato e não aparecem |
+| Turnos disponíveis | 1 ≤ X < turno de origem, diferente do turno em que a mesa está, com retrato; do mais recente para o mais antigo. Turnos só dos adversários (combate tático) não abrem vez dos jogadores e não têm retrato. **"Desfazer turno"** vai ao maior turno disponível abaixo do atual (o −1 sempre que ele existir) |
+| Bloqueios | Maddox narrando, testes/rolagens pendentes, pausa do combate ou fila da campanha ocupada = 409 `MASTER_TURN`; outra volta em curso = 409 `REWIND_IN_PROGRESS`; fora de `active` = 409 `CAMPAIGN_NOT_ACTIVE`; X inválido = 400 (Zod) ou 409 `TURN_UNAVAILABLE`; retomar sem volta pendente = 409 `NO_PENDING_REWIND`. **Com a narração parada por falha** (fase do mestre sem geração, `failedAt`), o dono pode voltar; retomar devolve a fase do mestre com a falha |
+| Trava | A operação toma a trava do mestre (`turn.generating.rewind`, fase `master`) e roda na fila da campanha: declarações concorrentes recebem `MASTER_TURN`/`TURN_CLOSED` (nunca ficam órfãs) e uma segunda volta responde 409. Trava velha (reinício) é refeita pela retomada do turno do mestre (`recoverRewind`); as operações são idempotentes |
+| Ir ao turno X | Memórias primeiro (abaixo); depois: apaga as ações feitas desde a chegada ao turno atual (declarações novas), tira da fila de gravações do Engramind as posteriores ao retrato, marca com `discardedBy` as mensagens depois do retrato e as imagens criadas depois dele (o que é até o retrato volta, dentro da volta), repõe o retrato e abre a **vez dos jogadores de X** (elegíveis = prontos agora; no combate, o membro da vez). Cancela os prazos do combate (`cancelCampaignTimers`), troca a sessão do narrador no OpenCode (`rotateNarratorSession`: a nova não carrega a conversa descartada), grava a linha `kind: "rewind"` "O dono voltou a mesa para o turno X", audita (`CampanhaMaddox`, `depois.rewind: "goto"`) e avisa a mesa |
+| Volta pendente | `campaign.rewind { id, originTurn, originPhase, atTurn, positionAt, … }` + o retrato de origem (turno inteiro, memórias tocadas e gravações guardadas da fila). Faixa para todos: "A mesa voltou ao turno X. Os turnos X+1 a N serão perdidos quando o Maddox narrar de novo." |
+| Retomar ("Voltar ao turno atual (N)") | Mesma sequência com o retrato de origem: tira todas as marcas desta volta, devolve o `turn` inteiro (fase, elegíveis, declarados, falha), as gravações da fila e as versões novas das memórias; linha "O dono retomou o turno N"; auditoria `depois.rewind: "resume"` |
+| Descarte | `discardedBy` some de **todas** as leituras por um filtro no schema (mensagens e imagens): mesa, Diário (histórico, busca, imagens), transcrição do narrador e do Opex, testes e reações. Só a cota de imagens, a gravação do resultado de uma imagem em geração e o varredor de imagens presas (`includeDiscarded`) e as consultas pelo próprio `discardedBy` o enxergam: a imagem descartada durante a geração recebe `status`, `url` e `key` (a retomada a traz pronta); se já virou lápide, o arquivo gerado é excluído. A declaração descartada sai do índice único (`turnAction` vai para `discardedBy.turnAction`) |
+| Perda definitiva | No começo da nova narração (`commitRewind` em `runMasterTurn`, dentro da fila e da trava): exclui as memórias nascidas no trecho (falha → `maddox_memory_repairs`, a narração segue e a rotina do Engramind tenta de novo), apaga as mensagens descartadas, as imagens viram lápide (`slot: "discarded"`, `counts` mantido: **a cota não volta**; arquivo excluído do S3), apaga o retrato de origem e os retratos posteriores, aposenta os agentes dos NPCs Opex que sumiram e encerra a volta (auditoria `depois.rewind: "commit"`). A numeração segue em X+1 |
+| Lobby | "Em andamento · Turno N · fase" mostra o turno em que a mesa está |
+
+**Memórias.** Cada gravação do jogo leva `turno:<n>` e `gravado:<ms>` (relógio do dndicas; reservada, fora do Diário),
+inclusive as dos Personagens Opex (`personagem-opex`) e dos NPCs Opex (`npc-opex`). Ir ao turno lê o histórico de cada
+memória candidata (as gravadas depois do retrato e as já tocadas pela volta) e a leva à revisão de conteúdo
+(`create`/`update`/`redact`) gravada até o `takenAt` do retrato: `revert` (texto, título, categoria, tags) e
+`archive`/`restore` (situação). Sem revisão até ali = arquivada (criada depois) ou **excluída** (nascida de ação feita
+depois da volta). Memórias antigas, sem `turno:` nem `gravado:`, nunca mudam. Rede fora: a operação responde 409
+`ENGRAMIND_UNAVAILABLE` sem tocar no Mongo; o que já foi mudado é devolvido à posição atual na hora ou fica em
+`campaign.memoryRepair` (refeito antes da próxima operação, da próxima narração e pela rotina). A troca de canal
+(Jogadores ↔ Mestre) feita depois do turno não é desfeita.
+
+Testes: `tests/backend/maddox/rewind.test.ts`, `rewind-combat.test.ts`, `rewind-plan.test.ts`,
+`tests/backend/engramind/campaign-rewind.test.ts` e `tests/frontend/maddox/maddox-game-rewind.test.tsx`.
 
 **Mestre.** `getMaddoxMaster()` devolve o narrador com IA (`aiMaddoxMaster`, interface `MaddoxMaster { narrate, answer }`
 com um `sink` para o texto ao vivo). O mestre simulado do Maddox 3 foi removido.
@@ -840,6 +879,12 @@ Sem rota nova nem permissão nova (`maddox.play` cobre a mesa).
 Graus **Rigoroso e Fiel ao D&D** (`MADDOX_TACTICAL_COMBAT_RIGORS`): iniciativa, turnos por combatente, Ação e Ação bônus por botões,
 dados rolados pelos jogadores (personagens) e pelo servidor (adversários) e dano/efeitos aplicados e persistidos.
 
+**Voltar a um turno (DND-44).** Cada vez de personagem é um turno com retrato: voltar a ela restaura a vez (`turn.combatActor`), a
+iniciativa e o estado tático (PV, condições e recargas dos adversários, economia e condições dos personagens) e a ficha inteira (PV,
+espaços, cargas, itens). Voltar a um turno anterior ao início do combate apaga o combate e a preparação dele. Os prazos do combate da
+campanha (dado dos inimigos, pausa entre blocos, ausência e reações, estas com a chave `reaction:<campanha>:<mensagem>`) são
+cancelados por `cancelCampaignTimers`. Turnos só dos adversários não têm retrato.
+
 Código: regras puras em `combat-rules.ts` (vantagem/desvantagem por condição, crítico, dano com resistência/imunidade/vulnerabilidade,
 PV temporários, 0 PV, morte instantânea, testes contra a morte 2024, CD da concentração, desempate da iniciativa, expressões de dados)
 e `combat-options.ts` (o que o personagem PODE usar); tipos em `combat-types.ts`; Zod das rotas em `combat-schemas.ts`. Servidor:
@@ -1155,6 +1200,10 @@ Campanhas Fiel antigas ficam sem lista (todo o catálogo), sem migração. Sem p
 
 Código: `server/journal.ts` (serviço), `journal-search.ts` (módulo puro: regex sem acento, trecho, texto corrido),
 `journal-schemas.ts`, `journal-types.ts`, `hooks/useMaddoxJournal.ts`, `components/journal/`.
+
+**Voltar a um turno (DND-44).** Com a mesa de volta a um turno, o que veio depois sai do Diário (histórico, busca e imagens) pelo
+filtro de descarte, e as memórias voltam à versão do turno (as criadas depois ficam arquivadas e não aparecem). Retomar o turno de
+origem devolve tudo.
 
 **O que os jogadores consultam.** Só o que eles sabem: NPCs e memórias com `visibility: "players"`, a descrição pública dos
 NPCs (o `masterNotes` nunca é lido, buscado nem existe nos DTOs), o histórico da mesa (o mesmo `messagesDto` da mesa, que esconde
@@ -1518,6 +1567,9 @@ Sem permissão nova: a configuração exige ser o dono e a leitura, `maddox.play
 Personagens controlados por IA que o dono adiciona à campanha e que jogam como os outros: entrevista com o Maddox, ficha,
 retrato, mesa, testes e combate.
 
+**Voltar a um turno (DND-44).** As memórias do canal individual são gravadas com `turno:<n>` e `gravado:<ms>` e acompanham a volta
+como as da campanha (arquivadas, revertidas, reativadas ou excluídas), com o token do próprio Opex. `opex.run` volta com o retrato.
+
 **Permissão.** `maddox.opex` (`MADDOX_OPEX_PERMISSION`) só para **adicionar** (`POST /api/maddox/campaigns/[id]/opex` e o botão
 "Adicionar Personagem Opex", via `canAddOpex` no GET do detalhe). Remover, "Tentar de novo", "Pular", aprovar e o retrato exigem
 `maddox.play` e ser o dono. Migração `grant-maddox-opex` (uma vez, perfil `user` + padrão).
@@ -1583,6 +1635,16 @@ teto `MADDOX_OPEX_GENERATION_TIMEOUT_MS`. Instruções = configuração + papel 
 
 NPC importante da campanha com **agente de IA próprio** (memória no Engramind) que decide o que ele fala e faz nas narrações em que
 aparece (inclusive no combate narrativo) e na vez dele no combate tático. O Maddox resolve e narra a partir da decisão.
+
+**Consultas paralelas (DND-44).** `consultar_npc_opex` reserva a vaga do teto de consultas por narração pelo **nome pedido**, antes
+da leitura do NPC, e a reserva passa para a chave do NPC quando ele é lido: chamadas do mesmo NPC no mesmo passo reaproveitam
+uma consulta só, o teto segue a ordem em que o narrador pediu (não a ordem em que o banco respondeu) e o narrador do combate
+enxerga a mesma decisão.
+
+**Voltar a um turno (DND-44).** As memórias do NPC (`gravar_memoria_npc_opex`, decisões e a memória inicial da promoção) levam
+`turno:<n>` e `gravado:<ms>` e acompanham a volta com o token do NPC (o do retrato de origem quando o NPC sumiu da mesa). O NPC criado
+depois do turno some da mesa e do contexto; volta ao retomar e é apagado na perda definitiva, que também aposenta o agente dos NPCs
+Opex que deixaram de existir. Canal sem acesso (token revogado) é ignorado.
 
 **Dados** (`maddox_npcs.opex`): `{ active, promotedAt, promotedBy ("system:maddox" ou o dono), retiredAt, retiredReason
 (maddox | owner | death), engramind }`, índice `{ campaignId, "opex.active" }`. Nada é apagado ao desfazer (`active: false`).

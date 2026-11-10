@@ -6,7 +6,7 @@ import { createHash, createHmac } from "node:crypto"
  * `405 METHOD_NOT_ALLOWED`, como o serviço real: rota nova aqui exige conferir método e caminho no
  * contrato antes. Simula o token de app (só o próprio app; não muta memória a memória), os tokens de
  * agente (só os canais assinados), a criação de canal por assinatura exata, `key`/`upsert`, versões,
- * categorias e importação idempotente. Nunca há rede.
+ * categorias, importação idempotente e o histórico de revisões (`history`/`revert`, DND-44). Nunca há rede.
  */
 
 export const CONTRACT_ROUTES: readonly (readonly [string, string])[] = [
@@ -43,6 +43,8 @@ export const CONTRACT_ROUTES: readonly (readonly [string, string])[] = [
     ["POST", "/v1/memories/{memory}/archive"],
     ["POST", "/v1/memories/{memory}/restore"],
     ["POST", "/v1/memories/{memory}/move"],
+    ["GET", "/v1/memories/{memory}/history"],
+    ["POST", "/v1/memories/{memory}/revert"],
 ]
 
 const PATTERNS = CONTRACT_ROUTES.map(([method, template]) => ({ method, template, pattern: new RegExp(`^${template.replace(/\{[^}]+\}/g, "([^/]+)")}$`) }))
@@ -66,6 +68,20 @@ export interface FakeMemory {
     created_at: string
     updated_at: string
     archived_at: string | null
+}
+
+export interface FakeRevision {
+    version: number
+    reason: string
+    status: FakeMemory["status"]
+    text: string
+    title: string
+    title_locked: boolean
+    category: string
+    tags: string[]
+    author: FakeMemory["author"]
+    origin: FakeMemory["origin"]
+    created_at: string
 }
 
 interface FakeToken {
@@ -121,6 +137,8 @@ export function createFakeEngramind() {
         subscriptions: [] as FakeSubscription[],
         tokens: new Map<string, FakeToken>(),
         memories: new Map<string, FakeMemory>(),
+        /** Revisões de cada memória (da mais antiga à mais nova), como `GET /v1/memories/{id}/history` devolve invertido. */
+        revisions: new Map<string, FakeRevision[]>(),
         apps: new Map<string, { slug: string; webhook: { url: string; secret: string } | null }>([["dndicas", { slug: "dndicas", webhook: null }]]),
         imports: new Map<string, unknown>(),
         events: [] as FakeEvent[],
@@ -130,6 +148,11 @@ export function createFakeEngramind() {
     }
     const tick = () => new Date((state.clock += 1000)).toISOString()
     const nextId = (prefix: string) => `${prefix}_${(++state.seq).toString(16).padStart(8, "0")}`
+    const revise = (memory: FakeMemory, reason: string) => {
+        const list = state.revisions.get(memory.id) ?? []
+        list.push({ version: memory.version, reason, status: memory.status, text: memory.text, title: memory.title ?? "", title_locked: false, category: memory.category, tags: [...memory.tags], author: memory.author, origin: memory.origin, created_at: memory.updated_at })
+        state.revisions.set(memory.id, list)
+    }
     const emit = (type: string, channel: string | null, memoryIds?: string[]) => state.events.push({ id: nextId("ev"), type, channel, ...(memoryIds ? { memory_ids: memoryIds } : {}) })
 
     function addToken(input: Omit<FakeToken, "id" | "secret" | "status" | "expires_at"> & { id?: string; secret?: string; status?: FakeToken["status"]; expires_at?: string | null }): FakeToken {
@@ -189,6 +212,7 @@ export function createFakeEngramind() {
                 if (!input.upsert) fail(409, "MEMORY_KEY_EXISTS", { existing_id: existing.id })
                 const status = (input.status as FakeMemory["status"]) ?? "active"
                 Object.assign(existing, { text: input.text, category, ...(input.title ? { title: input.title, title_state: "ready" } : {}), ...(input.tags ? { tags: input.tags } : {}), status, archived_at: status === "archived" ? (existing.archived_at ?? now) : null, version: existing.version + 1, updated_at: now })
+                revise(existing, "update")
                 emit("memory.updated", existing.channel, [existing.id])
                 return { memory: existing, duplicate: false, created: false }
             }
@@ -215,6 +239,7 @@ export function createFakeEngramind() {
             archived_at: status === "archived" ? now : null,
         }
         state.memories.set(memory.id, memory)
+        revise(memory, "create")
         return { memory, duplicate: false, created: true }
     }
 
@@ -460,12 +485,14 @@ export function createFakeEngramind() {
                     version: memory.version + 1,
                     updated_at: tick(),
                 })
+                revise(memory, "update")
                 emit("memory.updated", memory.channel, [memory.id])
                 return { status: 200, body: { memory, duplicate: false, similar: [] } }
             }
             case "DELETE /v1/memories/{memory}": {
                 const memory = memoryOrFail(params[0]!)
                 assertWrite(token, memory.channel)
+                if (!token.scopes.includes("delete")) fail(403, "SCOPE_REQUIRED", { required_scope: "delete" })
                 state.memories.delete(memory.id)
                 emit("memory.deleted", memory.channel, [memory.id])
                 return { status: 204 }
@@ -475,7 +502,9 @@ export function createFakeEngramind() {
                 const memory = memoryOrFail(params[0]!)
                 assertWrite(token, memory.channel)
                 const archive = template.endsWith("archive")
+                if ((memory.status === "archived") === archive) return { status: 200, body: memory }
                 Object.assign(memory, { status: archive ? "archived" : "active", archived_at: archive ? tick() : null, version: memory.version + 1, updated_at: tick() })
+                revise(memory, archive ? "archive" : "restore")
                 emit(archive ? "memory.archived" : "memory.updated", memory.channel, [memory.id])
                 return { status: 200, body: memory }
             }
@@ -487,8 +516,28 @@ export function createFakeEngramind() {
                 channelOrFail(to)
                 const from = memory.channel
                 Object.assign(memory, { channel: to, version: memory.version + 1, updated_at: tick() })
+                revise(memory, "move")
                 emit("memory.updated", from, [memory.id])
                 emit("memory.updated", to, [memory.id])
+                return { status: 200, body: memory }
+            }
+            case "GET /v1/memories/{memory}/history": {
+                const memory = memoryOrFail(params[0]!)
+                assertRead(token, memory.channel)
+                const all = [...(state.revisions.get(memory.id) ?? [])].reverse()
+                const start = Number(query.get("cursor") ?? 0) || 0
+                const limit = Math.min(200, Math.max(1, Number(query.get("limit") ?? 50)))
+                return { status: 200, body: { memory_id: memory.id, revisions: all.slice(start, start + limit), next_cursor: start + limit < all.length ? String(start + limit) : null } }
+            }
+            case "POST /v1/memories/{memory}/revert": {
+                const memory = memoryOrFail(params[0]!)
+                assertWrite(token, memory.channel)
+                const target = (state.revisions.get(memory.id) ?? []).find((item) => item.version === Number(body.version)) ?? fail(404, "VERSION_NOT_FOUND")
+                const same = memory.text === target.text && (memory.title ?? "") === target.title && memory.category === target.category && JSON.stringify(memory.tags) === JSON.stringify(target.tags)
+                if (same) return { status: 200, body: memory }
+                Object.assign(memory, { text: target.text, title: target.title, category: target.category, tags: [...target.tags], origin: target.origin, version: memory.version + 1, updated_at: tick() })
+                revise(memory, "revert")
+                emit("memory.updated", memory.channel, [memory.id])
                 return { status: 200, body: memory }
             }
         }

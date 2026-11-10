@@ -79,6 +79,8 @@ export function opexBannerText(state: Pick<MaddoxGameStateDto, "turn" | "status"
 
 /** Faixa do turno do mestre: narrando, esperando os testes (Maddox 5) ou, depois de uma falha, a espera da nova tentativa. */
 export function masterBannerText(state: Pick<MaddoxGameStateDto, "turn"> & { me?: Pick<MaddoxGameStateDto["me"], "memberId"> }): string {
+    // Volta a um turno em andamento (DND-44): a trava é do dono, não do Maddox.
+    if (state.turn.rewinding) return "O dono está voltando a mesa a outro turno…"
     if (state.turn.awaitingChecks) {
         // Combate tático: as rolagens e reações pendentes contam junto com os testes.
         const waits = [...state.turn.pendingChecks.map((check) => ({ memberId: check.memberId, characterName: check.characterName })), ...(state.turn.pendingCombat ?? []).map((item) => ({ memberId: item.memberId, characterName: item.characterName }))]
@@ -152,4 +154,15 @@ export function actionOptionsView(state: Pick<MaddoxGameStateDto, "status" | "tu
         chosen: mine ? (narration.actionOptions.find((option) => sameAction(option, mine.content)) ?? null) : null,
         disabled: state.me.declared,
     }
+}
+
+/**
+ * Maior id de aviso de volta a um turno (DND-44) entre as mensagens e o já visto (`seen`). Os ids crescem com o tempo
+ * (ObjectId em hexadecimal, mesmo tamanho): a mesa reinicia as páginas antigas carregadas só quando surge um aviso mais
+ * novo, nunca quando o aviso sai da janela das mensagens recentes.
+ */
+export function newestRewindNoticeId(messages: readonly Pick<MaddoxGameMessageDto, "id" | "kind">[], seen: string): string {
+    let newest = seen
+    for (const message of messages) if (message.kind === "rewind" && (message.id.length > newest.length || (message.id.length === newest.length && message.id > newest))) newest = message.id
+    return newest
 }

@@ -179,7 +179,10 @@ async function decideAsNpc<T extends { memorias: { titulo: string; texto: string
     const memories = opexMemoriesOf(decision)
     if (memories.length) {
         const { saveOpexNpcMemories } = await import("@/features/engramind/server/opex-npcs")
-        await saveOpexNpcMemories({ campaignId: String(campaign._id), npcId: String(npc._id), npcName: npc.name }, memories).catch((error: unknown) =>
+        // Turno da gravação (DND-44): a volta a um turno arquiva as memórias gravadas depois dele.
+        const { MaddoxCampaignModel } = await import("../models")
+        const turnNumber = (await MaddoxCampaignModel.findById(campaign._id).select("turn.number").lean<{ turn?: { number?: number } }>().catch(() => null))?.turn?.number ?? null
+        await saveOpexNpcMemories({ campaignId: String(campaign._id), npcId: String(npc._id), npcName: npc.name }, memories, undefined, turnNumber).catch((error: unknown) =>
             log.warn({ npcId: String(npc._id), err: error instanceof Error ? error.message : String(error) }, "[maddox] memórias do NPC Opex não gravadas"),
         )
     }

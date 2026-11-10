@@ -18,7 +18,7 @@ import { MaddoxCampaignMemberModel, MaddoxCampaignModel, MaddoxNpcModel, type IM
 
 const log = loggerFor({ module: "maddox", feature: "opex-npc" })
 
-type CampaignDoc = Pick<IMaddoxCampaign, "_id" | "name" | "status" | "ownerId">
+type CampaignDoc = Pick<IMaddoxCampaign, "_id" | "name" | "status" | "ownerId"> & { turn?: Pick<IMaddoxCampaign["turn"], "number"> }
 type NpcDoc = IMaddoxNpc
 
 /** NPC pelo id (rotas do dono) ou pelo nome (ferramentas do Maddox; acento e caixa não importam). */
@@ -56,7 +56,7 @@ export async function waitForOpexNpcWork(): Promise<void> {
 async function loadCampaign(campaignId: Types.ObjectId | string): Promise<CampaignDoc> {
     if (!Types.ObjectId.isValid(String(campaignId))) throw new DomainError(404, "Campanha não encontrada", "NOT_FOUND")
     await dbConnect()
-    const campaign = await MaddoxCampaignModel.findById(campaignId).select("name status ownerId").lean<CampaignDoc>()
+    const campaign = await MaddoxCampaignModel.findById(campaignId).select("name status ownerId turn.number").lean<CampaignDoc>()
     if (!campaign) throw new DomainError(404, "Campanha não encontrada", "NOT_FOUND")
     return campaign
 }
@@ -150,7 +150,7 @@ export async function promoteOpexNpc(campaignId: Types.ObjectId | string, target
     inBackground("promover", async () => {
         const memories = await import("@/features/engramind/server/opex-npcs")
         await memories.provisionOpexNpcAgent(ref, actorId)
-        await memories.seedOpexNpcInitialMemories(ref, { publicDescription: npc.publicDescription ?? "", masterNotes: npc.masterNotes ?? "" })
+        await memories.seedOpexNpcInitialMemories(ref, { publicDescription: npc.publicDescription ?? "", masterNotes: npc.masterNotes ?? "" }, campaign.turn?.number ?? null)
     })
     await announce(campaign._id)
     return { npc: view, alreadyOpex: false }

@@ -23,6 +23,11 @@ export const TAG_MAX = 40
 export const TAGS_MAX = 20
 const STATUS_TAG = "status:"
 const TURN_TAG = "turno:"
+/**
+ * Instante da gravação no relógio do dndicas (DND-44): a volta a um turno compara cada revisão de uma memória com o
+ * retrato do turno (`takenAt`) sem depender do relógio do Engramind. Reservada: não aparece no Diário.
+ */
+const WRITTEN_TAG = "gravado:"
 
 const hash8 = (value: string) => createHash("sha1").update(value).digest("hex").slice(0, 8)
 
@@ -73,12 +78,29 @@ export function resolveCategory(kind: MaddoxCampaignMemoryKind, available: reado
 
 export const statusTag = (status: MaddoxQuestStatus) => `${STATUS_TAG}${status}`
 
-const isReserved = (tag: string) => tag.startsWith(STATUS_TAG) || tag.startsWith(TURN_TAG)
+const isReserved = (tag: string) => tag.startsWith(STATUS_TAG) || tag.startsWith(TURN_TAG) || tag.startsWith(WRITTEN_TAG)
 
-/** Tags gravadas: as do narrador (cortadas, sem repetir, sem as reservadas) + status e turno. */
-export function tagsOf(input: { kind: MaddoxCampaignMemoryKind; tags?: readonly string[]; status?: MaddoxQuestStatus | null; turnNumber?: number | null }): string[] {
+/** Tags do turno de uma gravação (DND-44): `turno:<n>` (quando há turno) e `gravado:<ms>`. */
+export function rewindTags(turnNumber: number | null | undefined, writtenAt = Date.now()): string[] {
+    return [...(turnNumber ? [`${TURN_TAG}${turnNumber}`] : []), `${WRITTEN_TAG}${writtenAt}`]
+}
+
+/** Turno (`turno:<n>`) de uma lista de tags; `null` sem a tag. */
+export function turnOfTags(tags: readonly string[] | null | undefined): number | null {
+    const value = Number((tags ?? []).find((tag) => tag.startsWith(TURN_TAG))?.slice(TURN_TAG.length))
+    return Number.isInteger(value) && value > 0 ? value : null
+}
+
+/** Instante da gravação (`gravado:<ms>`); `null` nas gravações anteriores à DND-44. */
+export function writtenAtOfTags(tags: readonly string[] | null | undefined): number | null {
+    const value = Number((tags ?? []).find((tag) => tag.startsWith(WRITTEN_TAG))?.slice(WRITTEN_TAG.length))
+    return Number.isFinite(value) && value > 0 ? value : null
+}
+
+/** Tags gravadas: as do narrador (cortadas, sem repetir, sem as reservadas) + status, turno e instante da gravação. */
+export function tagsOf(input: { kind: MaddoxCampaignMemoryKind; tags?: readonly string[]; status?: MaddoxQuestStatus | null; turnNumber?: number | null; writtenAt?: number | null }): string[] {
     const free = [...new Set((input.tags ?? []).map((tag) => tag.trim().slice(0, TAG_MAX).trim()).filter((tag) => tag && !isReserved(tag)))].slice(0, MADDOX_TOOL_TAGS_MAX)
-    const reserved = [...(input.kind === "missao" ? [statusTag(input.status ?? "ativa")] : []), ...(input.turnNumber ? [`${TURN_TAG}${input.turnNumber}`] : [])]
+    const reserved = [...(input.kind === "missao" ? [statusTag(input.status ?? "ativa")] : []), ...(input.turnNumber ? [`${TURN_TAG}${input.turnNumber}`] : []), ...(input.writtenAt ? [`${WRITTEN_TAG}${input.writtenAt}`] : [])]
     return [...free.slice(0, TAGS_MAX - reserved.length), ...reserved]
 }
 

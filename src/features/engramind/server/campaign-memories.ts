@@ -180,6 +180,7 @@ export async function saveCampaignMemory(campaignId: string, input: SaveCampaign
     await provisionCampaignMemoryNetworkSafely(campaign)
     const key = input.key ?? memoryKeyOf(input.kind, input.title)
     const title = remoteTitle(input.title)
+    const writtenAt = Date.now()
     const client = await engramindAgentClient("maddox")
     const draftChannel = campaignChannel(campaignId, input.visibility ?? "players")
     const draftBody = (text: string, extra: Partial<{ tags: string[]; category: string; channel: string }> = {}) => ({
@@ -188,7 +189,7 @@ export async function saveCampaignMemory(campaignId: string, input: SaveCampaign
         upsert: true,
         text,
         category: extra.category ?? categoryOfKind(input.kind),
-        tags: extra.tags ?? tagsOf({ kind: input.kind, tags: input.tags, status: input.status, turnNumber: input.turnNumber }),
+        tags: extra.tags ?? tagsOf({ kind: input.kind, tags: input.tags, status: input.status, turnNumber: input.turnNumber, writtenAt }),
         origin: { source: "maddox", label: "Maddox" },
         ...(title ? { title } : {}),
     })
@@ -206,7 +207,7 @@ export async function saveCampaignMemory(campaignId: string, input: SaveCampaign
         const channel = campaignChannel(campaignId, visibility)
         const max = await textMaxOf(client, channel)
         const text = input.text.length > max ? input.text.slice(0, max).trimEnd() : input.text
-        const tags = tagsOf({ kind: input.kind, tags: input.tags ?? previous?.tags, status: input.status ?? previous?.status, turnNumber: input.turnNumber ?? previous?.turnNumber })
+        const tags = tagsOf({ kind: input.kind, tags: input.tags ?? previous?.tags, status: input.status ?? previous?.status, turnNumber: input.turnNumber ?? previous?.turnNumber, writtenAt })
         const category = resolveCategory(input.kind, await listCategoryKeys(client))
         body = draftBody(text, { tags, channel, ...(category ? { category } : {}) })
         if (existing && existing.channel !== channel) await client.memories.move(existing.id, channel)

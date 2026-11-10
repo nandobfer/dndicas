@@ -65,6 +65,8 @@ export interface MaddoxGameMessageDto {
     opexNpcFailures?: { npcName: string; reason: string }[]
     /** DND-41: card privado "Sua mesa está pronta" (só o dono do personagem o recebe). */
     combatPrep?: MaddoxCombatPrepCardDto | null
+    /** Linha de aviso da volta a um turno (DND-44, `kind: "rewind"`). */
+    rewindNotice?: { event: "goto" | "resume"; turnNumber: number; originTurn: number } | null
     createdAt: string
 }
 
@@ -359,6 +361,10 @@ export interface MaddoxGameStateDto {
          * Com `failed`, a mesa espera o dono ("Tentar de novo" ou "Pular"). No combate, `combat: true`.
          */
         opexActor?: { memberId: string; characterName: string; failed: boolean; error: string | null; combat: boolean } | null
+        /** Volta pendente (DND-44), para toda a mesa: a faixa e o aviso das declarações novas nos modais. */
+        rewind?: { atTurn: number; originTurn: number; hasNewActions: boolean } | null
+        /** O dono está levando a mesa a outro turno agora (trava da volta). */
+        rewinding?: boolean
     }
     /** Mostra a CD dos testes aos jogadores. */
     showCheckDc: boolean
@@ -381,6 +387,11 @@ export interface MaddoxGameStateDto {
         sheet: { id: string; slug: string } | null
         /** Combate tático (Maddox 7). */
         combat?: MaddoxMyCombatDto | null
+        /**
+         * Botão "Turnos" (DND-44): só o dono recebe. `blockReason` desabilita todas as ações (entrevista, campanha parada,
+         * Maddox narrando); `emptyReason` explica a lista vazia; `undoTarget` é o turno de "Desfazer turno".
+         */
+        rewind?: { blockReason: string | null; emptyReason: string | null; undoTarget: number | null; hasTurns: boolean } | null
     }
     /** Mensagens mais recentes, em ordem cronológica. */
     messages: MaddoxGameMessageDto[]

@@ -7,6 +7,7 @@ import {
     type MaddoxSceneImageSource,
     type MaddoxSceneImageStatus,
 } from "../constants"
+import { applyDiscardFilter, type IMaddoxDiscardMark } from "./discard-filter"
 
 /** Entidade do catálogo citada na imagem (tipo da marcação `{{Tipo:Nome}}` e id). */
 export interface IMaddoxSceneImageCatalogRef {
@@ -20,6 +21,8 @@ export interface IMaddoxSceneImageCatalogRef {
  * `failed` e `skipped` liberam a vaga. `description` (pedido ao gerador) nunca chega à tela.
  */
 export interface IMaddoxSceneImage {
+    /** Descartada por uma volta pendente (DND-44): some das leituras, mas continua no teto diário. */
+    discardedBy?: IMaddoxDiscardMark | null
     _id: Types.ObjectId
     campaignId: Types.ObjectId
     turnNumber: number
@@ -82,6 +85,8 @@ const MaddoxSceneImageSchema = new Schema<IMaddoxSceneImage>(
     },
     { collection: "maddox_scene_images", timestamps: true, versionKey: false },
 )
+
+applyDiscardFilter(MaddoxSceneImageSchema)
 
 // Teto diário e intervalo: imagens da campanha por data.
 MaddoxSceneImageSchema.index({ campaignId: 1, createdAt: -1 })

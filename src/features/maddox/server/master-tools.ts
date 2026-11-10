@@ -45,7 +45,7 @@ import {
 import { normalizeCatalogName } from "../catalog-markup"
 import { MaddoxCampaignMemberModel, MaddoxCampaignModel, MaddoxCharacterModel, MaddoxNpcModel, type IMaddoxCampaign, type IMaddoxCharacter, type IMaddoxNpc } from "../models"
 import { MADDOX_ABILITIES, MADDOX_ABILITY_LABELS, MADDOX_SKILLS, checkAbility, checkTitle } from "../check-modifier"
-import { addDraftCheck, addDraftCombat, addDraftNpcPortrait, addDraftOpexNpcFailure, jobOpexNpcConsult, jobOpexNpcConsultCount, setJobOpexNpcConsult, setDraftActionOptions, jobDraftChecks, jobDraftCombat, jobDraftSceneImage, jobWorkspace, maddoxJobMeta, setDraftSceneImage, type MaddoxDraftCombatReward } from "./game-live"
+import { addDraftCheck, addDraftCombat, addDraftNpcPortrait, addDraftOpexNpcFailure, deleteJobOpexNpcConsult, jobOpexNpcConsult, linkJobOpexNpcConsult, jobOpexNpcConsultCount, setJobOpexNpcConsult, setDraftActionOptions, jobDraftChecks, jobDraftCombat, jobDraftSceneImage, jobWorkspace, maddoxJobMeta, setDraftSceneImage, type MaddoxDraftCombatReward } from "./game-live"
 import { catalogEntityTypeSchema } from "@/features/mcp/server/catalog-schemas"
 import type { TacticalDraftCombatant } from "./tactical-combat"
 import type { CampaignMemoryView } from "@/features/engramind/campaign-memory-format"
@@ -1085,7 +1085,7 @@ export const MADDOX_OPEX_NPC_TOOLS: readonly MaddoxMasterTool[] = [
             const fit = fitter()
             const { saveOpexNpcMemories } = await import("@/features/engramind/server/opex-npcs")
             const { MADDOX_OPEX_MEMORY_TITLE_MAX } = await import("../constants")
-            const result = await saveOpexNpcMemories({ campaignId: String(context.campaignId), npcId: String(npc._id), npcName: npc.name }, [{ title: clip(input.titulo, MADDOX_OPEX_MEMORY_TITLE_MAX), text: fit.fit("texto", input.texto) }], "Maddox")
+            const result = await saveOpexNpcMemories({ campaignId: String(context.campaignId), npcId: String(npc._id), npcName: npc.name }, [{ title: clip(input.titulo, MADDOX_OPEX_MEMORY_TITLE_MAX), text: fit.fit("texto", input.texto) }], "Maddox", context.turnNumber)
             if (!result.saved && !result.pending) return { npc: npc.name, gravada: false, nota: "A rede de memórias não está configurada: a memória não foi gravada. Siga sem ela." }
             return { npc: npc.name, gravada: true, ...(result.pending ? { nota: "A rede de memórias está fora: a memória fica na fila e entra quando ela voltar." } : {}), ...fit.notice() }
         },
@@ -1105,36 +1105,54 @@ export const MADDOX_OPEX_NPC_TOOLS: readonly MaddoxMasterTool[] = [
         async execute(context, input): Promise<OpexNpcConsultResult> {
             const meta = context.jobId ? maddoxJobMeta(String(context.campaignId), context.jobId) : null
             if (!meta || meta.kind !== "narration") throw new MaddoxToolError("Nas respostas a perguntas, decida você mesmo pelo NPC.")
-            const npc = await loadOpexNpc(context, input.npc)
             const campaignId = String(context.campaignId)
-            const npcId = String(npc._id)
             const jobId = context.jobId!
-            // Consultas paralelas (tool calls do mesmo passo): a decisão em andamento fica no job ANTES do primeiro await, então
-            // a segunda chamada do mesmo NPC reaproveita a mesma promessa e a vaga no teto já está reservada.
-            const cached = jobOpexNpcConsult<Promise<OpexNpcConsultResult> | OpexNpcConsultResult>(campaignId, jobId, npcId)
+            // Consultas paralelas (tool calls do mesmo passo): a reserva vale pelo NOME pedido, ANTES do primeiro await. O teto
+            // segue a ordem em que o narrador pediu (o banco pode responder fora de ordem); a segunda chamada do mesmo NPC
+            // reaproveita a mesma promessa, inclusive quando ela é recusada pelo teto.
+            // A reserva fica no job pelo nome pedido e, quando o NPC é lido, passa para a chave do NPC (a mesma do narrador
+            // do combate): uma vaga só no teto e a mesma decisão para todos.
+            const slot = `nome:${keyOf(clip(input.npc, MADDOX_TOOL_NAME_MAX))}`
+            const cached = jobOpexNpcConsult<Promise<OpexNpcConsultResult> | OpexNpcConsultResult>(campaignId, jobId, slot)
             if (cached) return cached
             if (jobOpexNpcConsultCount(campaignId, jobId) >= MADDOX_OPEX_NPC_CONSULTS_PER_NARRATION) {
-                throw new MaddoxToolError(`Limite de ${MADDOX_OPEX_NPC_CONSULTS_PER_NARRATION} consultas a NPCs Opex por narração atingido: decida você o que ${npc.name} fala e faz.`)
+                throw new MaddoxToolError(`Limite de ${MADDOX_OPEX_NPC_CONSULTS_PER_NARRATION} consultas a NPCs Opex por narração atingido: decida você o que ${input.npc} fala e faz.`)
             }
             const consult = async (): Promise<OpexNpcConsultResult> => {
+                const npc = await loadOpexNpc(context, input.npc)
+                const npcId = String(npc._id)
+                // Já decidido neste job (o narrador do combate decide pelo NPC): devolve sem acionar o agente de novo.
+                const shared = jobOpexNpcConsult<Promise<OpexNpcConsultResult> | OpexNpcConsultResult>(campaignId, jobId, npcId)
+                if (shared) {
+                    deleteJobOpexNpcConsult(campaignId, jobId, slot)
+                    return shared
+                }
+                linkJobOpexNpcConsult(campaignId, jobId, slot, npcId)
+                let result: OpexNpcConsultResult
                 try {
                     const campaign = await MaddoxCampaignModel.findById(context.campaignId).select("name rigor setting openingSituation state").lean<IMaddoxCampaign>()
                     if (!campaign) throw new Error("Campanha não encontrada.")
                     const { decideOpexNpcScene } = await import("./opex-player")
                     const decision = await decideOpexNpcScene(campaign, npc, { situation: clip(input.situacao, MADDOX_TOOL_TEXT_MAX), question: input.pergunta ? clip(input.pergunta, MADDOX_TOOL_TEXT_MAX) : null })
-                    return { npc: npc.name, fala: decision.fala.trim(), acao: decision.acao.trim(), nota: `Narre a partir desta decisão de ${npc.name}: ele diz e tenta exatamente isso; você resolve os resultados.` }
+                    result = { npc: npc.name, fala: decision.fala.trim(), acao: decision.acao.trim(), nota: `Narre a partir desta decisão de ${npc.name}: ele diz e tenta exatamente isso; você resolve os resultados.` }
                 } catch (error) {
                     const reason = error instanceof Error ? error.message : String(error)
                     log.warn({ campaignId, npcId, err: reason }, "[maddox] o agente do NPC Opex não respondeu")
                     addDraftOpexNpcFailure(campaignId, jobId, { npcId, npcName: npc.name, error: reason.slice(0, 500) })
-                    return { npc: npc.name, falhou: true, nota: opexNpcFallbackNote(npc.name) }
+                    result = { npc: npc.name, falhou: true, nota: opexNpcFallbackNote(npc.name) }
                 }
+                setJobOpexNpcConsult(campaignId, jobId, npcId, result)
+                return result
             }
             const pending = consult()
-            setJobOpexNpcConsult(campaignId, jobId, npcId, pending)
-            const result = await pending
-            setJobOpexNpcConsult(campaignId, jobId, npcId, result)
-            return result
+            setJobOpexNpcConsult(campaignId, jobId, slot, pending)
+            try {
+                return await pending
+            } catch (error) {
+                // Recusa inteira (NPC inexistente, morto ou que não é Opex): solta a vaga e deixa a próxima chamada tentar.
+                deleteJobOpexNpcConsult(campaignId, jobId, slot)
+                throw error
+            }
         },
     }),
 ]
