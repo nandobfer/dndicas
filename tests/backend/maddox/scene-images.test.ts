@@ -19,7 +19,7 @@ const env = {
     generatorAvailable: true,
     model: "gemini-2.5-flash-image",
 }
-const gen = { fail: false, hang: false }
+const gen = { fail: false, hang: false, gate: null as Promise<void> | null }
 const jev = { score: 0.9 as number | null, fail: false, hang: false }
 const describer = { text: "", fail: false, hang: false }
 /** Dependência que nunca responde (os tetos de tempo, reduzidos abaixo, precisam liberar a geração). */
@@ -28,6 +28,7 @@ const never = () => new Promise<never>(() => undefined)
 const publishToChannels = vi.fn(async (...args: unknown[]) => void args)
 const generateAndStoreDndImage = vi.fn(async (input: { storageKey?: string; referenceImages?: unknown[]; prompt?: string; consumptionOrigin?: string; preferredAspectRatio?: string }) => {
     if (gen.hang) return never()
+    if (gen.gate) await gen.gate
     if (gen.fail) throw new Error("o provedor recusou a imagem")
     const key = `${input.storageKey}.png`
     return { key, url: `/api/upload?key=${encodeURIComponent(key)}`, mimeType: "image/png", referencesUsed: input.referenceImages?.length ?? 0 }
@@ -94,13 +95,15 @@ vi.mock("@/features/ai/server/memory-block", () => ({ memoryBlock: vi.fn(async (
 vi.mock("@/lib/ai/jev", () => ({ askJevSystemOne }))
 vi.mock("@/lib/ai/stream", () => ({ generateAiText }))
 vi.mock("@/core/storage/s3", () => ({ getFile }))
+const deleteFile = vi.fn(async (key: string) => void key)
+vi.mock("@/lib/storage/s3", () => ({ deleteFile }))
 vi.mock("@/features/engramind/server/campaign-memories", async () => (await import("../../helpers/campaign-memories-mock")).campaignMemoriesModule)
 vi.mock("@/features/maddox/server/combat-prep-ai", async () => (await import("../../helpers/combat-prep-mock")).combatPrepAiModule)
 vi.mock("@/features/mcp/server/catalog-entity-service", () => ({
     getCatalogEntity: vi.fn(async ({ id }: { id: string }) => (id === "goblin" ? { _id: "goblin", name: "Goblin", image: "/api/upload?key=catalogo%2Fgoblin.png", description: "<p>Pequeno e verde.</p>" } : null)),
 }))
 
-const { MaddoxCampaignMemberModel, MaddoxCampaignMessageModel, MaddoxCampaignModel, MaddoxCharacterModel, MaddoxCombatModel, MaddoxNpcModel, MaddoxSceneImageModel } = await import("@/features/maddox/models")
+const { MaddoxCampaignMemberModel, MaddoxCampaignMessageModel, MaddoxCampaignModel, MaddoxCharacterModel, MaddoxCombatModel, MaddoxNpcModel, MaddoxSceneImageModel, INCLUDE_DISCARDED } = await import("@/features/maddox/models")
 const campaigns = await import("@/features/maddox/server/campaigns")
 const images = await import("@/features/maddox/server/scene-images")
 const { enqueueMaddoxJob, jobDraftSceneImage, takeDraftImages, waitForCampaignIdle } = await import("@/features/maddox/server/game-live")
@@ -197,7 +200,8 @@ beforeEach(async () => {
         CharacterSheet.collection.deleteMany({}),
     ])
     Object.assign(env, { enabled: true, situations: { "new-location": true, climax: false, "combat-end": true, "npc-portrait": true }, autoPortraits: false, custom: [], gap: 3, maxPerDay: 10, jevSceneImage: false, generatorAvailable: true, model: "gemini-2.5-flash-image" })
-    Object.assign(gen, { fail: false, hang: false })
+    Object.assign(gen, { fail: false, hang: false, gate: null })
+    deleteFile.mockClear()
     Object.assign(jev, { score: 0.9, fail: false, hang: false })
     Object.assign(describer, { text: "", fail: false, hang: false })
     campaignMemoriesStore.reset()
@@ -398,6 +402,56 @@ describe("geração", () => {
         await MaddoxSceneImageModel.collection.updateOne({ _id: stuck._id }, { $set: { updatedAt: new Date(Date.now() - 10 * 60_000) } })
         expect(await images.expireStaleSceneImages(campaignId)).toBe(1)
         expect(await MaddoxSceneImageModel.findById(stuck._id).lean()).toMatchObject({ status: "failed", counts: false })
+    })
+})
+
+describe("volta a um turno durante a geração (DND-44)", () => {
+    const hold = () => {
+        let release!: () => void
+        gen.gate = new Promise<void>((resolve) => (release = resolve))
+        return () => release()
+    }
+    const discard = (id: unknown, extra: Record<string, unknown> = {}) => MaddoxSceneImageModel.collection.updateOne({ _id: id as mongoose.Types.ObjectId }, { $set: { discardedBy: { rewindId: "r1", at: new Date() }, ...extra } })
+
+    it("a imagem descartada enquanto era pintada recebe o resultado (status, url, key) e volta pronta na retomada", async () => {
+        const { campaignId, narrationId } = await table()
+        const release = hold()
+        const scheduled = await images.scheduleSceneImage({ campaignId, source: "tool", turnNumber: 5, messageId: narrationId, situation: "new-location", description: "x", caption: "" })
+        await vi.waitFor(async () => expect((await MaddoxSceneImageModel.findById(scheduled.image!._id).lean())?.status).toBe("generating"))
+        await discard(scheduled.image!._id)
+        release()
+        await images.waitForSceneImages()
+        const stored = await MaddoxSceneImageModel.findById(scheduled.image!._id).setOptions(INCLUDE_DISCARDED).lean()
+        expect(stored).toMatchObject({ status: "done", counts: true, key: expect.stringContaining("/scenes/"), url: expect.stringContaining("/api/upload") })
+        expect(stored!.discardedBy).toMatchObject({ rewindId: "r1" })
+        expect(deleteFile).not.toHaveBeenCalled()
+        // Retomada: a marca sai e a imagem aparece pronta (não presa em "generating").
+        await MaddoxSceneImageModel.collection.updateOne({ _id: scheduled.image!._id }, { $set: { discardedBy: null } })
+        expect(await MaddoxSceneImageModel.findById(scheduled.image!._id).lean()).toMatchObject({ status: "done" })
+    })
+
+    it("imagem descartada que ficou presa é varrida como as demais", async () => {
+        const { campaignId } = await table()
+        const stuck = await MaddoxSceneImageModel.create({ campaignId, turnNumber: 5, source: "tool", slot: "auto", status: "generating", counts: true })
+        await discard(stuck._id, { updatedAt: new Date(Date.now() - 10 * 60_000) })
+        expect(await images.expireStaleSceneImages(campaignId)).toBe(1)
+        expect(await MaddoxSceneImageModel.findById(stuck._id).setOptions(INCLUDE_DISCARDED).lean()).toMatchObject({ status: "failed" })
+    })
+
+    it("já perdida de vez (lápide) quando a geração termina: nada é gravado e o arquivo é excluído", async () => {
+        const { campaignId, narrationId } = await table()
+        const release = hold()
+        const scheduled = await images.scheduleSceneImage({ campaignId, source: "tool", turnNumber: 5, messageId: narrationId, situation: "new-location", description: "x", caption: "" })
+        await vi.waitFor(async () => expect((await MaddoxSceneImageModel.findById(scheduled.image!._id).lean())?.status).toBe("generating"))
+        await discard(scheduled.image!._id, { slot: "discarded", url: null, key: null })
+        release()
+        await images.waitForSceneImages()
+        const tomb = await MaddoxSceneImageModel.findById(scheduled.image!._id).setOptions(INCLUDE_DISCARDED).lean()
+        expect(tomb).toMatchObject({ slot: "discarded", status: "generating", counts: true, key: null })
+        expect(deleteFile).toHaveBeenCalledWith(expect.stringContaining(`/scenes/${String(scheduled.image!._id)}`))
+        // A lápide não é varrida (continua na cota).
+        await MaddoxSceneImageModel.collection.updateOne({ _id: scheduled.image!._id }, { $set: { updatedAt: new Date(Date.now() - 10 * 60_000) } })
+        expect(await images.expireStaleSceneImages(campaignId)).toBe(0)
     })
 })
 

@@ -45,9 +45,11 @@ const fakeMaster = {
     }),
 }
 vi.mock("@/features/maddox/server/game-master", () => ({ getMaddoxMaster: vi.fn(async () => fakeMaster) }))
+const rotateNarratorSession = vi.fn(async (campaignId: string) => void campaignId)
+vi.mock("@/features/maddox/server/opencode-sessions", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/features/maddox/server/opencode-sessions")>()), rotateNarratorSession }))
 
 /** Engramind da volta: grava os alvos pedidos e simula a rede fora e a exclusão que falha. */
-const net = vi.hoisted(() => ({ down: false, purgeFails: false, targets: [] as unknown[], purges: [] as unknown[] }))
+const net = vi.hoisted(() => ({ down: false, purgeFails: false, applyFailures: 0, downAfterApplyFailure: false, targets: [] as unknown[], purges: [] as unknown[] }))
 vi.mock("@/features/engramind/server/campaign-rewind", () => {
     class MemoryRewindUnavailableError extends Error {
         constructor(readonly cause: unknown) {
@@ -66,6 +68,12 @@ vi.mock("@/features/engramind/server/campaign-rewind", () => {
         }),
         applyMemoryRewinds: vi.fn(async () => {
             if (net.down) throw new MemoryRewindUnavailableError(new Error("ECONNREFUSED"))
+            // Falha no meio: parte já foi aplicada e a rede cai (opcionalmente fica fora para o reparo imediato).
+            if (net.applyFailures > 0) {
+                net.applyFailures--
+                if (net.downAfterApplyFailure) net.down = true
+                throw new MemoryRewindUnavailableError(new Error("ECONNRESET"))
+            }
             return 1
         }),
         purgeDiscardedMemories: vi.fn(async (_channels: unknown, known: { id: string; ref: unknown }[], window: unknown) => {
@@ -85,6 +93,7 @@ const game = await import("@/features/maddox/server/game")
 const rewind = await import("@/features/maddox/server/rewind")
 const { waitForCampaignIdle } = await import("@/features/maddox/server/game-live")
 const { sceneImageQuota } = await import("@/features/maddox/server/scene-images")
+const tactical = await import("@/features/maddox/server/tactical-combat")
 
 vi.setConfig({ testTimeout: 30_000 })
 
@@ -154,7 +163,8 @@ afterAll(async () => {
 beforeEach(async () => {
     const db = mongoose.connection.db!
     for (const collection of await db.collections()) await collection.deleteMany({})
-    Object.assign(net, { down: false, purgeFails: false, targets: [], purges: [] })
+    Object.assign(net, { down: false, purgeFails: false, applyFailures: 0, downAfterApplyFailure: false, targets: [], purges: [] })
+    rotateNarratorSession.mockClear()
     gate.hold = null
     recordAudit.mockClear()
     publishToChannels.mockClear()
@@ -338,8 +348,73 @@ describe("ir ao turno, andar e retomar", () => {
         expect(rejected.reason).toMatchObject({ status: 409 })
         const campaign = (await campaignOf(id))!
         const concurrent = (await allMessages(id)).find((message) => message.content === "Concorrente")
-        if (concurrent) expect(concurrent.discardedBy).toBeTruthy()
+        const declaration = results[2]!
+        if (concurrent) {
+            // Entrou antes da trava: foi para o descarte junto com o turno 4.
+            expect(declaration.status).toBe("fulfilled")
+            expect(concurrent.discardedBy).toBeTruthy()
+        } else {
+            // Chegou com a trava tomada ou depois de o turno fechar: recusada com o código, sem mensagem.
+            expect(declaration.status).toBe("rejected")
+            expect((declaration as PromiseRejectedResult).reason).toMatchObject({ status: 409, code: expect.stringMatching(/^(TURN_CLOSED|MASTER_TURN)$/) })
+        }
         expect(campaign.turn.declaredMemberIds).toHaveLength(0)
+    })
+
+    it("rede de memórias cai no meio: devolve as memórias na hora, a mesa não muda e repetir funciona", async () => {
+        const { id, owner } = await playTo(4)
+        net.applyFailures = 1
+        await expect(goto(id, owner, 2)).rejects.toMatchObject({ status: 409, code: "ENGRAMIND_UNAVAILABLE" })
+        // Plano da volta + plano do reparo imediato (de volta ao estado mais novo: asOf infinito).
+        expect(net.targets).toHaveLength(2)
+        expect(net.targets[1]).toMatchObject({ asOf: Number.POSITIVE_INFINITY, deleteAfter: null })
+        const after = (await campaignOf(id))!
+        expect(after.turn).toMatchObject({ number: 4, phase: "players", generating: null })
+        expect(after.rewind ?? null).toBeNull()
+        expect(after.memoryRepair ?? null).toBeNull()
+        expect((await allMessages(id)).some((message) => message.discardedBy)).toBe(false)
+        expect((await goto(id, owner, 2)).turn).toMatchObject({ number: 2, phase: "players" })
+    })
+
+    it("rede cai no meio e fica fora: o reparo pendente é gravado e roda antes da próxima volta", async () => {
+        const { id, owner } = await playTo(4)
+        Object.assign(net, { applyFailures: 1, downAfterApplyFailure: true })
+        await expect(goto(id, owner, 2)).rejects.toMatchObject({ status: 409, code: "ENGRAMIND_UNAVAILABLE" })
+        const pending = (await campaignOf(id))!
+        expect(pending.turn).toMatchObject({ number: 4, phase: "players", generating: null })
+        expect(pending.memoryRepair).toMatchObject({ asOf: null, keepAfter: null, known: [expect.objectContaining({ id: "m_1", ref: { kind: "campaign" } })] })
+        expect((await allMessages(id)).some((message) => message.discardedBy)).toBe(false)
+        // Rede de volta: a próxima volta repara primeiro (alvo = estado mais novo) e depois aplica.
+        net.down = false
+        net.targets = []
+        expect((await goto(id, owner, 2)).turn).toMatchObject({ number: 2, phase: "players" })
+        expect(net.targets[0]).toMatchObject({ asOf: Number.POSITIVE_INFINITY })
+        expect((await campaignOf(id))!.memoryRepair ?? null).toBeNull()
+    })
+
+    it("trava de volta sem processo vivo (reinício): a leitura da mesa refaz a operação, cancela os prazos e troca a sessão do narrador", async () => {
+        const { id, owner } = await playTo(4)
+        const old = new Date(Date.now() - 10 * 60_000)
+        await MaddoxCampaignModel.updateOne(
+            { _id: id },
+            { $set: { "turn.phase": "master", "turn.generating": { token: "morto", startedAt: old, rewind: { kind: "goto", target: 2, userId: owner, before: { number: 4, phase: "players", failedAt: null } } } } },
+        )
+        let fired = false
+        tactical.scheduleTimer(`npc-block:${id}`, 60_000, async () => {
+            fired = true
+        })
+        const during = await game.getGameState(id, owner)
+        expect(during.turn).toMatchObject({ rewinding: true, generating: false })
+        await vi.waitFor(async () => expect((await campaignOf(id))!.turn).toMatchObject({ number: 2, phase: "players", generating: null }), { timeout: 10_000 })
+        await waitForCampaignIdle(id)
+        expect((await campaignOf(id))!.rewind).toMatchObject({ originTurn: 4, originPhase: "players", atTurn: 2 })
+        expect(tactical.hasSequenceTimer(id)).toBe(false)
+        expect(fired).toBe(false)
+        expect(rotateNarratorSession).toHaveBeenCalledWith(id)
+        // Trava recente (processo vivo em outro lugar): não é tomada.
+        await MaddoxCampaignModel.updateOne({ _id: id }, { $set: { "turn.phase": "master", "turn.generating": { token: "vivo", startedAt: new Date(), rewind: { kind: "resume", target: null, userId: owner, before: { number: 2, phase: "players", failedAt: null } } } } })
+        await state(id, owner)
+        expect((await campaignOf(id))!.turn.generating).toMatchObject({ token: "vivo" })
     })
 })
 

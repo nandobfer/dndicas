@@ -14,7 +14,7 @@ import { apiErrorCode, apiErrorMessage } from "@/lib/api"
 import { MADDOX_TURN_PHASE_LABELS } from "../../constants"
 import type { MaddoxGameMessageDto, MaddoxGameStateDto } from "../../game-types"
 import type { MaddoxGameActionInput } from "../../game-schemas"
-import { actionOptionsView, combatBannerText, composerBlockReason, masterBannerText, opexBannerText, reminderBlockReason, turnProgress, visibleLiveGenerations } from "../../game-view"
+import { actionOptionsView, combatBannerText, newestRewindNoticeId, composerBlockReason, masterBannerText, opexBannerText, reminderBlockReason, turnProgress, visibleLiveGenerations } from "../../game-view"
 import { useMaddoxOpexTableActions } from "../../hooks/useMaddoxOpex"
 import { OpexFailureBanner } from "./OpexFailureBanner"
 import type { MaddoxCombatActionInput } from "../../combat-schemas"
@@ -126,8 +126,9 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
     const [loadingMore, setLoadingMore] = useState(false)
     const [invalidReason, setInvalidReason] = useState<string | null>(null)
     // Volta a um turno (DND-44): as páginas anteriores carregadas podem ter mensagens que saíram da mesa; recomeça.
-    const rewindKey = [...state.messages].reverse().find((message) => message.kind === "rewind")?.id ?? ""
-    const [olderKey, setOlderKey] = useState(rewindKey)
+    // Só um aviso NOVO reinicia: o aviso que sai da janela das mensagens recentes não apaga o que o jogador carregou.
+    const [olderKey, setOlderKey] = useState(() => newestRewindNoticeId(state.messages, ""))
+    const rewindKey = newestRewindNoticeId(state.messages, olderKey)
     if (olderKey !== rewindKey) {
         setOlderKey(rewindKey)
         setOlder([])

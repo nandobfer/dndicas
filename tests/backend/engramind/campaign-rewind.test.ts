@@ -136,6 +136,33 @@ describe("volta a um turno — memórias da campanha", () => {
         expect(remote("Antigo")).toMatchObject({ status: "active", version: before.version })
     })
 
+    it("rede cai no meio da aplicação: parte fica aplicada, repetir completa sem revisão extra nem duplicação", async () => {
+        const reference = new Map<string, number>()
+        // Revisões esperadas depois de uma volta só, sem falha (uma por revert e uma por archive/restore).
+        const channels = await rewind.resolveRewindChannels(id, new Map())
+        const items = await rewind.planMemoryRewinds(channels!, { asOf: 1_500, deleteAfter: 3_000 }, new Set())
+        for (const item of items) reference.set(item.id, revisions(item.id) + (item.action.kind === "apply" ? Number(item.action.revertTo !== null) + Number(item.action.status !== null) : 0))
+        // A primeira memória é aplicada; a rede cai antes da segunda.
+        const changing = items.filter((item) => item.action.kind !== "keep")
+        expect(changing.length).toBeGreaterThan(1)
+        await rewind.applyMemoryRewinds(channels!, changing.slice(0, 1))
+        fake.state.down = true
+        await expect(rewind.applyMemoryRewinds(channels!, changing.slice(1))).rejects.toBeInstanceOf(rewind.MemoryRewindUnavailableError)
+        const partial = [...reference.keys()].filter((memoryId) => revisions(memoryId) === reference.get(memoryId))
+        expect(partial.length).toBeGreaterThan(0)
+        expect(partial.length).toBeLessThan(reference.size)
+        // Rede de volta: repetir com as já tocadas como conhecidas fecha o que faltou.
+        fake.state.down = false
+        await rewindTo({ asOf: 1_500, deleteAfter: 3_000 }, new Set(items.map((item) => item.id)))
+        for (const [memoryId, count] of reference) expect(revisions(memoryId)).toBe(count)
+        expect(remote("O Mapa")).toMatchObject({ text: "Achar o mapa.", status: "active" })
+        expect(remote("A Torre")).toMatchObject({ status: "archived" })
+        expect(fake.state.memories.size).toBe(3)
+        // Uma terceira vez não muda nada.
+        await rewindTo({ asOf: 1_500, deleteAfter: 3_000 }, new Set(items.map((item) => item.id)))
+        for (const [memoryId, count] of reference) expect(revisions(memoryId)).toBe(count)
+    })
+
     it("rede fora: o plano lança MemoryRewindUnavailableError", async () => {
         fake.state.down = true
         await expect(rewindTo({ asOf: 1_500, deleteAfter: 3_000 })).rejects.toBeInstanceOf(rewind.MemoryRewindUnavailableError)

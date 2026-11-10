@@ -171,4 +171,36 @@ describe("mesa Maddox — Turnos (DND-44)", () => {
         expect(await within(menu).findByTestId("turns-empty")).toHaveTextContent("A mesa está no turno 1: não há para onde voltar.")
         expect(within(menu).getByTestId("turns-undo")).toBeDisabled()
     })
+
+    it("páginas antigas carregadas: o aviso que sai da janela não as apaga; um aviso novo recomeça", async () => {
+        const hex = (n: number) => n.toString(16).padStart(24, "0")
+        const notice = (n: number) => message(hex(n), { kind: "rewind", rewindNotice: { event: "goto", turnNumber: 3, originTurn: 4 } })
+        const first = gameState({ hasMore: true, messages: [notice(20), message(hex(21), { content: "Narração recente." })] })
+        // Janela das recentes já sem o aviso (o jogo avançou), e depois com um aviso mais novo.
+        const moved = gameState({ hasMore: true, messages: [message(hex(30), { content: "Narração bem depois." })] })
+        const again = gameState({ hasMore: true, messages: [notice(40), message(hex(41), { content: "Depois da nova volta." })] })
+        get.mockImplementation(async (url: string) => {
+            if (url.endsWith("/game/rewind")) return ok(TURNS)
+            if (url.endsWith("/game/messages")) return ok({ messages: [message(hex(5), { content: "Página antiga." })], hasMore: false })
+            return ok(first)
+        })
+        renderWithQueryClient(<GamePage campaignId="c1" />)
+        await screen.findByTestId("game-page")
+        fireEvent.click(screen.getByRole("button", { name: "Carregar anteriores" }))
+        expect(await screen.findByText("Página antiga.")).toBeTruthy()
+
+        const confirmVia = async (next: MaddoxGameStateDto) => {
+            post.mockResolvedValueOnce(ok(next))
+            const menu = await openMenu()
+            fireEvent.click(await within(menu).findByTestId("turns-item-3"))
+            fireEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Voltar ao turno 3" }))
+            await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull())
+        }
+        await confirmVia(moved)
+        expect(await screen.findByText("Narração bem depois.")).toBeTruthy()
+        expect(screen.getByText("Página antiga.")).toBeTruthy()
+        await confirmVia(again)
+        expect(await screen.findByText("Depois da nova volta.")).toBeTruthy()
+        await waitFor(() => expect(screen.queryByText("Página antiga.")).toBeNull())
+    })
 })
