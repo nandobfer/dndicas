@@ -69,7 +69,15 @@ export const combatAddSchema = z.object({
         .trim()
         .min(1)
         .max(60)
-        .transform((value) => value.replace(/^prep:/, "").replace(/[^a-z0-9-]+/gi, "-").toLowerCase()),
+        .transform((value) =>
+            value
+                .replace(/^prep:/, "")
+                .normalize("NFD")
+                .replace(/[\u0300-\u036f]/g, "")
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, "-")
+                .replace(/^-+|-+$/g, ""),
+        ),
     category: z.enum(["weapons", "spells", "items", "abilities", "other"]),
     economy: z.enum(["action", "bonus", "reaction"]),
     label: text(120).pipe(z.string().min(1)),

@@ -27,6 +27,8 @@ const decideReaction = vi.fn(async () => ({}))
 const gameState: { value: MaddoxGameStateDto | null; byUser: Map<string, MaddoxGameStateDto> } = { value: null, byUser: new Map() }
 const publishGameChanged = vi.fn(async () => undefined)
 
+// DND-41: a IA da preparação da mesa de combate (padrão: sem mudanças).
+vi.mock("@/features/maddox/server/combat-prep-ai", async () => (await import("../../helpers/combat-prep-mock")).combatPrepAiModule)
 vi.mock("@/lib/db", () => ({ dbConnect: vi.fn(async () => undefined), recordAudit: vi.fn(async () => undefined), AcaoAuditoria: { ATUALIZAR: "ATUALIZAR" } }))
 vi.mock("@/features/maddox/server/settings", async () => {
     const { DEFAULT_MADDOX_SETTINGS } = await import("@/features/maddox/schemas")

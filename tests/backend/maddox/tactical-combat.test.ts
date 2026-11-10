@@ -22,6 +22,8 @@ const scripted = (queue: number[][] | undefined) => {
     return (min: number, max: number) => values[index++] ?? Math.floor((min + max - 1) / 2)
 }
 
+// DND-41: a IA da preparação da mesa de combate (padrão: sem mudanças).
+vi.mock("@/features/maddox/server/combat-prep-ai", async () => (await import("../../helpers/combat-prep-mock")).combatPrepAiModule)
 vi.mock("@/features/dice-roller/server/dice-engine", async (importOriginal) => {
     const actual = await importOriginal<typeof import("@/features/dice-roller/server/dice-engine")>()
     return { ...actual, rollDice: (input: Parameters<typeof actual.rollDice>[0], options: Parameters<typeof actual.rollDice>[1] = {}) => actual.rollDice(input, { ...options, randomInt: options.randomInt ?? scripted(dice.server) }) }
@@ -138,6 +140,11 @@ const { CharacterSheet } = await import("@/features/character-sheets/models/char
 const { CharacterItem } = await import("@/features/character-sheets/models/character-item")
 const { CharacterTrait } = await import("@/features/character-sheets/models/character-trait")
 const { ItemModel } = await import("@/features/items/database/item")
+const { MaddoxCombatPrepModel } = await import("@/features/maddox/models")
+const combatPrep = await import("@/features/maddox/server/combat-prep")
+const adjustments = await import("@/features/maddox/server/combat-adjustments")
+const { combatPrepAi } = await import("../../helpers/combat-prep-mock")
+const { recordAudit } = await import("@/lib/db")
 
 let mongo: MongoMemoryServer
 const oid = () => new mongoose.Types.ObjectId()
@@ -247,6 +254,8 @@ beforeEach(async () => {
     toolLog.length = 0
     hooks.beforeSpend = null
     hooks.patchOptions = null
+    combatPrepAi.reset()
+    vi.mocked(recordAudit).mockClear()
 })
 
 describe("Maddox 7 — a vez do personagem", () => {
@@ -677,14 +686,17 @@ async function addSecondGoblin(id: string, options: { defeated?: boolean } = {})
 }
 
 /** Combate que começa agora (fase de iniciativa) com 2 goblins e 1 lobo; a mesa espera as rolagens no turno 3 do mestre. */
-async function initiativeScene(surprise: "adversarios" | null = null) {
+async function initiativeScene(surprise: "adversarios" | null = null, options: { waitPreps?: boolean; beforeCombat?: () => void } = {}) {
     const { id, kael, lyra } = await scene()
+    options.beforeCombat?.()
     await MaddoxCombatModel.deleteMany({ campaignId: id })
     const campaignId = new mongoose.Types.ObjectId(id)
     const draft = (name: string, quantity: number, iniciativa: number) => ({ name, side: "inimigo" as const, quantity, description: "", condition: "", registerNpc: false, stats: monsterStatsFromCustom({ ca: 12, pv: 7, iniciativa, acoes: [{ nome: "Mordida", tipo: "ataque", bonus: 4, dano: "1d6" }] }) })
     const plan = (await tactical.createTacticalCombat({ _id: campaignId }, 3, 0, { title: "Emboscada", location: "Estrada", surprise, combatants: [draft("Goblin", 2, 2), draft("Lobo", 1, 1)] }, async () => null))!
     await MaddoxCampaignMessageModel.insertMany(plan.initiativeMessages)
     await MaddoxCampaignModel.updateOne({ _id: id }, { $set: { "turn.number": 3, "turn.phase": "master", "turn.awaitingChecks": true, "turn.checkRound": 0, "turn.generating": null, "turn.combatActor": null, "turn.eligibleMemberIds": [] } })
+    // DND-41: a mesa de cada personagem é preparada (IA mockada, sem mudanças) antes de a iniciativa seguir.
+    if (options.waitPreps !== false) await (await import("@/features/maddox/server/combat-prep")).waitForCombatPreps()
     const cardOf = async (userId: string) => (await MaddoxCampaignMessageModel.findOne({ campaignId: id, kind: "combat-roll", "combatRoll.kind": "initiative", userId }).lean())!
     const enemyCards = () => MaddoxCampaignMessageModel.find({ campaignId: id, kind: "combat-roll", "combatRoll.kind": "enemy-initiative" }).sort({ _id: 1 }).lean()
     return { id, kael, lyra, cardOf, enemyCards }
@@ -946,3 +958,324 @@ describe("DND-25 — um bloco por adversário", () => {
 })
 
 void freshEconomy
+
+// ── DND-41: preparação da mesa de combate ─────────────────────────────────────
+
+const deferred = () => {
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => (release = resolve))
+    return { gate, release }
+}
+
+const prepsOf = (id: string) => MaddoxCombatPrepModel.find({ campaignId: id }).sort({ _id: 1 }).lean()
+
+/** Rola a iniciativa dos dois personagens da `initiativeScene` (a dos inimigos sai sozinha depois). */
+async function rollInitiatives(id: string, who: { kael: { userId: string }; lyra: { userId: string } }, cardOf: (userId: string) => Promise<{ _id: unknown }>) {
+    dice.players.set(who.kael.userId, [[14]])
+    dice.players.set(who.lyra.userId, [[9]])
+    await actions.rollCombatRoll(id, String((await cardOf(who.kael.userId))._id), who.kael.userId)
+    await actions.rollCombatRoll(id, String((await cardOf(who.lyra.userId))._id), who.lyra.userId)
+}
+
+/** Preparação pronta para um personagem da `scene` (a vez já está aberta). */
+async function readyPrep(id: string, combatId: unknown, who: { actorKey: string; characterId: string; memberId: string; userId: string; sheetId: string }, patch: Record<string, unknown> = {}) {
+    return MaddoxCombatPrepModel.create({ campaignId: id, combatId, actorKey: who.actorKey, characterId: who.characterId, memberId: who.memberId, userId: who.userId, sheetId: who.sheetId, characterName: "Kael", turnNumber: 1, waitRound: 0, status: "ready", overlay: { modify: [], remove: [], add: [], suppress: [] }, riders: [], changes: [], adjustments: [], ...patch })
+}
+
+const mention = (label: string) => ({ description: `<span data-type="mention" data-id="x" data-entity-type="Regra" class="mention">Propriedade: ${label}</span>`, level: 1 })
+
+describe("DND-41 — a ordem de iniciativa espera a preparação da mesa", () => {
+    it("prepara um personagem por vez, mostra os selos e só fecha a ordem com todas as fichas prontas", async () => {
+        const hold = deferred()
+        combatPrepAi.review.mockImplementation(async () => {
+            await hold.gate
+            return { sheetChanges: [], modify: [], remove: [], add: [] }
+        })
+        const { id, kael, lyra, cardOf } = await initiativeScene(null, { waitPreps: false })
+        await rollInitiatives(id, { kael, lyra }, cardOf)
+        await new Promise((resolve) => setTimeout(resolve, 60))
+        // Os dados pararam, mas a mesa de ninguém está pronta: a ordem não fecha.
+        expect(await tactical.finishInitiativeIfReady(new mongoose.Types.ObjectId(id), 3, 1)).toBe(false)
+        expect((await prepsOf(id)).map((prep) => prep.status)).toEqual(["running", "pending"])
+        const state = await game.getGameState(id, lyra.userId)
+        const tracker = state.combat!.tactical!
+        expect(tracker.preparation).toMatchObject({ active: true, blocked: false, failures: [] })
+        expect(tracker.order.filter((slot) => slot.kind === "character").map((slot) => slot.prep?.status)).toEqual(["preparing", "waiting"])
+        hold.release()
+        await combatPrep.waitForCombatPreps()
+        await settleCampaign(id)
+        expect(combatPrepAi.review).toHaveBeenCalledTimes(2)
+        expect((await prepsOf(id)).map((prep) => prep.status)).toEqual(["ready", "ready"])
+        expect((await MaddoxCombatModel.findOne({ campaignId: id }).lean())!.tactical!.phase).toBe("running")
+        expect((await game.getGameState(id, lyra.userId)).combat!.tactical!.preparation ?? null).toBeNull()
+    })
+
+    it("falha trava o combate: só o dono vê o motivo e decide; os demais veem só o selo", async () => {
+        combatPrepAi.review.mockImplementation(async (input) => {
+            if (input.characterName === "Lyra") throw new Error("PROVEDOR-SECRETO-123")
+            return { sheetChanges: [], modify: [], remove: [], add: [] }
+        })
+        const { id, kael, lyra, cardOf } = await initiativeScene()
+        await rollInitiatives(id, { kael, lyra }, cardOf)
+        await settleCampaign(id)
+        expect((await MaddoxCombatModel.findOne({ campaignId: id }).lean())!.tactical!.phase).toBe("initiative")
+        const failed = (await prepsOf(id)).find((prep) => prep.characterName === "Lyra")!
+        expect(failed.status).toBe("failed")
+        const owner = await game.getGameState(id, kael.userId)
+        expect(owner.combat!.tactical!.preparation).toMatchObject({ blocked: true, failures: [{ prepId: String(failed._id), characterName: "Lyra", error: "PROVEDOR-SECRETO-123" }] })
+        const player = await game.getGameState(id, lyra.userId)
+        expect(player.combat!.tactical!.preparation).toMatchObject({ blocked: true, failures: [] })
+        expect(JSON.stringify(player)).not.toContain("PROVEDOR-SECRETO-123")
+        expect(player.combat!.tactical!.order.find((slot) => slot.name === "Lyra")!.prep).toEqual({ status: "failed" })
+        // Só o dono decide.
+        await expect(combatPrep.retryCombatPrep(id, String(failed._id), lyra.userId)).rejects.toMatchObject({ code: "OWNER_ONLY" })
+        await expect(combatPrep.skipCombatPrep(id, String(failed._id), lyra.userId)).rejects.toMatchObject({ code: "OWNER_ONLY" })
+        // "Tentar de novo": a IA volta e a ordem fecha.
+        combatPrepAi.review.mockImplementation(async () => ({ sheetChanges: [], modify: [], remove: [], add: [] }))
+        await combatPrep.retryCombatPrep(id, String(failed._id), kael.userId)
+        await combatPrep.waitForCombatPreps()
+        await settleCampaign(id)
+        expect((await MaddoxCombatPrepModel.findById(failed._id).lean())!.status).toBe("ready")
+        expect((await MaddoxCombatModel.findOne({ campaignId: id }).lean())!.tactical!.phase).toBe("running")
+        expect(vi.mocked(recordAudit).mock.calls.some(([input]) => (input.depois as { decision?: string } | undefined)?.decision === "retry")).toBe(true)
+    })
+
+    it('"Seguir sem preparação": a ficha usa a lista base corrigida e o combate segue', async () => {
+        combatPrepAi.review.mockImplementation(async (input) => {
+            if (input.characterName === "Kael") throw new Error("fora do ar")
+            return { sheetChanges: [], modify: [], remove: [], add: [] }
+        })
+        const { id, kael, lyra, cardOf } = await initiativeScene()
+        await rollInitiatives(id, { kael, lyra }, cardOf)
+        await settleCampaign(id)
+        const failed = (await prepsOf(id)).find((prep) => prep.characterName === "Kael")!
+        await combatPrep.skipCombatPrep(id, String(failed._id), kael.userId)
+        await settleCampaign(id)
+        expect((await MaddoxCombatPrepModel.findById(failed._id).lean())!.status).toBe("skipped")
+        expect((await MaddoxCombatModel.findOne({ campaignId: id }).lean())!.tactical!.phase).toBe("running")
+        await expect(combatPrep.skipCombatPrep(id, String(failed._id), kael.userId)).rejects.toMatchObject({ code: "PREP_NOT_FAILED" })
+    })
+
+    it("a revisão grava na ficha (com auditoria) e o dono recebe o card privado com o que era, o que ficou e o motivo", async () => {
+        combatPrepAi.review.mockImplementation(async (input) => {
+            if (input.characterName !== "Kael") return { sheetChanges: [], modify: [], remove: [], add: [] }
+            const weapon = /id="(weapon:[^"]+)"/.exec(input.optionsText)![1]
+            return {
+                sheetChanges: [{ type: "ability", attribute: "dexterity", value: 16, reason: "A rolagem da entrevista deu 16." }],
+                modify: [{ optionId: weapon, attack: { bonus: 7, damage: "1d8+3", damageType: "cortante" }, reason: "Estilo de luta Duelismo." }],
+                add: [{ id: "segundo-folego", category: "abilities", economy: "bonus", label: "Retomar o Fôlego", resolution: "heal", heal: { dice: "1d10+3" }, target: "self", reason: "Guerreiro de nível 3." }],
+            }
+        })
+        const { id, kael, lyra, cardOf } = await initiativeScene()
+        expect((await CharacterSheet.findById(kael.sheetId).lean<{ dexterity: number }>())!.dexterity).toBe(16)
+        expect(vi.mocked(recordAudit)).toHaveBeenCalledWith(expect.objectContaining({ entidade: "FichaPersonagem", entidadeId: kael.sheetId, depois: expect.objectContaining({ by: "maddox", reason: "A rolagem da entrevista deu 16." }) }))
+        const prep = (await prepsOf(id)).find((item) => item.characterName === "Kael")!
+        expect(prep.changes.map((change) => [change.label, change.before, change.after])).toEqual([
+            ["Destreza", "12", "16"],
+            ["Espada", "+4 para acertar · 1d8+2 cortante", "+7 para acertar · 1d8+3 cortante"],
+            ["Retomar o Fôlego", "não existia", "Ação bônus"],
+        ])
+        // Card privado: o dono do personagem vê, a outra jogadora não.
+        const mine = (await game.getGameState(id, kael.userId)).messages.filter((message) => message.kind === "combat-prep")
+        expect(mine.map((message) => message.combatPrep!.characterName)).toEqual(["Kael"])
+        expect(mine[0]!.combatPrep!.changes).toHaveLength(3)
+        const hers = (await game.getGameState(id, lyra.userId)).messages.filter((message) => message.kind === "combat-prep")
+        expect(hers.map((message) => [message.combatPrep!.characterName, message.combatPrep!.changes.length])).toEqual([["Lyra", 0]])
+        // Na vez dele, a opção ajustada mostra o motivo e a nova ação bônus aparece.
+        await rollInitiatives(id, { kael, lyra }, cardOf)
+        await settleCampaign(id)
+        const options = (await import("@/features/maddox/server/tactical-options")).loadCharacterOptions
+        const combat = (await tactical.findActiveTactical(new mongoose.Types.ObjectId(id)))!
+        const view = (await options(combat.tactical.characters.filter((state) => state.name === "Kael"), undefined, combat._id)).get(kael.actorKey)!
+        const sword = view.options.action.find((option) => option.category === "weapons" && option.id !== "unarmed")!
+        expect([sword.attack!.bonus, sword.attack!.damage, sword.adjusted?.reason]).toEqual([7, "1d8+3", "Estilo de luta Duelismo."])
+        expect(view.options.bonus.map((option) => option.label)).toEqual(["Retomar o Fôlego", "Outra ação"])
+    })
+
+    it("o jogador alterou a ficha durante a preparação: o Maddox revisa de novo sobre o dado mais recente", async () => {
+        let calls = 0
+        combatPrepAi.review.mockImplementation(async (input) => {
+            if (input.characterName !== "Kael") return { sheetChanges: [], modify: [], remove: [], add: [] }
+            calls += 1
+            if (calls === 1) await CharacterSheet.collection.updateOne({ characterName: { $exists: false }, name: "Kael" }, { $set: { strength: 18, updatedAt: new Date() } })
+            return { sheetChanges: [{ type: "ability", attribute: "wisdom", value: 13, reason: "Corrigido." }] }
+        })
+        const { id, kael } = await initiativeScene()
+        expect(calls).toBe(2)
+        const reviewed = vi.mocked(combatPrepAi.review).mock.calls.filter(([input]) => input.characterName === "Kael").map(([input]) => input.sheetText)
+        expect(reviewed[1]).toContain("Força 18")
+        const sheet = (await CharacterSheet.findById(kael.sheetId).lean<{ strength: number; wisdom: number }>())!
+        expect([sheet.strength, sheet.wisdom]).toEqual([18, 13])
+        expect((await prepsOf(id)).every((prep) => prep.status === "ready")).toBe(true)
+    })
+
+    it("combate encerrado durante a preparação: ela é descartada sem gravar na ficha", async () => {
+        const hold = deferred()
+        combatPrepAi.review.mockImplementation(async () => {
+            await hold.gate
+            return { sheetChanges: [{ type: "ability", attribute: "wisdom", value: 18, reason: "x" }] }
+        })
+        const { id, kael } = await initiativeScene(null, { waitPreps: false })
+        await MaddoxCombatModel.updateOne({ campaignId: id }, { $set: { status: "ended" } })
+        await combatPrep.discardCombatPreps((await MaddoxCombatModel.findOne({ campaignId: id }).lean())!._id)
+        hold.release()
+        await combatPrep.waitForCombatPreps()
+        expect((await prepsOf(id)).map((prep) => prep.status)).toEqual(["discarded", "discarded"])
+        expect((await CharacterSheet.findById(kael.sheetId).lean<{ wisdom: number }>())!.wisdom).toBe(10)
+        expect(await MaddoxCampaignMessageModel.countDocuments({ campaignId: id, kind: "combat-prep" })).toBe(0)
+    })
+
+    it("IA não configurada: a preparação falha com o motivo em pt-BR para o dono", async () => {
+        const { maddoxAvailability } = await import("@/features/maddox/server/settings")
+        const { id, kael } = await initiativeScene(null, { beforeCombat: () => vi.mocked(maddoxAvailability).mockResolvedValueOnce({ available: false, reason: 'O "Agente Maddox" não está configurado.' } as never) })
+        const failures = (await game.getGameState(id, kael.userId)).combat!.tactical!.preparation!.failures
+        expect(failures[0]).toMatchObject({ characterName: "Kael", error: 'O "Agente Maddox" não está configurado.' })
+    })
+})
+
+describe("DND-41 — pedido de ajuste na própria vez", () => {
+    it("só o dono do personagem, só na vez dele, numa opção que existe e com a mesa preparada", async () => {
+        const { id, kael, lyra, combatId } = await scene()
+        await expect(adjustments.requestCombatAdjustment(id, { economy: "action", optionId: "unarmed", text: "mais dano" }, kael.userId)).rejects.toMatchObject({ code: "PREP_NOT_READY" })
+        await readyPrep(id, combatId, kael)
+        await expect(adjustments.requestCombatAdjustment(id, { economy: "action", optionId: "unarmed", text: "mais dano" }, lyra.userId)).rejects.toMatchObject({ code: "NOT_YOUR_COMBAT_TURN" })
+        await expect(adjustments.requestCombatAdjustment(id, { economy: "action", optionId: "weapon:nao-existe", text: "mais dano" }, kael.userId)).rejects.toMatchObject({ code: "OPTION_UNAVAILABLE", message: "Esta opção não existe mais. Escolha outra na lista." })
+        expect(combatPrepAi.adjust).not.toHaveBeenCalled()
+    })
+
+    it("aceito: corrige a opção e a ficha (auditada), mostra o motivo e não gasta a ação", async () => {
+        const { id, kael, combatId } = await scene()
+        await readyPrep(id, combatId, kael)
+        const before = (await game.getGameState(id, kael.userId)).me.combat!
+        const sword = before.options!.action.find((option) => option.category === "weapons" && option.id !== "unarmed")!
+        const hold = deferred()
+        combatPrepAi.adjust.mockImplementation(async () => (await hold.gate, {
+            decision: "accept",
+            reason: "A espada tem acuidade nesta campanha: vale a Destreza.",
+            sheetChanges: [{ type: "ability", attribute: "dexterity", value: 16, reason: "Valor da entrevista." }],
+            modify: [{ optionId: sword.id, attack: { bonus: 6, damage: "1d8+3", damageType: "cortante", finesse: true }, reason: "A espada tem acuidade." }],
+        }))
+        await adjustments.requestCombatAdjustment(id, { economy: "action", optionId: sword.id, text: "mas a espada tem acuidade, deveria ser destreza" }, kael.userId)
+        expect((await game.getGameState(id, kael.userId)).me.combat!.adjustments!.at(-1)!.status).toBe("pending")
+        hold.release()
+        await combatPrep.waitForCombatPreps()
+        const after = (await game.getGameState(id, kael.userId)).me.combat!
+        expect(after.adjustments!.at(-1)).toMatchObject({ status: "accepted", reason: "A espada tem acuidade nesta campanha: vale a Destreza." })
+        const fixed = after.options!.action.find((option) => option.id === sword.id)!
+        expect([fixed.attack!.bonus, fixed.attack!.damage, fixed.adjusted?.reason]).toEqual([6, "1d8+3", "A espada tem acuidade."])
+        expect(after.economy).toMatchObject({ action: true, bonus: true })
+        expect((await CharacterSheet.findById(kael.sheetId).lean<{ dexterity: number }>())!.dexterity).toBe(16)
+        expect(vi.mocked(recordAudit)).toHaveBeenCalledWith(expect.objectContaining({ entidade: "FichaPersonagem", depois: expect.objectContaining({ origin: "combat-adjust" }) }))
+    })
+
+    it("recusado: nada muda; o segundo pedido é tratado depois e vê o primeiro", async () => {
+        const { id, kael, combatId } = await scene()
+        await readyPrep(id, combatId, kael)
+        combatPrepAi.adjust.mockImplementation(async () => ({ decision: "refuse", reason: "10d10 não existe para uma espada." }))
+        await adjustments.requestCombatAdjustment(id, { economy: "action", optionId: "unarmed", text: "dano 10d10" }, kael.userId)
+        await adjustments.requestCombatAdjustment(id, { economy: "action", optionId: "unarmed", text: "então 2d10" }, kael.userId)
+        await combatPrep.waitForCombatPreps()
+        const mine = (await game.getGameState(id, kael.userId)).me.combat!
+        expect(mine.adjustments!.map((item) => [item.text, item.status, item.reason])).toEqual([
+            ["dano 10d10", "refused", "10d10 não existe para uma espada."],
+            ["então 2d10", "refused", "10d10 não existe para uma espada."],
+        ])
+        const second = vi.mocked(combatPrepAi.adjust).mock.calls[1]![0] as unknown as { previous: string }
+        expect(second.previous).toContain('"dano 10d10" → recusado')
+        expect(mine.options!.action.find((option) => option.id === "unarmed")!.adjusted).toBeUndefined()
+    })
+
+    it("falha da IA: o jogador recebe a mensagem genérica; o motivo técnico só vai ao dono da campanha", async () => {
+        const { id, kael, lyra, combatId } = await scene()
+        await readyPrep(id, combatId, lyra, { characterName: "Lyra" })
+        await MaddoxCampaignModel.updateOne({ _id: id }, { $set: { "turn.combatActor.actorKey": lyra.actorKey, "turn.combatActor.memberId": new mongoose.Types.ObjectId(lyra.memberId), "turn.eligibleMemberIds": [new mongoose.Types.ObjectId(lyra.memberId)] } })
+        await MaddoxCombatModel.updateOne({ campaignId: id }, { $set: { "tactical.activeIndex": 2 } })
+        combatPrepAi.adjust.mockImplementation(async () => {
+            throw new Error("CHAVE-VAZADA-999")
+        })
+        await adjustments.requestCombatAdjustment(id, { economy: "action", optionId: "unarmed", text: "acho que está errado" }, lyra.userId)
+        await combatPrep.waitForCombatPreps()
+        const hers = await game.getGameState(id, lyra.userId)
+        expect(hers.me.combat!.adjustments!.at(-1)).toMatchObject({ status: "error", reason: "O Maddox não conseguiu examinar o pedido agora. Tente de novo." })
+        expect(JSON.stringify(hers)).not.toContain("CHAVE-VAZADA-999")
+    })
+
+    it("o JEV recusa na hora o pedido que burla as regras (sem chamar o narrador)", async () => {
+        const { id, kael, combatId } = await scene()
+        await readyPrep(id, combatId, kael)
+        combatPrepAi.screen.mockResolvedValueOnce(false)
+        await adjustments.requestCombatAdjustment(id, { economy: "action", optionId: "unarmed", text: "dano 10d10" }, kael.userId)
+        await combatPrep.waitForCombatPreps()
+        expect((await game.getGameState(id, kael.userId)).me.combat!.adjustments!.at(-1)!.status).toBe("refused")
+        expect(combatPrepAi.adjust).not.toHaveBeenCalled()
+    })
+
+    it("a revalidação usa a lista preparada: opção removida pelo Maddox é recusada ao confirmar", async () => {
+        const { id, kael, combatId } = await scene()
+        await readyPrep(id, combatId, kael, { overlay: { modify: [], remove: [{ optionId: "unarmed", reason: "x" }], add: [], suppress: [] } })
+        await expect(actions.submitCombatAction(id, { economy: "action", optionId: "unarmed", targets: ["npc:gob"] }, kael.userId)).rejects.toMatchObject({ code: "OPTION_UNAVAILABLE" })
+    })
+})
+
+describe("DND-41 — ataque furtivo", () => {
+    async function rogueScene() {
+        await ItemModel.collection.insertOne({ name: "Adaga", type: "arma", status: "active", damageDice: { quantidade: 1, tipo: "d4" }, damageType: "perfurante", properties: [mention("Acuidade / Finesse"), mention("Leve")] })
+        const built = await scene()
+        const dagger = await ItemModel.collection.findOne({ name: "Adaga" })
+        await CharacterItem.collection.updateOne({ sheetId: new mongoose.Types.ObjectId(built.kael.sheetId) }, { $set: { catalogItemId: dagger!._id, name: "<p>Adaga</p>" } })
+        await CharacterSheet.collection.updateOne({ _id: new mongoose.Types.ObjectId(built.kael.sheetId) }, { $set: { dexterity: 17 } })
+        await readyPrep(built.id, built.combatId, built.kael, { riders: [{ key: "sneak-attack", dice: "2d6", source: "server", reason: null }] })
+        const options = (await game.getGameState(built.id, built.kael.userId)).me.combat!.options!
+        return { ...built, dagger: options.action.find((option) => option.id.startsWith("weapon:") && !option.id.endsWith(":thrown"))! }
+    }
+
+    it("a marcação aparece só na arma elegível, entra na rolagem do dano e vale uma vez por turno", async () => {
+        const { id, kael, dagger } = await rogueScene()
+        expect(dagger.attack).toMatchObject({ bonus: 5, damage: "1d4+3", finesse: true, riders: [{ key: "sneak-attack", label: "Ataque furtivo (+2d6)", dice: "2d6" }] })
+        const options = (await game.getGameState(id, kael.userId)).me.combat!.options!
+        expect(options.action.find((option) => option.id === "unarmed")!.attack!.riders).toBeUndefined()
+        await expect(actions.submitCombatAction(id, { economy: "action", optionId: "unarmed", targets: ["npc:gob"], sneakAttack: true }, kael.userId)).rejects.toMatchObject({ code: "SNEAK_ATTACK_UNAVAILABLE" })
+        await actions.submitCombatAction(id, { economy: "action", optionId: dagger.id, targets: ["npc:gob"], sneakAttack: true }, kael.userId)
+        expect(combatPrepAi.sneak).toHaveBeenCalledTimes(1)
+        const message = (await MaddoxCampaignMessageModel.findOne({ campaignId: id, kind: "combat-action" }).lean())!
+        expect(message.combatAction!.steps[1]).toMatchObject({ kind: "damage", dice: "1d4+3+2d6", note: "ataque furtivo +2d6" })
+        expect(message.combatAction!.summary).toContain("Ataque furtivo (+2d6)")
+        dice.players.set(kael.userId, [[15], [3, 4, 5]])
+        await actions.rollCombatAction(id, String(message._id), kael.userId)
+        expect((await stateOf(id, kael.actorKey)).economy.sneakAttackUsed).toBeFalsy()
+        await actions.rollCombatAction(id, String(message._id), kael.userId)
+        expect((await stateOf(id, kael.actorKey)).economy.sneakAttackUsed).toBe(true)
+        // Segunda vez no mesmo turno: recusada pelo servidor.
+        await MaddoxCombatModel.updateOne({ campaignId: id }, { $set: { "tactical.characters.$[me].economy.action": true, "combatants.0.tactical.defeated": false, "combatants.0.tactical.stats.hp": 7 } }, { arrayFilters: [{ "me.actorKey": kael.actorKey }] })
+        await expect(actions.submitCombatAction(id, { economy: "action", optionId: dagger.id, targets: ["npc:gob"], sneakAttack: true }, kael.userId)).rejects.toMatchObject({ code: "SNEAK_ATTACK_USED" })
+    })
+
+    it("o ataque que erra não gasta o ataque furtivo", async () => {
+        const { id, kael, dagger } = await rogueScene()
+        await actions.submitCombatAction(id, { economy: "action", optionId: dagger.id, targets: ["npc:gob"], sneakAttack: true }, kael.userId)
+        const message = (await MaddoxCampaignMessageModel.findOne({ campaignId: id, kind: "combat-action" }).lean())!
+        dice.players.set(kael.userId, [[2]])
+        await actions.rollCombatAction(id, String(message._id), kael.userId)
+        expect((await stateOf(id, kael.actorKey)).economy.sneakAttackUsed).toBeFalsy()
+    })
+
+    it("com desvantagem é recusado sem IA; sem vantagem, o Maddox confere o aliado e pode recusar com o motivo (nada gasto)", async () => {
+        const { id, kael, dagger } = await rogueScene()
+        await MaddoxCombatModel.updateOne({ campaignId: id }, { $set: { "tactical.characters.$[me].conditions": [{ key: "poisoned", untilRound: null, source: "veneno" }] } }, { arrayFilters: [{ "me.actorKey": kael.actorKey }] })
+        await expect(actions.submitCombatAction(id, { economy: "action", optionId: dagger.id, targets: ["npc:gob"], sneakAttack: true }, kael.userId)).rejects.toMatchObject({ code: "SNEAK_ATTACK_DENIED" })
+        expect(combatPrepAi.sneak).not.toHaveBeenCalled()
+        await MaddoxCombatModel.updateOne({ campaignId: id }, { $set: { "tactical.characters.$[me].conditions": [] } }, { arrayFilters: [{ "me.actorKey": kael.actorKey }] })
+        combatPrepAi.sneak.mockResolvedValueOnce({ ok: false, reason: "Lyra está longe do goblin." })
+        await expect(actions.submitCombatAction(id, { economy: "action", optionId: dagger.id, targets: ["npc:gob"], sneakAttack: true }, kael.userId)).rejects.toMatchObject({ code: "SNEAK_ATTACK_DENIED", message: "Lyra está longe do goblin." })
+        expect(combatPrepAi.sneak.mock.calls[0]![0]).toMatchObject({ targetName: "Goblin", allies: ["Lyra"] })
+        expect((await stateOf(id, kael.actorKey)).economy.action).toBe(true)
+        expect(await MaddoxCampaignMessageModel.countDocuments({ campaignId: id, kind: "combat-action" })).toBe(0)
+    })
+
+    it("o alvo caído dá vantagem corpo a corpo: aceito sem consultar a IA", async () => {
+        const { id, kael, dagger } = await rogueScene()
+        await MaddoxCombatModel.updateOne({ campaignId: id }, { $set: { "combatants.0.tactical.conditions": [{ key: "prone", untilRound: null, source: "queda" }] } })
+        await actions.submitCombatAction(id, { economy: "action", optionId: dagger.id, targets: ["npc:gob"], sneakAttack: true }, kael.userId)
+        expect(combatPrepAi.sneak).not.toHaveBeenCalled()
+    })
+})

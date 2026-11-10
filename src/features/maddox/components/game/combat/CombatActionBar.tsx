@@ -296,11 +296,13 @@ export function CombatActionMenu({ economy: economySlot, options, combat, busy, 
                         </p>
                     )}
                     {rider && (
-                        <label className={cn("flex items-center gap-2 text-xs", sneakUsed ? "text-white/40" : "text-white/85")} data-testid="combat-sneak-attack">
-                            <Checkbox checked={sneak} disabled={sneakUsed || busy} onCheckedChange={(value) => setSneak(value === true)} aria-label={rider.label} />
-                            {rider.label}
+                        <div className={cn("flex items-center gap-2 text-xs", sneakUsed ? "text-white/40" : "text-white/85")} data-testid="combat-sneak-attack">
+                            <Checkbox id="combat-sneak-attack" checked={sneak} disabled={sneakUsed || busy} onCheckedChange={(value) => setSneak(value === true)} data-testid="combat-sneak-attack-input" />
+                            <label htmlFor="combat-sneak-attack" className={cn(!sneakUsed && "cursor-pointer")}>
+                                {rider.label}
+                            </label>
                             {sneakUsed && <span className="text-white/40">· já usado neste turno</span>}
-                        </label>
+                        </div>
                     )}
                     {needsTarget && (
                         <div className="space-y-1">
