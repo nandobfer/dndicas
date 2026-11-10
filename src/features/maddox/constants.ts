@@ -115,6 +115,66 @@ export const MADDOX_DENSITY_LEVEL_DEFS: Record<MaddoxDensityLevel, { label: stri
     },
 }
 
+// ── Dificuldade dos combates ─────────────────────────────────────────────────
+
+/**
+ * Dificuldade dos combates da campanha (DND-42): o balanceamento dos adversários contra o grupo nos combates táticos
+ * (só Rigoroso e Fiel ao D&D, `MADDOX_TACTICAL_COMBAT_RIGORS`). Não muda o rigor das regras: orienta o narrador na
+ * quantidade, na força e nas condições dos adversários ao montar `start_combat`/`update_combat`. Não é validador.
+ */
+export const MADDOX_COMBAT_DIFFICULTY_LEVELS = ["muito-facil", "facil", "equilibrado", "dificil", "mortal"] as const
+export type MaddoxCombatDifficultyLevel = (typeof MADDOX_COMBAT_DIFFICULTY_LEVELS)[number]
+export const MADDOX_COMBAT_DIFFICULTY_DEFAULT: MaddoxCombatDifficultyLevel = "equilibrado"
+
+/**
+ * Passo do slider de dificuldade, no formato do card de rigor: `rules` (o que muda nos encontros) e `free` (o que fica
+ * com o Maddox); `encounter` vai no pedido ao narrador. A cor é a da raridade do nível (`rarityColors`).
+ */
+export const MADDOX_COMBAT_DIFFICULTY_LEVEL_DEFS: Record<MaddoxCombatDifficultyLevel, { label: string; description: string; rarity: MaddoxRarity; rules: string[]; free: string[]; encounter: string }> = {
+    "muito-facil": {
+        label: "Muito fácil",
+        description: "Todo combate é tranquilo para o grupo: menos adversários e mais fracos.",
+        rarity: "common",
+        rules: ["Bem menos adversários do que personagens (2 goblins para 4 personagens de nível 1)", "Monstros de nível de desafio baixo para o grupo", "Nunca uma ameaça real de morte"],
+        free: ["Que monstros aparecem, dentro do clima da cena", "Adversários que fogem ou se rendem cedo"],
+        encounter:
+            "todo encontro é bem favorável ao grupo: BEM menos adversários do que personagens e mais fracos que eles (ex.: 2 goblins contra 4 personagens de nível 1), nunca uma ameaça real de morte. Quando a cena justificar, eles ainda podem chegar enfraquecidos (bêbados, sonolentos, feridos), com desvantagem nos ataques.",
+    },
+    facil: {
+        label: "Fácil",
+        description: "Os combates são favoráveis ao grupo: menos adversários ou adversários em desvantagem.",
+        rarity: "uncommon",
+        rules: ["Menos adversários do que personagens (no máximo 3 goblins para 4 personagens de nível 1)", "Ou a quantidade cheia, enfraquecida pela cena (bêbados, sonolentos, feridos), com desvantagem nos ataques", "Nunca uma ameaça mortal"],
+        free: ["Quando a cena justifica adversários enfraquecidos", "Que monstros aparecem, dentro do clima da cena"],
+        encounter:
+            "todo encontro é favorável ao grupo: MENOS adversários do que personagens (ex.: no máximo 3 goblins contra 4 personagens de nível 1) OU a quantidade equilibrada enfraquecida pela cena (ex.: 4 goblins bêbados ou sonolentos, com desvantagem nos ataques). Nunca uma ameaça mortal.",
+    },
+    equilibrado: {
+        label: "Equilibrado",
+        description: "Combates equilibrados pelas regras do D&D: desafio justo para o grupo.",
+        rarity: "rare",
+        rules: ["Adversários na medida do grupo (4 goblins para 4 personagens de nível 1)", "Encontro médio pelo orçamento de XP do Guia do Mestre"],
+        free: ["Que monstros aparecem, dentro do clima da cena", "Terreno, emboscadas e surpresa pela ficção"],
+        encounter: "encontro equilibrado pelo orçamento de XP do Guia do Mestre (encontro médio): adversários na medida do grupo (ex.: 4 goblins contra 4 personagens de nível 1).",
+    },
+    dificil: {
+        label: "Difícil",
+        description: "Combates exigentes: o grupo precisa de tática e recursos para vencer.",
+        rarity: "veryRare",
+        rules: ["Encontro difícil, no limite do orçamento de XP do grupo", "Mais adversários ou monstros mais fortes que o grupo", "Personagens podem cair; morte só pelas regras"],
+        free: ["Que monstros aparecem, dentro do clima da cena", "Táticas dos adversários pela ficção"],
+        encounter: "encontro difícil, no limite do orçamento de XP do grupo: mais adversários do que personagens ou monstros mais fortes (ex.: 6 goblins, ou 4 goblins com um líder, contra 4 personagens de nível 1). O grupo precisa de tática e recursos para vencer.",
+    },
+    mortal: {
+        label: "Mortal",
+        description: "Combates mortais: acima do que o grupo aguenta, com risco real de morte.",
+        rarity: "legendary",
+        rules: ["Encontro mortal, acima do orçamento de XP do grupo", "Adversários em maior número e mais fortes", "Risco real de morte dos personagens"],
+        free: ["Que monstros aparecem, dentro do clima da cena", "Rotas de fuga ou trégua, se a ficção permitir"],
+        encounter: "encontro mortal, acima do orçamento de XP do grupo: adversários em maior número e mais fortes que os personagens, com risco real de morte (ex.: 8 goblins com um líder, ou um ogro, contra 4 personagens de nível 1).",
+    },
+}
+
 /** Permissão Perfix das Campanhas Maddox (criar, participar, convidar). */
 export const MADDOX_PLAY_PERMISSION = "maddox.play"
 

@@ -4,7 +4,7 @@ import { AcaoAuditoria, dbConnect, recordAudit } from "@/lib/db"
 import { DomainError } from "@/lib/api/route"
 import { loggerFor } from "@/lib/logger"
 import { User } from "@/features/users/models/user"
-import { MADDOX_CAMPAIGN_AUDIT_ENTITY, MADDOX_DEFAULT_DENSITY, MADDOX_INVITE_CLOSED_STATUSES, MADDOX_OPEX_INTERVIEW_FAILED_MESSAGE, MADDOX_OPEX_LABEL, MADDOX_OPEX_STALE_MS, MADDOX_SHEET_RIGORS, type MaddoxCampaignStatus } from "../constants"
+import { MADDOX_CAMPAIGN_AUDIT_ENTITY, MADDOX_COMBAT_DIFFICULTY_DEFAULT, MADDOX_DEFAULT_DENSITY, MADDOX_INVITE_CLOSED_STATUSES, MADDOX_OPEX_INTERVIEW_FAILED_MESSAGE, MADDOX_OPEX_LABEL, MADDOX_OPEX_STALE_MS, MADDOX_SHEET_RIGORS, type MaddoxCampaignStatus } from "../constants"
 import { MaddoxCampaignMemberModel, MaddoxCampaignModel, MaddoxCharacterModel, MaddoxCombatModel, MaddoxSceneImageModel, type IMaddoxCampaign, type IMaddoxCampaignMember, type IMaddoxCharacter } from "../models"
 import type { CreateMaddoxCampaignInput, UpdateMaddoxCampaignInput } from "../campaign-schemas"
 import type {
@@ -207,6 +207,7 @@ async function buildDtos(campaigns: CampaignDoc[], userId: string): Promise<(Omi
             sceneImages: campaign.sceneImages !== false,
             hidePlayerActions: Boolean(campaign.hidePlayerActions),
             density: campaign.density ?? MADDOX_DEFAULT_DENSITY,
+            combatDifficulty: campaign.combatDifficulty ?? MADDOX_COMBAT_DIFFICULTY_DEFAULT,
             startingLevel: campaign.startingLevel ?? null,
             startingStage: campaign.startingStage ?? "",
             worldCatalog: worldCatalogOf(campaign.worldCatalog),
@@ -287,7 +288,7 @@ export async function createCampaign(input: CreateMaddoxCampaignInput, userId: s
     const availability = await maddoxAvailability(settings, input.rigor)
     if (!availability.available) throw new DomainError(409, availability.reason ?? 'O "Agente Maddox" não está disponível. Fale com um administrador.', "MADDOX_UNAVAILABLE")
 
-    const campaign = await MaddoxCampaignModel.create({ name: input.name, ownerId: userId, rigor: input.rigor, showCheckDc: input.showCheckDc ?? false, sceneImages: input.sceneImages ?? true, hidePlayerActions: input.hidePlayerActions ?? false, density: input.density ?? MADDOX_DEFAULT_DENSITY, status: "lobby", invite: { token: newToken(), rotatedAt: new Date() } })
+    const campaign = await MaddoxCampaignModel.create({ name: input.name, ownerId: userId, rigor: input.rigor, showCheckDc: input.showCheckDc ?? false, sceneImages: input.sceneImages ?? true, hidePlayerActions: input.hidePlayerActions ?? false, density: input.density ?? MADDOX_DEFAULT_DENSITY, combatDifficulty: input.combatDifficulty ?? MADDOX_COMBAT_DIFFICULTY_DEFAULT, status: "lobby", invite: { token: newToken(), rotatedAt: new Date() } })
     try {
         await MaddoxCampaignMemberModel.create({ campaignId: campaign._id, userId, role: "owner", status: "joined", invitedBy: null, joinedAt: new Date() })
     } catch (error) {
@@ -295,7 +296,7 @@ export async function createCampaign(input: CreateMaddoxCampaignInput, userId: s
         await MaddoxCampaignModel.deleteOne({ _id: campaign._id }).catch(() => undefined)
         throw error
     }
-    await recordAudit({ userId, entidade: MADDOX_CAMPAIGN_AUDIT_ENTITY, entidadeId: String(campaign._id), acao: AcaoAuditoria.CRIAR, depois: { name: input.name, rigor: input.rigor, showCheckDc: input.showCheckDc ?? false, sceneImages: input.sceneImages ?? true, hidePlayerActions: input.hidePlayerActions ?? false, density: input.density ?? MADDOX_DEFAULT_DENSITY, status: "lobby" } })
+    await recordAudit({ userId, entidade: MADDOX_CAMPAIGN_AUDIT_ENTITY, entidadeId: String(campaign._id), acao: AcaoAuditoria.CRIAR, depois: { name: input.name, rigor: input.rigor, showCheckDc: input.showCheckDc ?? false, sceneImages: input.sceneImages ?? true, hidePlayerActions: input.hidePlayerActions ?? false, density: input.density ?? MADDOX_DEFAULT_DENSITY, combatDifficulty: input.combatDifficulty ?? MADDOX_COMBAT_DIFFICULTY_DEFAULT, status: "lobby" } })
     await notifyCampaignChanged(String(campaign._id), [userId])
     // Rede de memórias da campanha no Engramind (categorias + canais), sem segurar a criação.
     void import("@/features/engramind/server/campaign-channels")
@@ -326,6 +327,9 @@ export async function updateCampaign(campaignId: string, input: UpdateMaddoxCamp
         ...(input.hidePlayerActions !== undefined ? { hidePlayerActions: input.hidePlayerActions } : {}),
         // A densidade das narrações (DND-22) também: vale a partir da próxima narração.
         ...(input.density !== undefined ? { density: input.density } : {}),
+        // A dificuldade dos combates (DND-42) também: aceita em todo grau (não perde o valor), usada só nos táticos e
+        // a partir do próximo combate.
+        ...(input.combatDifficulty !== undefined ? { combatDifficulty: input.combatDifficulty } : {}),
     }
     await MaddoxCampaignModel.updateOne({ _id: campaign._id }, { $set: next })
     await recordAudit({
@@ -333,7 +337,7 @@ export async function updateCampaign(campaignId: string, input: UpdateMaddoxCamp
         entidade: MADDOX_CAMPAIGN_AUDIT_ENTITY,
         entidadeId: String(campaign._id),
         acao: AcaoAuditoria.ATUALIZAR,
-        antes: { name: campaign.name, rigor: campaign.rigor, showCheckDc: Boolean(campaign.showCheckDc), startingLevel: campaign.startingLevel ?? null, sceneImages: campaign.sceneImages !== false, hidePlayerActions: Boolean(campaign.hidePlayerActions), density: campaign.density ?? MADDOX_DEFAULT_DENSITY },
+        antes: { name: campaign.name, rigor: campaign.rigor, showCheckDc: Boolean(campaign.showCheckDc), startingLevel: campaign.startingLevel ?? null, sceneImages: campaign.sceneImages !== false, hidePlayerActions: Boolean(campaign.hidePlayerActions), density: campaign.density ?? MADDOX_DEFAULT_DENSITY, combatDifficulty: campaign.combatDifficulty ?? MADDOX_COMBAT_DIFFICULTY_DEFAULT },
         depois: next,
     })
     await changed(campaign._id)

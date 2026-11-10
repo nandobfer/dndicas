@@ -2,10 +2,13 @@ import { describe, expect, it } from "vitest"
 import {
     buildNarratorInstructions,
     checkResultLine,
+    combatDifficultyLine,
+    combatDifficultyReinforcementLine,
     judgesFreeActionsInNarration,
     narratorTaskText,
     narratorTranscript,
     sceneImagesRule,
+    tacticalCombatRule,
     tacticalTaskLines,
     usesChecks,
     usesCombat,
@@ -340,6 +343,67 @@ describe("densidade das narrações (DND-22)", () => {
         const instructions = buildNarratorInstructions(context(), { kind: "ai-sdk" })
         expect(instructions).not.toContain("parágrafos curtos")
         expect(instructions).toContain("no tamanho pedido na tarefa")
+    })
+})
+
+describe("dificuldade dos combates (DND-42)", () => {
+    const levels = ["muito-facil", "facil", "equilibrado", "dificil", "mortal"] as const
+
+    it("cada passo traz o rótulo e a própria orientação de balanceamento", () => {
+        const lines = levels.map((level) => combatDifficultyLine(level))
+        expect(new Set(lines).size).toBe(5)
+        expect(lines[0]).toContain("(**Muito fácil**)")
+        expect(lines[0]).toContain("BEM menos adversários")
+        expect(lines[1]).toContain("(**Fácil**)")
+        expect(lines[1]).toContain("no máximo 3 goblins contra 4 personagens de nível 1")
+        expect(lines[1]).toContain("4 goblins bêbados ou sonolentos, com desvantagem nos ataques")
+        expect(lines[2]).toContain("(**Equilibrado**)")
+        expect(lines[2]).toContain("4 goblins contra 4 personagens de nível 1")
+        expect(lines[3]).toContain("(**Difícil**)")
+        expect(lines[3]).toContain("no limite do orçamento de XP")
+        expect(lines[4]).toContain("(**Mortal**)")
+        expect(lines[4]).toContain("risco real de morte")
+    })
+
+    it("exige motivo na ficção para enfraquecer adversários e proíbe penalizar todos em todo combate", () => {
+        for (const level of levels) {
+            const line = combatDifficultyLine(level)
+            expect(line).toContain("só quando a cena justificar")
+            expect(line).toContain("nunca enfraqueça todos os adversários em todo combate")
+            expect(line).toContain("só do catálogo")
+            expect(line).toContain("`start_combat`")
+        }
+    })
+
+    it("vai nas narrações com a opção e nunca na resposta a uma pergunta; sem a opção a tarefa fica como antes", () => {
+        const narration = narratorTaskText({ kind: "narration", turnNumber: 3, declarations: [] }, { combatDifficulty: "facil" })
+        expect(narration).toContain("Dificuldade dos combates desta campanha (**Fácil**)")
+        expect(narratorTaskText({ kind: "narration", turnNumber: 3, declarations: [] })).not.toContain("Dificuldade dos combates")
+        const answer = narratorTaskText({ kind: "answer", turnNumber: 3, characterName: "Lyra", question: "Há guardas?", declarations: [] }, { combatDifficulty: "mortal" })
+        expect(answer).not.toContain("Dificuldade dos combates")
+    })
+
+    it("com o combate tático em andamento a tarefa leva a versão curta, para os reforços (update_combat), no mesmo nível", () => {
+        const tactical = { phase: "running" as const, queue: ["Goblin 1"], next: "Lyra", enemiesDown: false, charactersDown: false }
+        const text = narratorTaskText({ kind: "narration", turnNumber: 4, declarations: [], tactical }, { combatDifficulty: "facil" })
+        expect(text).toContain(combatDifficultyReinforcementLine("facil"))
+        expect(text).toContain("Dificuldade dos combates desta campanha (**Fácil**)")
+        expect(text).toContain("`update_combat`")
+        expect(text).toContain("no máximo 3 goblins contra 4 personagens de nível 1")
+        expect(text).toContain("nunca todos")
+        expect(text).not.toContain(combatDifficultyLine("facil"))
+        // Fora do combate vai a versão completa (abertura com start_combat).
+        expect(narratorTaskText({ kind: "narration", turnNumber: 4, declarations: [] }, { combatDifficulty: "facil" })).toContain(combatDifficultyLine("facil"))
+        expect(new Set((["muito-facil", "facil", "equilibrado", "dificil", "mortal"] as const).map((level) => combatDifficultyReinforcementLine(level))).size).toBe(5)
+    })
+
+    it("a regra do combate tático orienta a desvantagem do adversário enfraquecido pela ficção, sem penalizar todos", () => {
+        for (const rigor of ["rigoroso", "fiel-dnd"] as const) {
+            const rule = tacticalCombatRule(rigor)
+            expect(rule).toContain("Adversário enfraquecido pela ficção")
+            expect(rule).toContain('`modo: "desvantagem"`')
+            expect(rule).toContain("nunca enfraqueça todos os adversários em todo combate")
+        }
     })
 })
 

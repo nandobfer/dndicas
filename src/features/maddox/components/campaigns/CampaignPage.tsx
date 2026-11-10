@@ -12,7 +12,7 @@ import { ErrorState } from "@/components/feedback/ErrorState"
 import { EmptyState } from "@/components/feedback/EmptyState"
 import { GlassCard as Card, GlassCardContent as CardContent, GlassCardDescription as CardDescription, GlassCardHeader as CardHeader, GlassCardTitle as CardTitle } from "@/components/ui/glass-card"
 import { useAuth } from "@/core/hooks/useAuth"
-import { MADDOX_CHARACTER_UNNAMED_LABEL, MADDOX_OPEX_INTERVIEW_MODE_LABELS, MADDOX_OPEX_UNNAMED_LABEL, MADDOX_RIGOR_LEVEL_DEFS, MADDOX_TURN_PHASE_LABELS } from "../../constants"
+import { MADDOX_CHARACTER_UNNAMED_LABEL, MADDOX_OPEX_INTERVIEW_MODE_LABELS, MADDOX_OPEX_UNNAMED_LABEL, MADDOX_RIGOR_LEVEL_DEFS, MADDOX_TACTICAL_COMBAT_RIGORS, MADDOX_TURN_PHASE_LABELS } from "../../constants"
 import type { MaddoxCampaignCharacterDto, MaddoxCampaignDetailDto, MaddoxCampaignMemberDto } from "../../campaign-types"
 import { useMaddoxCampaign, useMaddoxCampaignsRealtime, useRemoveMaddoxMember, useRetryMaddoxCharacterPortrait } from "../../hooks/useMaddoxCampaigns"
 import { useStartMaddoxCampaign } from "../../hooks/useMaddoxGame"
@@ -23,7 +23,7 @@ import { InvitePanel } from "./InvitePanel"
 import { CharacterProfileDialog } from "./CharacterProfileDialog"
 import { journalHref } from "../journal/journal-links"
 import { CampaignStoryCard } from "./CampaignStoryCard"
-import { InterviewChip, MemberAvatar, OpexChip, DensityChip, RarityChip, RigorChip, StartingLevelChip, StartingStageLine, StatusChip, WorldCatalogLines, rigorColor } from "./campaign-visuals"
+import { InterviewChip, MemberAvatar, OpexChip, CombatDifficultyChip, DensityChip, RarityChip, RigorChip, StartingLevelChip, StartingStageLine, StatusChip, WorldCatalogLines, rigorColor } from "./campaign-visuals"
 import { rarityColors } from "@/lib/config/colors"
 
 const errorStatus = (error: unknown) => (error as { response?: { status?: number } } | null)?.response?.status
@@ -101,6 +101,7 @@ function CampaignView({ campaign, userId }: { campaign: MaddoxCampaignDetailDto;
                         <div className="flex flex-wrap items-center gap-1.5">
                             <RigorChip rigor={campaign.rigor} />
                             <DensityChip density={campaign.density} />
+                            {MADDOX_TACTICAL_COMBAT_RIGORS.includes(campaign.rigor) && <CombatDifficultyChip level={campaign.combatDifficulty} />}
                             <StatusChip status={campaign.status} />
                             <StartingLevelChip campaign={campaign} />
                             <RarityChip color={isOwner ? rarityColors.legendary : rarityColors.veryRare}>{isOwner ? "Você é o dono" : "Você é jogador"}</RarityChip>

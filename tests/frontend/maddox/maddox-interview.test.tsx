@@ -53,6 +53,7 @@ const campaign = (over: Partial<MaddoxCampaignDetailDto> = {}): MaddoxCampaignDe
     sceneImages: true,
     hidePlayerActions: false,
     density: "equilibrada",
+    combatDifficulty: "equilibrado",
     startingLevel: null,
     startingStage: "",
     worldCatalog: { races: [], classes: [] },

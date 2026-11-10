@@ -650,7 +650,9 @@ export async function tacticalView(campaignId: Types.ObjectId, jobId: string | u
                 return { nome: actor.name, tipo: "personagem", iniciativa: slot.total, ...(hp ? { pv: `${hp.hp}/${hp.hpMax}`, ca: hp.armorClass } : {}), condicoes: conditions, ...(actor.state.dead ? { morto: true } : actor.state.hpZero ? { morrendo: !actor.state.stable, estavel: actor.state.stable } : {}), ...(actor.state.concentration ? { concentracao: actor.state.concentration.spell } : {}) }
             }
             const stats = actor.state.stats
-            return { nome: actor.name, tipo: actor.combatant.side, iniciativa: slot.total, pv: `${stats.hp}/${stats.hpMax}`, ca: stats.ac, caido: actor.state.defeated, condicoes: conditions, acoes: stats.actions.map((action) => `${action.name}${action.available ? "" : " (recarregando)"}`), ...(stats.multiattack > 1 ? { ataquesMultiplos: stats.multiattack } : {}) }
+            // DND-42: a descrição (ex.: "bêbado, desvantagem nos ataques") volta a cada bloco para o Maddox manter a penalidade da ficção.
+            const description = actor.combatant.description?.trim()
+            return { nome: actor.name, tipo: actor.combatant.side, ...(description ? { descricao: description.length > 200 ? `${description.slice(0, 199)}…` : description } : {}), iniciativa: slot.total, pv: `${stats.hp}/${stats.hpMax}`, ca: stats.ac, caido: actor.state.defeated, condicoes: conditions, acoes: stats.actions.map((action) => `${action.name}${action.available ? "" : " (recarregando)"}`), ...(stats.multiattack > 1 ? { ataquesMultiplos: stats.multiattack } : {}) }
         }),
         inimigosDePe: livingEnemies(combat).length,
         personagensConscientes: consciousCharacters(combat).length,

@@ -4,7 +4,7 @@ import type { ReactNode } from "react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/opex/avatar"
 import { rarityColors } from "@/lib/config/colors"
 import { cn } from "@/lib/utils"
-import { MADDOX_CAMPAIGN_STATUS_DEFS, MADDOX_DEFAULT_DENSITY, MADDOX_DENSITY_LEVEL_DEFS, MADDOX_INTERVIEW_STATUS_DEFS, MADDOX_RIGOR_LEVEL_DEFS, type MaddoxCampaignStatus, type MaddoxDensityLevel, type MaddoxInterviewStatus, type MaddoxRigorLevel } from "../../constants"
+import { MADDOX_CAMPAIGN_STATUS_DEFS, MADDOX_COMBAT_DIFFICULTY_DEFAULT, MADDOX_COMBAT_DIFFICULTY_LEVEL_DEFS, MADDOX_DEFAULT_DENSITY, MADDOX_DENSITY_LEVEL_DEFS, MADDOX_INTERVIEW_STATUS_DEFS, MADDOX_RIGOR_LEVEL_DEFS, type MaddoxCampaignStatus, type MaddoxCombatDifficultyLevel, type MaddoxDensityLevel, type MaddoxInterviewStatus, type MaddoxRigorLevel } from "../../constants"
 import { worldNames, type WorldCatalog } from "../../world-catalog"
 
 /** Cor de raridade do nível de rigor (comum → lendário). */
@@ -13,6 +13,11 @@ export const rigorColor = (rigor: MaddoxRigorLevel) => rarityColors[MADDOX_RIGOR
 export const densityDef = (density: MaddoxDensityLevel | null | undefined) => MADDOX_DENSITY_LEVEL_DEFS[density ?? MADDOX_DEFAULT_DENSITY] ?? MADDOX_DENSITY_LEVEL_DEFS[MADDOX_DEFAULT_DENSITY]
 /** Cor de raridade do nível de densidade (comum → lendário). */
 export const densityColor = (density: MaddoxDensityLevel | null | undefined) => rarityColors[densityDef(density).rarity]
+/** Definição do passo da dificuldade dos combates (DND-42); campanha sem o campo = a padrão. */
+export const combatDifficultyDef = (level: MaddoxCombatDifficultyLevel | null | undefined) =>
+    MADDOX_COMBAT_DIFFICULTY_LEVEL_DEFS[level ?? MADDOX_COMBAT_DIFFICULTY_DEFAULT] ?? MADDOX_COMBAT_DIFFICULTY_LEVEL_DEFS[MADDOX_COMBAT_DIFFICULTY_DEFAULT]
+/** Cor de raridade do passo da dificuldade dos combates (comum → lendário). */
+export const combatDifficultyColor = (level: MaddoxCombatDifficultyLevel | null | undefined) => rarityColors[combatDifficultyDef(level).rarity]
 export const statusColor = (status: MaddoxCampaignStatus) => rarityColors[MADDOX_CAMPAIGN_STATUS_DEFS[status].rarity]
 
 /** Chip com a cor de raridade (borda, fundo translúcido e texto). */
@@ -31,6 +36,11 @@ export const RigorChip = ({ rigor }: { rigor: MaddoxRigorLevel }) => <RarityChip
 export const DensityChip = ({ density }: { density: MaddoxDensityLevel | null | undefined }) => (
     <RarityChip color={densityColor(density)}>
         <span data-testid="maddox-density-chip">Narração {densityDef(density).label.toLowerCase()}</span>
+    </RarityChip>
+)
+export const CombatDifficultyChip = ({ level }: { level: MaddoxCombatDifficultyLevel | null | undefined }) => (
+    <RarityChip color={combatDifficultyColor(level)}>
+        <span data-testid="maddox-combat-difficulty-chip">Combate {combatDifficultyDef(level).label.toLowerCase()}</span>
     </RarityChip>
 )
 export const StatusChip = ({ status }: { status: MaddoxCampaignStatus }) => <RarityChip color={statusColor(status)}>{MADDOX_CAMPAIGN_STATUS_DEFS[status].label}</RarityChip>

@@ -1,5 +1,5 @@
 import type { WorldCatalog } from "./world-catalog"
-import type { MaddoxCampaignStatus, MaddoxCharacterPortraitStatus, MaddoxDensityLevel, MaddoxInterviewStatus, MaddoxMemberKind, MaddoxMemberRole, MaddoxOpexInterviewMode, MaddoxRigorLevel, MaddoxScenarioStatus, MaddoxTurnPhase } from "./constants"
+import type { MaddoxCampaignStatus, MaddoxCombatDifficultyLevel, MaddoxCharacterPortraitStatus, MaddoxDensityLevel, MaddoxInterviewStatus, MaddoxMemberKind, MaddoxMemberRole, MaddoxOpexInterviewMode, MaddoxRigorLevel, MaddoxScenarioStatus, MaddoxTurnPhase } from "./constants"
 
 /** DTOs das Campanhas Maddox (Maddox 1). */
 
@@ -75,6 +75,8 @@ export interface MaddoxCampaignListItemDto {
     hidePlayerActions: boolean
     /** Densidade das narrações (DND-22). */
     density: MaddoxDensityLevel
+    /** Dificuldade dos combates (DND-42; só vale nos graus táticos). */
+    combatDifficulty: MaddoxCombatDifficultyLevel
     /** Nível inicial da mesa (graus com ficha; `null` = cada personagem informa). */
     startingLevel: number | null
     /** Estágio de experiência inicial (graus narrativos). */

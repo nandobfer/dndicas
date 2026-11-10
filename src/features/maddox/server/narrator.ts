@@ -12,6 +12,7 @@ import {
     MADDOX_NARRATOR_INDEX_ITEMS,
     MADDOX_NARRATOR_MAX_STEPS,
     MADDOX_COMBAT_OUTCOME_LABELS,
+    MADDOX_COMBAT_DIFFICULTY_DEFAULT,
     MADDOX_DEFAULT_DENSITY,
     type MaddoxRigorLevel,
 } from "../constants"
@@ -384,6 +385,9 @@ async function generate(args: GenerateArgs, sink: MaddoxMasterSink): Promise<str
     }
     // Sugestões de ação (DND-30): só nas narrações fora do combate tático (lá a vez é pelos botões).
     const actionOptions = args.task.kind !== "answer" && !args.task.tactical
+    // Dificuldade dos combates (DND-42): só nos graus táticos e nas narrações (não nas respostas); com o combate tático em
+    // andamento, a tarefa leva a versão curta, para os reforços.
+    const combatDifficulty = args.task.kind !== "answer" && usesTacticalCombat(context.campaign.rigor) ? (context.campaign.combatDifficulty ?? MADDOX_COMBAT_DIFFICULTY_DEFAULT) : null
     // NPCs Opex (DND-27): a consulta ao agente só existe nas narrações (nas respostas, o Maddox decide sozinho).
     const opexNpcs = args.task.kind !== "answer" && context.opexNpcNames.length > 0
     // No bloco de um adversário do combate tático, o servidor já consultou o agente (a decisão ou a falha vêm na tarefa): a
@@ -391,7 +395,7 @@ async function generate(args: GenerateArgs, sink: MaddoxMasterSink): Promise<str
     const npcBlock = args.task.kind !== "answer" && args.task.tactical?.block?.kind === "npc"
     const userText = [
         transcript ? `# Últimos acontecimentos\n\n${mentionsToMarkup(transcript)}` : null,
-        narratorTaskText(args.task, { density: context.campaign.density ?? MADDOX_DEFAULT_DENSITY, actionOptions, opexNpcs: opexNpcs && !npcBlock ? context.opexNpcNames : [] }),
+        narratorTaskText(args.task, { density: context.campaign.density ?? MADDOX_DEFAULT_DENSITY, combatDifficulty, actionOptions, opexNpcs: opexNpcs && !npcBlock ? context.opexNpcNames : [] }),
         remindersText || null,
     ]
         .filter(Boolean)

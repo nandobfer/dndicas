@@ -1,5 +1,5 @@
 import { memoriesSection } from "@/features/ai/memories-prompt"
-import { MADDOX_ACTION_OPTIONS_MAX, MADDOX_CATALOG_TOOL_NAMES, MADDOX_DEFAULT_DENSITY, MADDOX_DENSITY_LEVEL_DEFS, MADDOX_CHECK_RIGORS, MADDOX_CHECK_ROUNDS_MAX, MADDOX_COMBAT_LONG_TURNS, MADDOX_COMBAT_RIGORS, MADDOX_DECLARATION_VALIDATION_RIGORS, MADDOX_PROFILE_SECTIONS, MADDOX_TACTICAL_COMBAT_RIGORS, MADDOX_TOOL_TEXT_GUIDE, MADDOX_WORLD_CATALOG_RIGORS, type MaddoxCampaignMemoryKind, type MaddoxDensityLevel, type MaddoxGameMessageKind, type MaddoxQuestStatus, type MaddoxRigorLevel, type MaddoxVisibility } from "../constants"
+import { MADDOX_ACTION_OPTIONS_MAX, MADDOX_CATALOG_TOOL_NAMES, MADDOX_COMBAT_DIFFICULTY_DEFAULT, MADDOX_COMBAT_DIFFICULTY_LEVEL_DEFS, MADDOX_DEFAULT_DENSITY, MADDOX_DENSITY_LEVEL_DEFS, MADDOX_CHECK_RIGORS, MADDOX_CHECK_ROUNDS_MAX, MADDOX_COMBAT_LONG_TURNS, MADDOX_COMBAT_RIGORS, MADDOX_DECLARATION_VALIDATION_RIGORS, MADDOX_PROFILE_SECTIONS, MADDOX_TACTICAL_COMBAT_RIGORS, MADDOX_TOOL_TEXT_GUIDE, MADDOX_WORLD_CATALOG_RIGORS, type MaddoxCampaignMemoryKind, type MaddoxCombatDifficultyLevel, type MaddoxDensityLevel, type MaddoxGameMessageKind, type MaddoxQuestStatus, type MaddoxRigorLevel, type MaddoxVisibility } from "../constants"
 import { CATALOG_CITATION_RULE, rigorBlock } from "./interview-prompt"
 import { checkSucceeded } from "../check-modifier"
 import { worldCatalogLines, type WorldCatalog } from "../world-catalog"
@@ -122,6 +122,7 @@ export function tacticalCombatRule(rigor: MaddoxRigorLevel): string {
         "- Quando um adversário sair do alcance de um personagem, ou conjurar uma magia diante de quem tem Contramágica, chame `offer_reaction`. Efeitos que você adjudica (ambiente, magia utilitária, ação livre aceita) usam `apply_effect` (condição, dano ou cura em dados rolados pelo servidor); dano de uma ação livre de personagem usa `request_damage_roll`.",
         "- \"Outra ação\" de um jogador já foi validada pelo rigor; resolva-a pelas regras (peça teste com `request_check` quando couber).",
         "- Personagem com 0 PV fica Inconsciente e faz testes contra a morte na vez dele; ninguém morre por conveniência da história, só pelas regras.",
+        "- Adversário enfraquecido pela ficção (bêbado, sonolento, ferido, desprevenido): registre o motivo na `descricao` dele no `start_combat` (ou no `update_combat`) e, enquanto durar, use `modo: \"desvantagem\"` em cada ataque dele no `monster_action`. Só quando a cena justificar: nunca enfraqueça todos os adversários em todo combate.",
         "- Quando todos os inimigos caírem, fugirem ou se renderem (ou o grupo cair), chame `end_combat` na mesma narração: resultado, resumo, desfecho de cada adversário, recompensas e a cena final.",
     ].join("\n")
 }
@@ -498,6 +499,30 @@ export function narrationDensityLine(density: MaddoxDensityLevel): string {
 }
 
 /**
+ * Linha da dificuldade dos combates (DND-42), pela campanha: vai no texto da tarefa das narrações dos graus táticos sem
+ * combate em andamento (onde `start_combat` pode ser chamado), para valer já no próximo combate mesmo com a sessão do
+ * OpenCode reaproveitada. Com o combate em andamento vai a versão curta (`combatDifficultyReinforcementLine`). Orienta o
+ * balanceamento; não é validador.
+ */
+export function combatDifficultyLine(level: MaddoxCombatDifficultyLevel): string {
+    const def = MADDOX_COMBAT_DIFFICULTY_LEVEL_DEFS[level] ?? MADDOX_COMBAT_DIFFICULTY_LEVEL_DEFS[MADDOX_COMBAT_DIFFICULTY_DEFAULT]
+    return [
+        `Dificuldade dos combates desta campanha (**${def.label}**): se um combate começar (\`start_combat\`) ou receber reforços (\`update_combat\`), monte os adversários assim — ${def.encounter}`,
+        "Conte os personagens do grupo e o nível deles antes de escolher a quantidade e o monstro; no Fiel ao D&D os monstros vêm só do catálogo, então o ajuste é pela quantidade, pela escolha do monstro e pelas condições.",
+        "Adversários enfraquecidos (bêbados, sonolentos, feridos, desprevenidos) só quando a cena justificar (uma taverna, a madrugada, um acampamento atacado, a fuga de outra luta), variando o motivo: nunca enfraqueça todos os adversários em todo combate. Sem motivo na ficção, ajuste pela quantidade ou pela escolha de um monstro mais fraco ou mais forte.",
+    ].join(" ")
+}
+
+/**
+ * Versão curta da dificuldade (DND-42) para as narrações com combate tático em andamento: os reforços (`update_combat`)
+ * seguem o mesmo nível, sem enfraquecer todos por conveniência.
+ */
+export function combatDifficultyReinforcementLine(level: MaddoxCombatDifficultyLevel): string {
+    const def = MADDOX_COMBAT_DIFFICULTY_LEVEL_DEFS[level] ?? MADDOX_COMBAT_DIFFICULTY_LEVEL_DEFS[MADDOX_COMBAT_DIFFICULTY_DEFAULT]
+    return `Dificuldade dos combates desta campanha (**${def.label}**): reforços só se a ficção pedir; se chamar \`update_combat\` com novos adversários, o encontro somado (os que ainda estão de pé mais os novos) continua neste nível — ${def.encounter} Enfraquecer um adversário (bêbado, sonolento, ferido) só quando a cena justificar, nunca todos.`
+}
+
+/**
  * Linha das sugestões de ação (DND-30): vai no texto da tarefa das narrações em que a ferramenta `suggest_actions` é oferecida
  * (nunca nas respostas nem no combate tático), para valer mesmo com a sessão do OpenCode reaproveitada.
  */
@@ -517,12 +542,21 @@ export function opexNpcsTaskSection(names: readonly string[]): string | null {
 }
 
 /**
- * Texto da tarefa da geração; com `density`, as narrações (não as respostas) recebem a linha de tamanho; com `actionOptions`,
- * a linha das sugestões de ação; com `opexNpcs`, a seção dos NPCs Opex (DND-27).
+ * Texto da tarefa da geração; com `density`, as narrações (não as respostas) recebem a linha de tamanho; com
+ * `combatDifficulty`, a da dificuldade dos combates (DND-42: completa fora do combate tático, curta para reforços nele); com
+ * `actionOptions`, a linha das sugestões de ação; com `opexNpcs`, a seção dos NPCs Opex (DND-27).
  */
-export function narratorTaskText(task: NarratorTask, options: { density?: MaddoxDensityLevel | null; actionOptions?: boolean; opexNpcs?: readonly string[] } = {}): string {
+export function narratorTaskText(task: NarratorTask, options: { density?: MaddoxDensityLevel | null; combatDifficulty?: MaddoxCombatDifficultyLevel | null; actionOptions?: boolean; opexNpcs?: readonly string[] } = {}): string {
     if (task.kind === "answer") return taskBody(task)
-    return [taskBody(task), options.density ? narrationDensityLine(options.density) : null, options.actionOptions ? MADDOX_ACTION_OPTIONS_TASK_LINE : null, opexNpcsTaskSection(options.opexNpcs ?? [])].filter(Boolean).join("\n\n")
+    return [
+        taskBody(task),
+        options.density ? narrationDensityLine(options.density) : null,
+        options.combatDifficulty ? (task.tactical ? combatDifficultyReinforcementLine(options.combatDifficulty) : combatDifficultyLine(options.combatDifficulty)) : null,
+        options.actionOptions ? MADDOX_ACTION_OPTIONS_TASK_LINE : null,
+        opexNpcsTaskSection(options.opexNpcs ?? []),
+    ]
+        .filter(Boolean)
+        .join("\n\n")
 }
 
 function taskBody(task: NarratorTask): string {
