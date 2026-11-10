@@ -472,7 +472,8 @@ export function narrationDensityLine(density: MaddoxDensityLevel): string {
 /**
  * Linha da dificuldade dos combates (DND-42), pela campanha: vai no texto da tarefa das narrações dos graus táticos sem
  * combate em andamento (onde `start_combat` pode ser chamado), para valer já no próximo combate mesmo com a sessão do
- * OpenCode reaproveitada. Orienta o balanceamento; não é validador.
+ * OpenCode reaproveitada. Com o combate em andamento vai a versão curta (`combatDifficultyReinforcementLine`). Orienta o
+ * balanceamento; não é validador.
  */
 export function combatDifficultyLine(level: MaddoxCombatDifficultyLevel): string {
     const def = MADDOX_COMBAT_DIFFICULTY_LEVEL_DEFS[level] ?? MADDOX_COMBAT_DIFFICULTY_LEVEL_DEFS[MADDOX_COMBAT_DIFFICULTY_DEFAULT]
@@ -484,6 +485,15 @@ export function combatDifficultyLine(level: MaddoxCombatDifficultyLevel): string
 }
 
 /**
+ * Versão curta da dificuldade (DND-42) para as narrações com combate tático em andamento: os reforços (`update_combat`)
+ * seguem o mesmo nível, sem enfraquecer todos por conveniência.
+ */
+export function combatDifficultyReinforcementLine(level: MaddoxCombatDifficultyLevel): string {
+    const def = MADDOX_COMBAT_DIFFICULTY_LEVEL_DEFS[level] ?? MADDOX_COMBAT_DIFFICULTY_LEVEL_DEFS[MADDOX_COMBAT_DIFFICULTY_DEFAULT]
+    return `Dificuldade dos combates desta campanha (**${def.label}**): reforços só se a ficção pedir; se chamar \`update_combat\` com novos adversários, o encontro somado (os que ainda estão de pé mais os novos) continua neste nível — ${def.encounter} Enfraquecer um adversário (bêbado, sonolento, ferido) só quando a cena justificar, nunca todos.`
+}
+
+/**
  * Linha das sugestões de ação (DND-30): vai no texto da tarefa das narrações em que a ferramenta `suggest_actions` é oferecida
  * (nunca nas respostas nem no combate tático), para valer mesmo com a sessão do OpenCode reaproveitada.
  */
@@ -491,14 +501,14 @@ export const MADDOX_ACTION_OPTIONS_TASK_LINE = `Se a narração terminar no pont
 
 /**
  * Texto da tarefa da geração; com `density`, as narrações (não as respostas) recebem a linha de tamanho; com
- * `combatDifficulty`, a da dificuldade dos combates (DND-42); com `actionOptions`, a linha das sugestões de ação.
+ * `combatDifficulty`, a da dificuldade dos combates (DND-42: completa fora do combate tático, curta para reforços nele); com `actionOptions`, a linha das sugestões de ação.
  */
 export function narratorTaskText(task: NarratorTask, options: { density?: MaddoxDensityLevel | null; combatDifficulty?: MaddoxCombatDifficultyLevel | null; actionOptions?: boolean } = {}): string {
     if (task.kind === "answer") return taskBody(task)
     return [
         taskBody(task),
         options.density ? narrationDensityLine(options.density) : null,
-        options.combatDifficulty ? combatDifficultyLine(options.combatDifficulty) : null,
+        options.combatDifficulty ? (task.tactical ? combatDifficultyReinforcementLine(options.combatDifficulty) : combatDifficultyLine(options.combatDifficulty)) : null,
         options.actionOptions ? MADDOX_ACTION_OPTIONS_TASK_LINE : null,
     ]
         .filter(Boolean)

@@ -397,6 +397,8 @@ describe("Maddox 7 — combate fiel ao D&D de ponta a ponta", () => {
         await settleCampaign(id)
         expect(calls.at(-1)!.userText).toContain("Kael — Ação: Espada Curta em Goblin 1 → Goblin 1: acertou (18); 7 de dano perfurante em Goblin 1 (Goblin 1 caiu)")
         expect(calls.at(-1)!.userText).toContain("Movimento e posição: Avança até a porta da cripta.")
+        // DND-42: com o combate em andamento, a tarefa leva a dificuldade na versão dos reforços (padrão Equilibrado).
+        expect(calls.at(-1)!.userText).toContain("Dificuldade dos combates desta campanha (**Equilibrado**): reforços só se a ficção pedir")
         campaign = (await MaddoxCampaignModel.findById(id).lean())!
         expect(campaign.turn.combatActor?.actorKey).toBe(`pc:${lyra.characterId}`)
 

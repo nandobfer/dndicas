@@ -3,6 +3,7 @@ import {
     buildNarratorInstructions,
     checkResultLine,
     combatDifficultyLine,
+    combatDifficultyReinforcementLine,
     judgesFreeActionsInNarration,
     narratorTaskText,
     narratorTranscript,
@@ -380,6 +381,20 @@ describe("dificuldade dos combates (DND-42)", () => {
         expect(narratorTaskText({ kind: "narration", turnNumber: 3, declarations: [] })).not.toContain("Dificuldade dos combates")
         const answer = narratorTaskText({ kind: "answer", turnNumber: 3, characterName: "Lyra", question: "Há guardas?", declarations: [] }, { combatDifficulty: "mortal" })
         expect(answer).not.toContain("Dificuldade dos combates")
+    })
+
+    it("com o combate tático em andamento a tarefa leva a versão curta, para os reforços (update_combat), no mesmo nível", () => {
+        const tactical = { phase: "running" as const, queue: ["Goblin 1"], next: "Lyra", enemiesDown: false, charactersDown: false }
+        const text = narratorTaskText({ kind: "narration", turnNumber: 4, declarations: [], tactical }, { combatDifficulty: "facil" })
+        expect(text).toContain(combatDifficultyReinforcementLine("facil"))
+        expect(text).toContain("Dificuldade dos combates desta campanha (**Fácil**)")
+        expect(text).toContain("`update_combat`")
+        expect(text).toContain("no máximo 3 goblins contra 4 personagens de nível 1")
+        expect(text).toContain("nunca todos")
+        expect(text).not.toContain(combatDifficultyLine("facil"))
+        // Fora do combate vai a versão completa (abertura com start_combat).
+        expect(narratorTaskText({ kind: "narration", turnNumber: 4, declarations: [] }, { combatDifficulty: "facil" })).toContain(combatDifficultyLine("facil"))
+        expect(new Set((["muito-facil", "facil", "equilibrado", "dificil", "mortal"] as const).map((level) => combatDifficultyReinforcementLine(level))).size).toBe(5)
     })
 
     it("a regra do combate tático orienta a desvantagem do adversário enfraquecido pela ficção, sem penalizar todos", () => {

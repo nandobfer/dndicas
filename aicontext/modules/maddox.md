@@ -1458,11 +1458,13 @@ muda a qualquer momento, inclusive em andamento e com o rigor travado, com audit
 | Mortal | legendary | Acima do orçamento, com risco real de morte |
 
 **Prompt.** `combatDifficultyLine(level)` vai no **texto da tarefa** (`narratorTaskText(task, { combatDifficulty })`), como a densidade,
-para valer já no próximo combate mesmo com a sessão do OpenCode reaproveitada. O narrador (`narrator.ts`) só a envia nos graus táticos,
-nas narrações **sem combate tático em andamento** (`!task.tactical`, onde `start_combat` pode ser chamado) e nunca nas respostas às
-perguntas: por isso a mudança vale "a partir do próximo combate". A linha manda contar os personagens e o nível antes de escolher
-quantidade e monstro, lembra que no Fiel ao D&D os monstros vêm só do catálogo (o ajuste é pela quantidade, pela escolha do monstro e
-pelas condições) e vale também para reforços (`update_combat`). **Decisão do dono:** a desvantagem dos adversários é só orientação de
+para valer já no próximo combate mesmo com a sessão do OpenCode reaproveitada. O narrador (`narrator.ts`) só a envia nos graus táticos
+e nunca nas respostas às perguntas. Nas narrações **sem combate tático em andamento** (`!task.tactical`, onde `start_combat` pode ser
+chamado) vai a linha completa: ela manda contar os personagens e o nível antes de escolher quantidade e monstro e lembra que no Fiel ao
+D&D os monstros vêm só do catálogo (o ajuste é pela quantidade, pela escolha do monstro e pelas condições). Nas narrações **com combate
+em andamento** (`task.tactical`) vai a versão curta `combatDifficultyReinforcementLine`: reforços (`update_combat`) só se a ficção pedir, e
+o encontro somado (os de pé mais os novos) continua no nível escolhido. A mudança de nível vale para a montagem do próximo combate e para
+os reforços seguintes. **Decisão do dono:** a desvantagem dos adversários é só orientação de
 prompt (sem campo nem regra nova no motor) e precisa fazer sentido narrativo — a linha e a regra tática exigem motivo na cena e proíbem
 enfraquecer todos os adversários em todo combate; sem motivo, a dificuldade baixa pela quantidade ou por um monstro mais fraco. O
 adversário enfraquecido tem o motivo na `descricao` (que volta no `get_combat`/`tacticalView`) e ataca com `modo: "desvantagem"` no

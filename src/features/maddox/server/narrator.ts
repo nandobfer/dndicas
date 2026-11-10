@@ -306,8 +306,9 @@ async function generate(args: GenerateArgs, sink: MaddoxMasterSink): Promise<str
     }
     // Sugestões de ação (DND-30): só nas narrações fora do combate tático (lá a vez é pelos botões).
     const actionOptions = args.task.kind !== "answer" && !args.task.tactical
-    // Dificuldade dos combates (DND-42): só nos graus táticos e nas narrações sem combate tático em andamento (o próximo combate).
-    const combatDifficulty = args.task.kind !== "answer" && !args.task.tactical && usesTacticalCombat(context.campaign.rigor) ? (context.campaign.combatDifficulty ?? MADDOX_COMBAT_DIFFICULTY_DEFAULT) : null
+    // Dificuldade dos combates (DND-42): só nos graus táticos e nas narrações (não nas respostas); com o combate tático em
+    // andamento, a tarefa leva a versão curta, para os reforços.
+    const combatDifficulty = args.task.kind !== "answer" && usesTacticalCombat(context.campaign.rigor) ? (context.campaign.combatDifficulty ?? MADDOX_COMBAT_DIFFICULTY_DEFAULT) : null
     const userText = [transcript ? `# Últimos acontecimentos\n\n${mentionsToMarkup(transcript)}` : null, narratorTaskText(args.task, { density: context.campaign.density ?? MADDOX_DEFAULT_DENSITY, combatDifficulty, actionOptions }), remindersText || null].filter(Boolean).join("\n\n")
     const promptContext: NarratorPromptContext = { instructions: settings.instructions, agentMemories: memories, ...context.prompt }
     const stream = liveText(sink)
