@@ -14,7 +14,7 @@ import { MemberAvatar, OpexChip } from "../campaigns/campaign-visuals"
 import { GameCheckCard } from "./GameCheckCard"
 import { GameSceneImage } from "./GameSceneImage"
 import { GameCombatCard } from "./GameCombatCard"
-import { CombatActionCard, CombatOrderCard, CombatReactionCard, CombatRollCard } from "./combat/CombatCards"
+import { CombatActionCard, CombatOrderCard, CombatPrepCard, CombatReactionCard, CombatRollCard } from "./combat/CombatCards"
 import { LiveNpcRolls } from "./combat/LiveNpcRolls"
 import { ReminderLine } from "./ReminderLine"
 
@@ -169,6 +169,8 @@ export function GameMessageList({ messages, myMemberId, maddoxAvatarUrl, color, 
                                     <CombatRollCard message={message} mine={actsAs(message)} replay={replays.get(message.id) ?? null} onRoll={combat.onRollCombat} />
                                 ) : message.kind === "combat-reaction" && message.combatReaction ? (
                                     <CombatReactionCard message={message} mine={actsAs(message)} isOwner={combat.isOwner} busy={combat.reacting} onDecide={combat.onDecideReaction} />
+                                ) : message.kind === "combat-prep" && message.combatPrep ? (
+                                    <CombatPrepCard message={message} />
                                 ) : message.kind === "reminder" ? (
                                     <ReminderLine message={message} color={color} />
                                 ) : message.kind === "check" && message.check ? (

@@ -3,7 +3,7 @@ import type { AttributeType, SkillName } from "@/features/character-sheets/types
 import type { DiceRollResponse } from "@/features/dice-roller/types"
 import type { CombatEconomy, HpBand } from "./combat-rules"
 import type { CombatOption } from "./combat-options"
-import type { CombatActionStep, IMaddoxCombatReaction } from "./combat-types"
+import type { CombatActionStep, CombatPrepChange, IMaddoxCombatReaction } from "./combat-types"
 import type {
     MaddoxCampaignStatus,
     MaddoxConditionKey,
@@ -61,6 +61,8 @@ export interface MaddoxGameMessageDto {
     reminder?: MaddoxReminderDto | null
     /** Sugestões de ação da narração para o personagem de quem vê (DND-30); as dos outros nunca chegam. */
     actionOptions?: string[] | null
+    /** DND-41: card privado "Sua mesa está pronta" (só o dono do personagem o recebe). */
+    combatPrep?: MaddoxCombatPrepCardDto | null
     createdAt: string
 }
 
@@ -147,6 +149,23 @@ export interface MaddoxTacticalSlotDto {
     dead: boolean
     stable: boolean
     dying: boolean
+    /** DND-41: selo da preparação da mesa (só personagens, enquanto alguma preparação não terminou). */
+    prep?: MaddoxCombatPrepSlotDto | null
+}
+
+/** Selo da preparação de um personagem: "Aguardando", "Preparando…", "Pronto" ou "Falhou". */
+export interface MaddoxCombatPrepSlotDto {
+    status: "waiting" | "preparing" | "ready" | "failed"
+}
+
+/** DND-41: estado da preparação da mesa de combate. `failures` (com o motivo) só chega ao dono da campanha. */
+export interface MaddoxCombatPreparationDto {
+    /** Alguma preparação ainda não terminou (a mesa mostra "O mestre está preparando o combate"). */
+    active: boolean
+    /** Uma falha travou o combate: o dono decide ("Tentar de novo" ou "Seguir sem preparação"). */
+    blocked: boolean
+    /** Só para o dono da campanha. */
+    failures: { prepId: string; characterName: string; error: string }[]
 }
 
 export interface MaddoxTacticalCombatDto {
@@ -154,6 +173,7 @@ export interface MaddoxTacticalCombatDto {
     round: number
     activeKey: string | null
     order: MaddoxTacticalSlotDto[]
+    preparation?: MaddoxCombatPreparationDto | null
 }
 
 export interface MaddoxCombatActionDto {
@@ -208,6 +228,25 @@ export interface MaddoxMyCombatDto {
     attacksPerAction: number
     options: { action: CombatOption[]; bonus: CombatOption[] } | null
     dying: boolean
+    /** DND-41: pedidos de ajuste feitos nesta preparação (o mais recente por último). */
+    adjustments?: MaddoxCombatAdjustmentDto[]
+}
+
+/** Pedido de ajuste de uma opção (DND-41). `reason` = motivo do Maddox (ou a mensagem genérica de falha). */
+export interface MaddoxCombatAdjustmentDto {
+    id: string
+    economy: "action" | "bonus"
+    optionId: string
+    optionLabel: string
+    text: string
+    status: "pending" | "accepted" | "refused" | "error"
+    reason: string | null
+}
+
+/** Card privado "Sua mesa está pronta" (DND-41). */
+export interface MaddoxCombatPrepCardDto {
+    characterName: string
+    changes: CombatPrepChange[]
 }
 
 export interface MaddoxCombatRewardDto {

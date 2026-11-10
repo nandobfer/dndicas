@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { motion } from "framer-motion"
-import { Ban, Crosshair, Heart, HeartPulse, ListOrdered, ShieldAlert, Skull, Swords, Timer, X } from "lucide-react"
+import { AlertTriangle, ArrowRight, Ban, ClipboardCheck, Crosshair, Heart, HeartPulse, ListOrdered, Loader2, RefreshCw, ShieldAlert, SkipForward, Skull, Swords, Timer, X } from "lucide-react"
 import { Button } from "@/components/ui/opex/button"
+import { ConfirmDialog } from "@/components/ui/opex/confirm-dialog"
 import { rarityColors } from "@/lib/config/colors"
 import { DiceRollerPanel } from "@/features/dice-roller/components/dice-roller-panel"
 import { CRITICAL_STAGE_CONFIG, CriticalHighlight, criticalBoxShadow } from "@/features/dice-roller/components/critical-highlight"
@@ -12,7 +13,7 @@ import type { DiceRollPreset, DiceRollResponse } from "@/features/dice-roller/ty
 import { parseDiceExpression } from "../../../combat-rules"
 import type { CombatActionStep } from "../../../combat-types"
 import { MADDOX_CHECK_DIE_HIDE_MS } from "../../../constants"
-import type { MaddoxGameCombatEventDto, MaddoxGameMessageDto } from "../../../game-types"
+import type { MaddoxCombatPreparationDto, MaddoxGameCombatEventDto, MaddoxGameMessageDto } from "../../../game-types"
 import { MemberAvatar, RarityChip } from "../../campaigns/campaign-visuals"
 import { COMBAT_COLOR } from "../GameCombatCard"
 import { ReplayDie } from "./ReplayDie"
@@ -360,3 +361,87 @@ export function CombatOrderCard({ combat }: { combat: MaddoxGameCombatEventDto }
     )
 }
 
+
+/**
+ * DND-41: card privado "Sua mesa está pronta" — o que o Maddox mudou na ficha e nas opções do personagem durante a
+ * iniciativa, com o que era, o que ficou e o motivo. Só o dono do personagem o recebe (o servidor filtra).
+ */
+export function CombatPrepCard({ message }: { message: MaddoxGameMessageDto }) {
+    const prep = message.combatPrep!
+    const changes = prep.changes
+    return (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="pb-4" data-testid="combat-prep-card">
+            <div className="space-y-2 rounded-2xl border bg-white/[0.03] p-3.5" style={{ borderColor: `${rarityColors.uncommon}55`, boxShadow: `inset 3px 0 0 ${rarityColors.uncommon}` }}>
+                <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide" style={{ color: rarityColors.uncommon }}>
+                    <ClipboardCheck className="h-3.5 w-3.5" aria-hidden /> Sua mesa está pronta · {prep.characterName}
+                </p>
+                {changes.length === 0 ? (
+                    <p className="text-sm text-white/75" data-testid="combat-prep-no-changes">
+                        Nenhuma mudança: a ficha já estava pronta para o combate.
+                    </p>
+                ) : (
+                    <ul className="space-y-1.5" data-testid="combat-prep-changes">
+                        {changes.map((change, index) => (
+                            <li key={`${change.label}-${index}`} className="break-words rounded-lg border border-white/10 px-2.5 py-1.5 text-xs" data-applied={change.applied} data-testid="combat-prep-change">
+                                <p className="flex flex-wrap items-center gap-1.5 text-white/85">
+                                    <span className="font-semibold text-white">{change.label}</span>
+                                    <span className="text-white/50 line-through">{change.before}</span>
+                                    <ArrowRight className="h-3 w-3 text-white/40" aria-hidden />
+                                    <span>{change.after}</span>
+                                    {!change.applied && <RarityChip color={rarityColors.artifact}>não aplicada: a ficha mudou</RarityChip>}
+                                </p>
+                                <p className="mt-0.5 whitespace-pre-wrap break-words text-white/60">{change.reason}</p>
+                            </li>
+                        ))}
+                    </ul>
+                )}
+            </div>
+        </motion.div>
+    )
+}
+
+/**
+ * DND-41: a preparação de uma ficha falhou e o combate parou. O dono da campanha vê o motivo e decide; os demais veem
+ * "Aguardando o dono da campanha" (o motivo nem chega a eles).
+ */
+export function CombatPrepBlockedNotice({ preparation, isOwner, retrying, skipping, onRetry, onSkip }: { preparation: MaddoxCombatPreparationDto; isOwner: boolean; retrying: boolean; skipping: boolean; onRetry: (prepId: string) => void; onSkip: (prepId: string) => void }) {
+    const [confirming, setConfirming] = useState<{ prepId: string; characterName: string } | null>(null)
+    if (!preparation.blocked) return null
+    if (!isOwner || !preparation.failures.length) {
+        return (
+            <div className="flex items-center gap-2 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning" role="status" data-testid="combat-prep-waiting-owner">
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden /> A preparação de uma ficha falhou. Aguardando o dono da campanha.
+            </div>
+        )
+    }
+    return (
+        <div className="space-y-1.5" data-testid="combat-prep-failures">
+            {preparation.failures.map((failure) => (
+                <div key={failure.prepId} className="flex flex-wrap items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive" role="alert" data-testid="combat-prep-failure">
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                    <span className="min-w-0 flex-1">
+                        A preparação da mesa de {failure.characterName} falhou: {failure.error}
+                    </span>
+                    <Button size="sm" variant="outline" className="h-7" onClick={() => onRetry(failure.prepId)} disabled={retrying || skipping}>
+                        {retrying ? <Loader2 className="animate-spin" aria-hidden /> : <RefreshCw aria-hidden />} Tentar de novo
+                    </Button>
+                    <Button size="sm" variant="ghost" className="h-7" onClick={() => setConfirming({ prepId: failure.prepId, characterName: failure.characterName })} disabled={retrying || skipping}>
+                        <SkipForward aria-hidden /> Seguir sem preparação
+                    </Button>
+                </div>
+            ))}
+            <ConfirmDialog
+                open={Boolean(confirming)}
+                onOpenChange={(open) => (open ? null : setConfirming(null))}
+                title={`Seguir sem a preparação de ${confirming?.characterName ?? "personagem"}?`}
+                description="A ficha usa a lista que o servidor calcula, sem a revisão do Maddox. O combate segue."
+                confirmLabel="Seguir sem preparação"
+                pending={skipping}
+                onConfirm={() => {
+                    if (confirming) onSkip(confirming.prepId)
+                    setConfirming(null)
+                }}
+            />
+        </div>
+    )
+}

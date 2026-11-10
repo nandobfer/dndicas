@@ -2,7 +2,8 @@
 
 import { useLayoutEffect, useMemo, useRef, useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
-import { Check, Flag, HelpCircle, Loader2, MinusCircle, Sparkles, Swords, X } from "lucide-react"
+import { Check, Flag, HelpCircle, Loader2, MessageSquareWarning, MinusCircle, Sparkles, Swords, Wand2, X } from "lucide-react"
+import { Checkbox } from "@/core/ui/checkbox"
 import { Button } from "@/components/ui/opex/button"
 import { Textarea } from "@/components/ui/opex/textarea"
 import { OptionTabs } from "@/components/ui/opex/option-tabs"
@@ -10,9 +11,10 @@ import { GlassSelector } from "@/components/ui/glass-selector"
 import { cn } from "@/lib/utils"
 import { rarityColors } from "@/lib/config/colors"
 import type { CombatEconomySlot, CombatOption, CombatOptionCategory } from "../../../combat-options"
-import { MADDOX_COMBAT_FREE_TEXT_MAX } from "../../../constants"
-import type { MaddoxCombatActionInput } from "../../../combat-schemas"
-import type { MaddoxMyCombatDto, MaddoxTacticalCombatDto } from "../../../game-types"
+import { MADDOX_COMBAT_ADJUST_TEXT_MAX, MADDOX_COMBAT_FREE_TEXT_MAX } from "../../../constants"
+import type { MaddoxCombatActionInput, MaddoxCombatAdjustmentInput } from "../../../combat-schemas"
+import type { MaddoxCombatAdjustmentDto, MaddoxMyCombatDto, MaddoxTacticalCombatDto } from "../../../game-types"
+import { onlyFreeBonus } from "../../../combat-prep"
 import { RarityChip } from "../../campaigns/campaign-visuals"
 import { ECONOMY_COLORS, ECONOMY_LABELS } from "./combat-visuals"
 
@@ -49,9 +51,12 @@ interface Props {
     onAct: (input: MaddoxCombatActionInput) => Promise<boolean>
     onEndTurn: (movement: string) => void
     onAsk: () => void
+    /** DND-41: pedido de ajuste de uma opção (não gasta a ação). */
+    onAdjust?: (input: MaddoxCombatAdjustmentInput) => Promise<boolean>
+    adjusting?: boolean
 }
 
-export function CombatActionBar({ me, combat, color, busy, invalidReason, onAct, onEndTurn, onAsk }: Props) {
+export function CombatActionBar({ me, combat, color, busy, invalidReason, onAct, onEndTurn, onAsk, onAdjust, adjusting = false }: Props) {
     const [open, setOpen] = useState<CombatEconomySlot | null>(null)
     const [left, setLeft] = useState(0)
     const [movement, setMovement] = useState("")
@@ -100,6 +105,10 @@ export function CombatActionBar({ me, combat, color, busy, invalidReason, onAct,
                             combat={combat}
                             busy={busy}
                             invalidReason={invalidReason}
+                            adjustments={me.adjustments ?? []}
+                            sneakUsed={Boolean(economy?.sneakAttackUsed)}
+                            onAdjust={onAdjust}
+                            adjusting={adjusting}
                             onClose={() => setOpen(null)}
                             onConfirm={async (input) => {
                                 const done = await onAct(input)
@@ -178,10 +187,24 @@ interface MenuProps {
     invalidReason: string | null
     onClose: () => void
     onConfirm: (input: MaddoxCombatActionInput) => Promise<void>
+    /** DND-41: pedidos de ajuste desta preparação, ataque furtivo já usado no turno e o envio do pedido. */
+    adjustments?: MaddoxCombatAdjustmentDto[]
+    sneakUsed?: boolean
+    onAdjust?: (input: MaddoxCombatAdjustmentInput) => Promise<boolean>
+    adjusting?: boolean
+}
+
+/** Avisos do painel quando falta algo (DND-41): sem armas, sem habilidades, só "Outra ação" na Ação bônus. */
+export function combatMenuNotices(economy: CombatEconomySlot, options: readonly CombatOption[]): string[] {
+    if (economy === "bonus") return onlyFreeBonus({ bonus: [...options] }) ? ['Nenhuma ação bônus válida além de "Outra ação" para o seu personagem agora.'] : []
+    const notices: string[] = []
+    if (!options.some((option) => option.category === "weapons" && option.id !== "unarmed")) notices.push("Sem armas equipadas: só o ataque desarmado.")
+    if (!options.some((option) => option.category === "abilities")) notices.push("Nenhuma habilidade com custo de Ação na ficha.")
+    return notices
 }
 
 /** Menu de opções da Ação ou da Ação bônus (categorias vazias não aparecem). */
-export function CombatActionMenu({ economy: economySlot, options, combat, busy, invalidReason, onClose, onConfirm }: MenuProps) {
+export function CombatActionMenu({ economy: economySlot, options, combat, busy, invalidReason, onClose, onConfirm, adjustments = [], sneakUsed = false, onAdjust, adjusting = false }: MenuProps) {
     const economy = economySlot === "bonus" ? "bonus" : "action"
     const categories = useMemo(() => CATEGORY_ORDER.filter((category) => options.some((option) => option.category === category)), [options])
     const [category, setCategory] = useState<CombatOptionCategory>(categories[0] ?? "other")
@@ -190,7 +213,13 @@ export function CombatActionMenu({ economy: economySlot, options, combat, busy, 
     const [level, setLevel] = useState<number | null>(null)
     const [skill, setSkill] = useState<string | null>(null)
     const [freeText, setFreeText] = useState("")
+    const [sneak, setSneak] = useState(false)
+    const [adjustText, setAdjustText] = useState("")
     const selected = options.find((option) => option.id === selectedId) ?? null
+    const rider = selected?.attack?.riders?.find((item) => item.key === "sneak-attack") ?? null
+    const lastAdjustment = selected ? [...adjustments].reverse().find((item) => item.optionId === selected.id && item.economy === economy) : undefined
+    const adjustmentPending = Boolean(lastAdjustment && lastAdjustment.status === "pending")
+    const notices = combatMenuNotices(economySlot, options)
     const visible = options.filter((option) => option.category === category)
     const candidates = combat.order.filter((slot) => {
         if (!selected) return false
@@ -209,6 +238,8 @@ export function CombatActionMenu({ economy: economySlot, options, combat, busy, 
         setTargets([])
         setLevel(option.spell?.levels[0] ?? null)
         setSkill(option.skills?.[0] ?? null)
+        setSneak(false)
+        setAdjustText("")
     }
 
     return (
@@ -233,6 +264,13 @@ export function CombatActionMenu({ economy: economySlot, options, combat, busy, 
                     }}
                 />
             )}
+            {notices.length > 0 && (
+                <div className="space-y-0.5 rounded-md border border-white/10 bg-white/[0.03] px-2 py-1.5 text-[11px] text-white/65" data-testid="combat-menu-notices">
+                    {notices.map((notice) => (
+                        <p key={notice}>{notice}</p>
+                    ))}
+                </div>
+            )}
             <ul className="max-h-56 space-y-1 overflow-y-auto pr-1" data-testid="combat-menu-options">
                 {visible.map((option) => (
                     <li key={option.id}>
@@ -252,6 +290,20 @@ export function CombatActionMenu({ economy: economySlot, options, combat, busy, 
             </ul>
             {selected && (
                 <div className="space-y-2 border-t border-white/10 pt-2" data-testid="combat-menu-detail">
+                    {selected.adjusted && (
+                        <p className="flex items-start gap-1.5 text-xs" style={{ color: rarityColors.uncommon }} data-testid="combat-option-adjusted">
+                            <Wand2 className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden /> Ajustado pelo Maddox: {selected.adjusted.reason}
+                        </p>
+                    )}
+                    {rider && (
+                        <div className={cn("flex items-center gap-2 text-xs", sneakUsed ? "text-white/40" : "text-white/85")} data-testid="combat-sneak-attack">
+                            <Checkbox id="combat-sneak-attack" checked={sneak} disabled={sneakUsed || busy} onCheckedChange={(value) => setSneak(value === true)} data-testid="combat-sneak-attack-input" />
+                            <label htmlFor="combat-sneak-attack" className={cn(!sneakUsed && "cursor-pointer")}>
+                                {rider.label}
+                            </label>
+                            {sneakUsed && <span className="text-white/40">· já usado neste turno</span>}
+                        </div>
+                    )}
                     {needsTarget && (
                         <div className="space-y-1">
                             <p className="text-xs text-white/60">{selected.multiTarget ? "Alvos" : "Alvo"}</p>
@@ -291,6 +343,52 @@ export function CombatActionMenu({ economy: economySlot, options, combat, busy, 
                             data-testid="combat-free-text"
                         />
                     )}
+                    {onAdjust && selected.id !== "free" && (
+                        <div className="space-y-1.5 rounded-md border border-white/10 bg-white/[0.02] p-2" data-testid="combat-adjust">
+                            <p className="flex items-center gap-1.5 text-[11px] text-white/60">
+                                <MessageSquareWarning className="h-3.5 w-3.5" aria-hidden /> Algo errado nesta opção? Peça um ajuste ao Maddox (não gasta a ação).
+                            </p>
+                            <div className="flex items-end gap-2">
+                                <Textarea
+                                    value={adjustText}
+                                    onChange={(event) => setAdjustText(event.target.value.slice(0, MADDOX_COMBAT_ADJUST_TEXT_MAX))}
+                                    rows={1}
+                                    placeholder='Ex.: "a adaga tem acuidade, deveria ser destreza"'
+                                    className="min-h-[2.25rem] flex-1 resize-none text-xs"
+                                    aria-label="Pedido de ajuste"
+                                    data-testid="combat-adjust-text"
+                                />
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    disabled={adjustText.trim().length < 3 || adjusting || adjustmentPending}
+                                    onClick={async () => {
+                                        const done = await onAdjust({ economy, optionId: selected.id, text: adjustText.trim() })
+                                        if (done) setAdjustText("")
+                                    }}
+                                    data-testid="combat-adjust-send"
+                                >
+                                    {adjusting || adjustmentPending ? <Loader2 className="animate-spin" aria-hidden /> : <Wand2 aria-hidden />} Pedir ajuste
+                                </Button>
+                            </div>
+                            {lastAdjustment && (
+                                <p
+                                    className="text-[11px]"
+                                    style={{ color: lastAdjustment.status === "accepted" ? rarityColors.uncommon : lastAdjustment.status === "pending" ? undefined : rarityColors.artifact }}
+                                    data-testid="combat-adjust-result"
+                                    data-status={lastAdjustment.status}
+                                >
+                                    {lastAdjustment.status === "pending"
+                                        ? "O Maddox está examinando o pedido…"
+                                        : lastAdjustment.status === "accepted"
+                                          ? `Ajuste aceito: ${lastAdjustment.reason ?? ""}`
+                                          : lastAdjustment.status === "refused"
+                                            ? `Ajuste recusado: ${lastAdjustment.reason ?? ""}`
+                                            : (lastAdjustment.reason ?? "O Maddox não conseguiu examinar o pedido agora. Tente de novo.")}
+                                </p>
+                            )}
+                        </div>
+                    )}
                     {invalidReason && (
                         <p className="rounded-md border px-2 py-1.5 text-xs" style={{ borderColor: `${rarityColors.artifact}66`, color: rarityColors.artifact }} role="alert" data-testid="combat-invalid-reason">
                             {invalidReason}
@@ -309,6 +407,7 @@ export function CombatActionMenu({ economy: economySlot, options, combat, busy, 
                                     ...(skill ? { skill } : {}),
                                     ...(freeText.trim() ? { freeText: freeText.trim() } : {}),
                                     ...(selected.id === "standard:ready" && freeText.trim() ? { readyTrigger: freeText.trim() } : {}),
+                                    ...(rider && sneak && !sneakUsed ? { sneakAttack: true } : {}),
                                 })
                             }
                             data-testid="combat-confirm"
@@ -323,12 +422,15 @@ export function CombatActionMenu({ economy: economySlot, options, combat, busy, 
 }
 
 /** Fora da minha vez: de quem é a vez e a rodada. */
-export function CombatWaitBar({ combat, onAsk, canAsk }: { combat: MaddoxTacticalCombatDto; onAsk: () => void; canAsk: boolean }) {
+export function CombatWaitBar({ combat, onAsk, canAsk, isOwner = false }: { combat: MaddoxTacticalCombatDto; onAsk: () => void; canAsk: boolean; isOwner?: boolean }) {
     const active = combat.order.find((slot) => slot.active)
+    const preparation = combat.preparation
+    // DND-41: durante a iniciativa, o mestre prepara a mesa de cada personagem; uma falha espera o dono da campanha.
+    const preparing = preparation?.active ? (preparation.blocked ? (isOwner ? "A preparação de uma ficha falhou: decida acima para o combate seguir." : "Aguardando o dono da campanha") : "O mestre está preparando o combate") : null
     return (
         <div className="flex items-center gap-2 border-t px-4 py-3 text-sm text-white/80" data-testid="combat-wait-bar">
             <Swords className="h-4 w-4 text-red-300" aria-hidden />
-            <span className="flex-1">{combat.phase === "initiative" ? "Rolando a iniciativa…" : active ? `Vez de ${active.name}${active.initiative !== null ? ` (iniciativa ${active.initiative})` : ""} · Rodada ${combat.round}` : `Vez dos adversários · Rodada ${combat.round}`}</span>
+            <span className="flex-1" data-testid="combat-wait-text">{preparing ? preparing : combat.phase === "initiative" ? "Rolando a iniciativa…" : active ? `Vez de ${active.name}${active.initiative !== null ? ` (iniciativa ${active.initiative})` : ""} · Rodada ${combat.round}` : `Vez dos adversários · Rodada ${combat.round}`}</span>
             {canAsk && (
                 <Button size="sm" variant="ghost" onClick={onAsk}>
                     <HelpCircle aria-hidden /> Perguntar ao mestre

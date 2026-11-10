@@ -136,6 +136,8 @@ export const MADDOX_CAMPAIGN_STATUS_DEFS: Record<MaddoxCampaignStatus, { label: 
 export const MADDOX_INVITE_CLOSED_STATUSES: readonly MaddoxCampaignStatus[] = ["ended", "archived"]
 
 export const MADDOX_CAMPAIGN_AUDIT_ENTITY = "CampanhaMaddox"
+/** Correções do Maddox na ficha de um personagem (DND-41: preparação do combate e pedidos de ajuste). */
+export const MADDOX_SHEET_AUDIT_ENTITY = "FichaPersonagem"
 export const MADDOX_CAMPAIGN_NAME_MIN = 3
 export const MADDOX_CAMPAIGN_NAME_MAX = 80
 export const MADDOX_CHARACTER_NAME_MIN = 2
@@ -214,7 +216,7 @@ export const MADDOX_GAME_CHANGED_EVENT = "maddox.game.changed"
  * uma rolagem avulsa (`combat-roll`: iniciativa, salvaguarda, teste contra a morte, concentração, dano) e a janela de
  * reação (`combat-reaction`).
  */
-export const MADDOX_GAME_MESSAGE_KINDS = ["narration", "declaration", "pass", "question", "answer", "check", "combat", "combat-action", "combat-roll", "combat-reaction", "reminder"] as const
+export const MADDOX_GAME_MESSAGE_KINDS = ["narration", "declaration", "pass", "question", "answer", "check", "combat", "combat-action", "combat-roll", "combat-reaction", "reminder", "combat-prep"] as const
 export type MaddoxGameMessageKind = (typeof MADDOX_GAME_MESSAGE_KINDS)[number]
 
 /** O que o jogador envia no próprio turno. */
@@ -289,6 +291,9 @@ export const MADDOX_NARRATOR_INDEX_ITEMS = 40
 /** Origens do consumo de IA do narrador (painel de consumo). */
 export const MADDOX_NARRATION_CONSUMPTION_ORIGIN = "maddox-narration"
 export const MADDOX_VALIDATION_CONSUMPTION_ORIGIN = "maddox-validation"
+export const MADDOX_COMBAT_PREP_CONSUMPTION_ORIGIN = "maddox-combat-prep"
+export const MADDOX_COMBAT_ADJUST_CONSUMPTION_ORIGIN = "maddox-combat-adjust"
+export const MADDOX_SNEAK_ATTACK_CONSUMPTION_ORIGIN = "maddox-sneak-attack"
 
 /** Servidor MCP do Maddox registrado no OpenCode (ferramentas do narrador quando o provedor é o OpenCode). */
 export const MADDOX_MCP_SERVER_NAME = "dndicas-maddox"
@@ -569,6 +574,32 @@ export const MADDOX_COMBAT_FORCE_END_AFTER = 2
 export const MADDOX_COMBAT_FREE_TEXT_MAX = 1_000
 /** Alvos de uma magia de área. */
 export const MADDOX_COMBAT_TARGETS_MAX = 12
+
+// ── Preparação da mesa de combate (DND-41) ────────────────────────────────────
+
+/** Teto técnico de UMA geração da preparação de uma ficha; passou disso, a preparação falha e o dono decide. */
+export const MADDOX_COMBAT_PREP_TIMEOUT_MS = 3 * 60_000
+/** Preparação "em andamento" sem job vivo há mais que isto (processo reiniciado) volta para a fila. */
+export const MADDOX_COMBAT_PREP_STALE_MS = 30_000
+/** Novas leituras da ficha quando o jogador a altera durante a preparação. */
+export const MADDOX_COMBAT_PREP_CONFLICT_RETRIES = 2
+/** Teto técnico de uma geração do pedido de ajuste. */
+export const MADDOX_COMBAT_ADJUST_TIMEOUT_MS = 2 * 60_000
+/** Texto do pedido de ajuste de uma opção. */
+export const MADDOX_COMBAT_ADJUST_TEXT_MAX = 500
+/** Conferência da condição do ataque furtivo (JEV ou geração curta do narrador). */
+export const MADDOX_SNEAK_ATTACK_CHECK_TIMEOUT_MS = 20_000
+/**
+ * Tetos TÉCNICOS do texto gerado pela IA na preparação e nos ajustes (proteção contra resposta descontrolada, folgados
+ * acima do que o prompt pede): abaixo deles o texto é gravado inteiro; a tela quebra a linha, não corta.
+ */
+export const MADDOX_COMBAT_PREP_TEXT_CEILING = { reason: 4_000, label: 300, detail: 1_000, name: 300, append: 10_000, description: 30_000 } as const
+/** Trecho de cada característica e talento que vai ao modelo; acima disso (ou com menções) ele só acrescenta, não reescreve. */
+export const MADDOX_COMBAT_PREP_TRAIT_TEXT_MAX = 400
+/** Mensagem dos demais quando a preparação de uma ficha falhou (o motivo só vai ao dono da campanha). */
+export const MADDOX_COMBAT_PREP_FAILED_MESSAGE = "A preparação desta ficha falhou. Aguardando o dono da campanha."
+/** Mensagem do jogador quando o pedido de ajuste não pôde ser examinado (o motivo só vai ao dono da campanha). */
+export const MADDOX_COMBAT_ADJUST_FAILED_MESSAGE = "O Maddox não conseguiu examinar o pedido agora. Tente de novo."
 /**
  * Iniciativa dos inimigos (DND-25): tempo em que o dado ainda está na tela de todos depois de rolado. A ordem de
  * iniciativa só fecha (e o Maddox só narra) depois disso.
@@ -610,7 +641,7 @@ export interface MaddoxScriptTopic {
 // ── JEV ───────────────────────────────────────────────────────────────────────
 
 /** Decisões que poderão usar o JEV (System One) nas próximas entregas. Por enquanto só configuráveis. */
-export const MADDOX_JEV_DECISIONS = ["question-or-action", "free-action-validity", "requires-check", "combat-boundary", "combat-option-cost", "master-knowledge", "interview-complete", "scene-image"] as const
+export const MADDOX_JEV_DECISIONS = ["question-or-action", "free-action-validity", "requires-check", "combat-boundary", "combat-option-cost", "master-knowledge", "interview-complete", "scene-image", "sneak-attack-condition", "combat-adjust-plausible"] as const
 export type MaddoxJevDecision = (typeof MADDOX_JEV_DECISIONS)[number]
 
 export const MADDOX_JEV_DECISION_DEFS: Record<MaddoxJevDecision, { label: string; description: string }> = {
@@ -622,6 +653,8 @@ export const MADDOX_JEV_DECISION_DEFS: Record<MaddoxJevDecision, { label: string
     "master-knowledge": { label: "Conhecimento do mestre", description: "Um fato persistido pode ser visto pelos jogadores ou é conhecimento exclusivo do Maddox." },
     "interview-complete": { label: "Fim da entrevista", description: "A entrevista de cenário ou de personagem já tem base suficiente para concluir." },
     "scene-image": { label: "Gerar imagem na cena", description: "Antes de gerar a imagem pedida pelo Maddox, o JEV confere se a narração corresponde mesmo à situação configurada (filtro contra excesso)." },
+    "sneak-attack-condition": { label: "Condição do ataque furtivo", description: "No combate tático, sem vantagem nem desvantagem, se há um aliado adjacente ao alvo para o ataque furtivo valer. Desligada, decide uma geração curta do narrador." },
+    "combat-adjust-plausible": { label: "Pedido de ajuste fora das regras", description: "Antes de o Maddox examinar um pedido de ajuste de opção no combate, o JEV recusa na hora o que claramente tenta burlar as regras da ficha." },
 }
 
 // ── OpenCode ──────────────────────────────────────────────────────────────────
@@ -904,6 +937,23 @@ export const MADDOX_OPEX_UNNAMED_LABEL = "Personagem Opex em criação"
 
 export const MADDOX_OPEX_FAILED_MESSAGE = "O Personagem Opex não conseguiu agir agora."
 export const MADDOX_OPEX_INTERVIEW_FAILED_MESSAGE = "A entrevista do Personagem Opex parou."
+
+/** Critério da preparação da mesa de combate (DND-41). O contrato da resposta fica fixo no código. */
+export const DEFAULT_MADDOX_COMBAT_PREP_INSTRUCTIONS = [
+    "Você é Maddox, o mestre da campanha, preparando a mesa de um personagem para o combate tático. Confira, contra a ficha inteira, cada ação, ação bônus e habilidade que o servidor calculou.",
+    "Confira o modificador certo de cada ataque (Acuidade usa o maior entre Força e Destreza; armas à distância usam Destreza), o bônus de proficiência, os dados e o tipo de dano, as magias preparadas, os recursos e as cargas.",
+    "Acrescente o que a ficha permite e o servidor não mostrou (ações bônus de classe, habilidades com custo de ação, danos adicionais como o ataque furtivo) e remova o que a ficha não permite.",
+    "Corrija também a ficha quando ela estiver errada, sempre explicando o motivo em uma frase curta, falando com o jogador. Não invente capacidades que a ficha, a classe, a espécie ou os talentos não dão.",
+    "Fale sempre em português do Brasil.",
+].join("\n")
+
+/** Critério dos pedidos de ajuste de uma opção no combate (DND-41). */
+export const DEFAULT_MADDOX_COMBAT_ADJUST_INSTRUCTIONS = [
+    "Você é Maddox, o mestre da campanha. Um jogador pediu, na própria vez do combate, um ajuste numa opção de ação do personagem dele.",
+    "Examine o pedido contra a ficha inteira e o grau de rigor da campanha. Aceite e corrija quando o jogador tiver razão; recuse quando o pedido contrariar a ficha ou as regras, ou tentar ganhar uma vantagem que o personagem não tem.",
+    "Sempre explique o motivo em uma ou duas frases, falando com o jogador.",
+    "Fale sempre em português do Brasil.",
+].join("\n")
 
 export const DEFAULT_MADDOX_OPEX_CHARACTER_INSTRUCTIONS = [
     "Você é um jogador de RPG experiente que interpreta um personagem numa campanha narrada pelo Maddox. Pense e decida como esse personagem, de forma coerente com a personalidade, a história, as motivações e as relações dele.",

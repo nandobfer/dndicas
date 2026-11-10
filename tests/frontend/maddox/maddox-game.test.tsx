@@ -1139,3 +1139,69 @@ describe("mesa Maddox — Personagem Opex parado (DND-26)", () => {
         expect(screen.queryByTestId("opex-failure")).toBeNull()
     })
 })
+
+describe("mesa Maddox — preparação do combate (DND-41)", () => {
+    const slot = (actorKey: string, name: string, memberId: string | null, over: Partial<NonNullable<NonNullable<MaddoxGameStateDto["combat"]>["tactical"]>["order"][number]> = {}) => ({
+        actorKey,
+        kind: (memberId ? "character" : "combatant") as "character" | "combatant",
+        side: (memberId ? "personagem" : "inimigo") as never,
+        name,
+        portraitUrl: null,
+        memberId,
+        initiative: null,
+        active: false,
+        hp: memberId ? { current: 10, max: 10, temp: 0 } : null,
+        band: memberId ? null : ("ileso" as never),
+        conditions: [],
+        concentration: null,
+        defeated: false,
+        dead: false,
+        stable: false,
+        dying: false,
+        ...over,
+    })
+    const combatState = (tactical: NonNullable<NonNullable<MaddoxGameStateDto["combat"]>["tactical"]>, me: Partial<MaddoxGameStateDto["me"]> = {}, messages: MaddoxGameMessageDto[] = []) =>
+        gameState({
+            rigor: "fiel-dnd",
+            turn: { number: 3, phase: "master", startedAt: null, generating: false, failed: false, awaitingChecks: true, pendingChecks: [] },
+            combat: { title: "Emboscada", location: "Estrada", tactical } as never,
+            me: ME({ combat: { myTurn: false, actorKey: "pc:kael", economy: { action: true, bonus: true, reaction: true, movement: true, attackAction: false, attacksLeft: 0, lightAttack: false, lightWeaponId: null } as never, attacksPerAction: 1, dying: false, options: null }, ...me }),
+            messages: [message("n1", { kind: "narration", phase: "master", content: "Goblins saltam da mata." }), ...messages],
+        })
+    const blocked = { phase: "initiative" as const, round: 0, activeKey: null, order: [slot("pc:kael", "Kael", "m1", { prep: { status: "ready" } }), slot("pc:lyra", "Lyra", "m2", { prep: { status: "failed" } }), slot("npc:g", "Goblin", null)] }
+    const prepCard = message("cp1", { kind: "combat-prep", phase: "master", memberId: "m1", characterName: "Kael", combatPrep: { characterName: "Kael", changes: [{ area: "opcao", label: "Adaga", before: "+1 para acertar · 1d4-1 perfurante", after: "+5 para acertar · 1d4+3 perfurante", reason: "A adaga tem Acuidade.", applied: true }] } })
+
+    it('o dono vê o card "Sua mesa está pronta", o motivo da falha e "Tentar de novo" chama a rota', async () => {
+        post.mockResolvedValue(ok(combatState(blocked)))
+        await renderGame(combatState({ ...blocked, preparation: { active: true, blocked: true, failures: [{ prepId: "p2", characterName: "Lyra", error: "Endpoint indisponível" }] } }, {}, [prepCard]))
+        expect(screen.getByTestId("combat-prep-card")).toHaveTextContent("Sua mesa está pronta · Kael")
+        expect(screen.getByTestId("combat-prep-card")).toHaveTextContent("A adaga tem Acuidade.")
+        expect(screen.getByTestId("combat-prep-failure")).toHaveTextContent("A preparação da mesa de Lyra falhou: Endpoint indisponível")
+        expect(screen.getAllByTestId("initiative-prep").map((seal) => seal.getAttribute("data-status"))).toEqual(["ready", "failed"])
+        await act(async () => fireEvent.click(within(screen.getByTestId("combat-prep-failure")).getByText("Tentar de novo")))
+        await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns/c1/game/combat/preps/p2/retry", {}))
+    })
+
+    it("quem não é dono vê só o aviso de espera, sem os botões", async () => {
+        await renderGame(combatState({ ...blocked, preparation: { active: true, blocked: true, failures: [] } }, { isOwner: false, memberId: "m2" }))
+        expect(screen.getByTestId("combat-prep-waiting-owner")).toHaveTextContent("Aguardando o dono da campanha")
+        expect(screen.getByTestId("combat-wait-text")).toHaveTextContent("Aguardando o dono da campanha")
+        expect(screen.queryByText("Tentar de novo")).not.toBeInTheDocument()
+    })
+
+    it("na minha vez, o pedido de ajuste do painel vai à rota de ajustes", async () => {
+        const running = { phase: "running" as const, round: 1, activeKey: "pc:kael", order: [slot("pc:kael", "Kael", "m1", { active: true, initiative: 18 }), slot("npc:g", "Goblin", null, { initiative: 10 })] }
+        const dagger = { id: "weapon:adaga", category: "weapons", economy: "action", label: "Adaga", detail: "+5 para acertar · 1d4+3 perfurante", target: "enemy", multiTarget: false, resolution: "attack", attack: { bonus: 5, damage: "1d4+3", damageType: "perfurante", ranged: false, light: true } }
+        const state = combatState(running)
+        state.turn = { ...state.turn, phase: "players", awaitingChecks: false }
+        state.me.combat = { ...state.me.combat!, myTurn: true, options: { action: [dagger as never], bonus: [] }, adjustments: [] }
+        post.mockResolvedValue(ok(state))
+        await renderGame(state)
+        fireEvent.click(screen.getByTestId("combat-action-button"))
+        const menu = await screen.findByTestId("combat-menu")
+        fireEvent.click(within(menu).getByText("Adaga"))
+        fireEvent.change(within(menu).getByTestId("combat-adjust-text"), { target: { value: "a adaga tem acuidade" } })
+        await act(async () => fireEvent.click(within(menu).getByTestId("combat-adjust-send")))
+        await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns/c1/game/combat/adjustments", { economy: "action", optionId: "weapon:adaga", text: "a adaga tem acuidade" }))
+    })
+})

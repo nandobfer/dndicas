@@ -17,7 +17,7 @@ import { useAiProviderStatuses, useImageGeneratorSettings } from "@/features/ai/
 import { AgentSettingsTabs } from "@/features/ai/components/AgentSettingsTabs"
 import type { IntegrationTabDef } from "@/features/integrations/components/tabs/IntegrationTabs"
 import { apiErrorMessage } from "@/lib/api"
-import { DEFAULT_MADDOX_INSTRUCTIONS, DEFAULT_MADDOX_INTERVIEWER_INSTRUCTIONS, DEFAULT_MADDOX_OPEX_CHARACTER_INSTRUCTIONS, MADDOX_SCRIPT_KINDS, type MaddoxScriptKind } from "../../constants"
+import { DEFAULT_MADDOX_COMBAT_ADJUST_INSTRUCTIONS, DEFAULT_MADDOX_COMBAT_PREP_INSTRUCTIONS, DEFAULT_MADDOX_INSTRUCTIONS, DEFAULT_MADDOX_INTERVIEWER_INSTRUCTIONS, DEFAULT_MADDOX_OPEX_CHARACTER_INSTRUCTIONS, MADDOX_SCRIPT_KINDS, type MaddoxScriptKind } from "../../constants"
 import { DEFAULT_MADDOX_SETTINGS, maddoxSettingsSchema, type MaddoxSettings } from "../../schemas"
 import { firstHiddenFormError } from "../../form-errors"
 import { draftFromScript, isScriptDraftDirty, isScriptDraftValid, type MaddoxScriptDraft } from "../../script-draft"
@@ -196,6 +196,32 @@ export function MaddoxTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) =
                                         <Textarea id="maddox-interviewer-instructions" aria-describedby="maddox-interviewer-instructions-help" rows={8} className="font-mono text-xs" {...form.register("interviewerInstructions")} />
                                         <div className="flex justify-end">
                                             <Button type="button" variant="ghost" size="sm" className="gap-1.5" onClick={() => form.setValue("interviewerInstructions", DEFAULT_MADDOX_INTERVIEWER_INSTRUCTIONS, { shouldDirty: true, shouldValidate: true })}>
+                                                <RotateCcw className="h-3.5 w-3.5" aria-hidden /> Restaurar padrão
+                                            </Button>
+                                        </div>
+                                    </Field>
+                                </CardContent>
+                            </Card>
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle className="text-base">Combate tático</CardTitle>
+                                    <CardDescription>
+                                        Critério do Maddox ao preparar a mesa de cada personagem durante a iniciativa e ao examinar os pedidos de ajuste de uma opção na vez do jogador. Usa o mesmo modelo do narrador; o grau de rigor, a ficha inteira e o formato da resposta entram sozinhos.
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent className="space-y-5">
+                                    <Field id="maddox-combat-prep-instructions" label="Preparação do combate" error={errors.combatPrepInstructions?.message}>
+                                        <Textarea id="maddox-combat-prep-instructions" rows={7} className="font-mono text-xs" {...form.register("combatPrepInstructions")} />
+                                        <div className="flex justify-end">
+                                            <Button type="button" variant="ghost" size="sm" className="gap-1.5" onClick={() => form.setValue("combatPrepInstructions", DEFAULT_MADDOX_COMBAT_PREP_INSTRUCTIONS, { shouldDirty: true, shouldValidate: true })}>
+                                                <RotateCcw className="h-3.5 w-3.5" aria-hidden /> Restaurar padrão
+                                            </Button>
+                                        </div>
+                                    </Field>
+                                    <Field id="maddox-combat-adjust-instructions" label="Pedidos de ajuste no combate" error={errors.combatAdjustInstructions?.message}>
+                                        <Textarea id="maddox-combat-adjust-instructions" rows={6} className="font-mono text-xs" {...form.register("combatAdjustInstructions")} />
+                                        <div className="flex justify-end">
+                                            <Button type="button" variant="ghost" size="sm" className="gap-1.5" onClick={() => form.setValue("combatAdjustInstructions", DEFAULT_MADDOX_COMBAT_ADJUST_INSTRUCTIONS, { shouldDirty: true, shouldValidate: true })}>
                                                 <RotateCcw className="h-3.5 w-3.5" aria-hidden /> Restaurar padrão
                                             </Button>
                                         </div>
