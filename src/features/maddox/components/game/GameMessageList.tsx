@@ -6,7 +6,7 @@ import { AlertCircle, ArrowDown, BookOpen, EyeOff, HelpCircle, Loader2, MinusCir
 import { Button } from "@/components/ui/opex/button"
 import { Markdown } from "@/components/ui/opex/markdown"
 import type { MaddoxGameMessageDto, MaddoxLiveGenerationDto } from "../../game-types"
-import type { MaddoxActionOptionsView } from "../../game-view"
+import { opexActingLabel, type MaddoxActionOptionsView } from "../../game-view"
 import { GameActionOptions } from "./GameActionOptions"
 import { OpexNpcFailureLine } from "./OpexNpcFailureLine"
 import { liveMarkupToBold } from "../../catalog-markup"
@@ -32,6 +32,8 @@ interface Props {
     narrating: boolean
     /** Gerações do Maddox ao vivo (e as que acabaram, até a mensagem gravada chegar). */
     live?: MaddoxLiveGenerationDto[]
+    /** Personagem Opex da vez (DND-45): balão "agindo…" no fim da conversa. Nunca no diário (só leitura). */
+    opexActing?: { memberId: string; characterName: string; portraitUrl: string | null } | null
     hasMore: boolean
     loadingMore: boolean
     onLoadMore: () => void
@@ -86,9 +88,10 @@ function stepReplaysOf(replays: ReadonlyMap<string, DiceRollResponse>, messageId
 
 const NO_COMBAT: CombatHandlers = { isOwner: false, reacting: false, onRollAction: noRoll, onRollCombat: noRoll, onCancelAction: () => undefined, onDecideReaction: () => undefined }
 
-export function GameMessageList({ messages, myMemberId, maddoxAvatarUrl, color, narrating, live = [], hasMore, loadingMore, onLoadMore, replays = NO_REPLAYS, onRollCheck = noRoll, combat: handlers = NO_COMBAT, readOnly = false, highlightId = null, actionOptions: optionsInput = null }: Props) {
+export function GameMessageList({ messages, myMemberId, maddoxAvatarUrl, color, narrating, live = [], opexActing: opexActingInput = null, hasMore, loadingMore, onLoadMore, replays = NO_REPLAYS, onRollCheck = noRoll, combat: handlers = NO_COMBAT, readOnly = false, highlightId = null, actionOptions: optionsInput = null }: Props) {
     const combat = readOnly ? NO_COMBAT : handlers
     const actionOptions = readOnly ? null : optionsInput
+    const opexActing = readOnly ? null : opexActingInput
     // Só leitura: nenhum card é "meu", então nenhum mostra botão de rolar, cancelar ou reagir.
     const actsAs = (message: MaddoxGameMessageDto) => !readOnly && message.memberId !== null && message.memberId === myMemberId
     const scrollRef = useRef<HTMLDivElement>(null)
@@ -111,7 +114,7 @@ export function GameMessageList({ messages, myMemberId, maddoxAvatarUrl, color, 
 
     const liveNarration = live.some((item) => item.kind === "narration")
     const lastTurn = messages.at(-1)?.turnNumber ?? null
-    const signature = `${messages.length}:${messages.at(-1)?.id ?? ""}:${narrating ? 1 : 0}:${actionOptions ? actionOptions.view.messageId : ""}:${live.map((item) => `${item.liveId}:${item.text.length}:${item.tool ? 1 : 0}`).join(",")}`
+    const signature = `${messages.length}:${messages.at(-1)?.id ?? ""}:${narrating ? 1 : 0}:${actionOptions ? actionOptions.view.messageId : ""}:${opexActing?.memberId ?? ""}:${live.map((item) => `${item.liveId}:${item.text.length}:${item.tool ? 1 : 0}`).join(",")}`
     const highlightLoaded = highlightId !== null && byId.has(highlightId)
     useLayoutEffect(() => {
         if (stickRef.current && !highlightId) scrollToEnd()
@@ -198,6 +201,11 @@ export function GameMessageList({ messages, myMemberId, maddoxAvatarUrl, color, 
                     <MaddoxBubble avatarUrl={maddoxAvatarUrl} color={color}>
                         <WritingIndicator color={color} />
                     </MaddoxBubble>
+                )}
+                {opexActing && (
+                    <SpeakerBubble key={`opex-acting-${opexActing.memberId}`} name={opexActing.characterName} avatarUrl={opexActing.portraitUrl} color={color} badge={<OpexChip />} testId="opex-acting">
+                        <WritingIndicator color={color} label={opexActingLabel(opexActing.characterName)} />
+                    </SpeakerBubble>
                 )}
             </div>
             <AnimatePresence>
@@ -334,11 +342,21 @@ function GameMessage({ message, mine, replyTo, maddoxAvatarUrl, color }: { messa
 
 function MaddoxBubble({ avatarUrl, color, testId, children }: { avatarUrl: string | null; color: string; testId?: string; children: React.ReactNode }) {
     return (
-        <motion.div {...bubble} className="flex items-start gap-2.5 pb-4" data-testid={testId ?? "maddox-writing"}>
-            <MemberAvatar name="Maddox" imageUrl={avatarUrl} color={color} className="mt-0.5 h-7 w-7 shrink-0 self-start" />
+        <SpeakerBubble name="Maddox" avatarUrl={avatarUrl} color={color} testId={testId ?? "maddox-writing"}>
+            {children}
+        </SpeakerBubble>
+    )
+}
+
+/** Balão à esquerda de quem fala sem ser eu: o Maddox e o Personagem Opex agindo (DND-45). */
+function SpeakerBubble({ name, avatarUrl, color, badge, testId, children }: { name: string; avatarUrl: string | null; color: string; badge?: React.ReactNode; testId: string; children: React.ReactNode }) {
+    return (
+        <motion.div {...bubble} className="flex items-start gap-2.5 pb-4" data-testid={testId}>
+            <MemberAvatar name={name} imageUrl={avatarUrl} color={color} className="mt-0.5 h-7 w-7 shrink-0 self-start" />
             <div className="min-w-0 max-w-[85%] space-y-1 break-words rounded-2xl rounded-tl-sm border bg-white/[0.03] px-3.5 py-2.5 text-sm text-foreground" style={{ borderColor: `${color}40` }}>
-                <p className="text-xs font-semibold" style={{ color }}>
-                    Maddox
+                <p className="flex items-center gap-1 text-xs font-semibold" style={{ color }}>
+                    {name}
+                    {badge}
                 </p>
                 {children}
             </div>

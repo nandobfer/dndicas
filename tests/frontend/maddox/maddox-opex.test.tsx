@@ -75,7 +75,9 @@ const detail = (over: Partial<MaddoxCampaignDetailDto> = {}): MaddoxCampaignDeta
 const { CampaignPage } = await import("@/features/maddox/components/campaigns/CampaignPage")
 const { OpexInterviewPage } = await import("@/features/maddox/components/interviews/OpexInterviewPage")
 const { OpexDraftPanel } = await import("@/features/maddox/components/interviews/OpexDraftPanel")
-const { opexBannerText, seatStatus, turnProgress, composerBlockReason } = await import("@/features/maddox/game-view")
+const { opexActingView, opexBannerText, seatStatus, turnProgress, composerBlockReason } = await import("@/features/maddox/game-view")
+const { GameMessageList } = await import("@/features/maddox/components/game/GameMessageList")
+const { TurnPanel } = await import("@/features/maddox/components/game/TurnPanel")
 
 function serve(campaign: MaddoxCampaignDetailDto) {
     get.mockImplementation(async (url: string) => {
@@ -194,11 +196,11 @@ describe("regras da mesa com Personagens Opex", () => {
     const state = (opexActor: MaddoxGameStateDto["turn"]["opexActor"]) => ({ status: "active" as const, turn: { number: 2, phase: "players" as const, startedAt: null, generating: false, failed: false, awaitingChecks: false, pendingChecks: [], opexActor }, me: { memberId: "m1", isOwner: true, ready: true, eligible: true, declared: false, sheet: null } })
     const presence = { available: true, online: new Set(["u1"]) }
 
-    it("o Opex nunca aparece offline, não conta na faixa dos humanos e mostra \"Agindo…\" ou \"Parado\"", () => {
+    it("o Opex nunca aparece offline, não conta na faixa dos humanos e a vez dele não vira situação de assento (DND-45)", () => {
         const opex = participant({ memberId: "m9", userId: "opex:m9", opex: true })
         expect(seatStatus(opex, state(null), presence)).toBe("waiting")
-        expect(seatStatus(opex, state({ memberId: "m9", characterName: "Tork", failed: false, error: null, combat: false }), presence)).toBe("acting")
-        expect(seatStatus(opex, state({ memberId: "m9", characterName: "Tork", failed: true, error: "x", combat: false }), presence)).toBe("stuck")
+        expect(seatStatus(opex, state({ memberId: "m9", characterName: "Tork", failed: false, error: null, combat: false }), presence)).toBe("waiting")
+        expect(seatStatus({ ...opex, declared: true }, state({ memberId: "m9", characterName: "Tork", failed: true, error: "x", combat: false }), presence)).toBe("declared")
         expect(turnProgress({ participants: [participant({}), opex] }, presence)).toEqual({ declared: 0, total: 1 })
     })
 
@@ -208,6 +210,63 @@ describe("regras da mesa com Personagens Opex", () => {
         expect(opexBannerText({ ...state({ memberId: "m9", characterName: "Tork", failed: true, error: null, combat: false }), me: { isOwner: false } })).toContain("aguardando o dono da campanha")
         expect(composerBlockReason({ ...state({ memberId: "m9", characterName: "Tork", failed: false, error: null, combat: false }), me: { ...state(null).me, declared: false } } as never)).toBe("Os Personagens Opex estão agindo. Aguarde a narração do Maddox.")
         expect(opexBannerText(state(null))).toBeNull()
+    })
+})
+
+describe("vez do Personagem Opex no chat (DND-45)", () => {
+    const opex: MaddoxGameParticipantDto = { memberId: "m9", userId: "opex:m9", name: "Personagem Opex", characterName: "Tork", portraitUrl: "https://img/tork.png", role: "player", ready: true, eligible: true, declared: false, opex: true }
+    const human: MaddoxGameParticipantDto = { memberId: "m1", userId: "u-owner", name: "Marina Dona", characterName: "Kael", portraitUrl: null, role: "owner", ready: true, eligible: true, declared: false }
+    const actor = (over: Partial<NonNullable<MaddoxGameStateDto["turn"]["opexActor"]>> = {}) => ({ memberId: "m9", characterName: "Tork", failed: false, error: null, combat: false, ...over })
+    const gameState = (opexActor: MaddoxGameStateDto["turn"]["opexActor"], over: Partial<MaddoxGameStateDto> = {}) =>
+        ({
+            campaignId: "c1",
+            status: "active",
+            turn: { number: 2, phase: "players", startedAt: null, generating: false, failed: false, awaitingChecks: false, pendingChecks: [], opexActor },
+            participants: [human, opex],
+            me: { memberId: "m1", isOwner: true, ready: true, eligible: true, declared: true, sheet: null },
+            ...over,
+        }) as MaddoxGameStateDto
+    const list = (props: Partial<Parameters<typeof GameMessageList>[0]> = {}) => <GameMessageList messages={[]} myMemberId="m1" maddoxAvatarUrl={null} color="#3b82f6" narrating={false} hasMore={false} loadingMore={false} onLoadMore={vi.fn()} {...props} />
+
+    it("opexActingView: o Opex da vez (inclusive no combate tático), com o retrato; nada em falha, no turno do mestre ou fora do jogo", () => {
+        expect(opexActingView(gameState(actor()))).toEqual({ memberId: "m9", characterName: "Tork", portraitUrl: "https://img/tork.png" })
+        expect(opexActingView(gameState(actor({ combat: true })))).toEqual({ memberId: "m9", characterName: "Tork", portraitUrl: "https://img/tork.png" })
+        expect(opexActingView(gameState(actor({ failed: true, error: "x" })))).toBeNull()
+        expect(opexActingView(gameState(actor(), { turn: { ...gameState(null).turn, phase: "master", opexActor: actor() } }))).toBeNull()
+        expect(opexActingView(gameState(actor(), { status: "paused" as MaddoxGameStateDto["status"] }))).toBeNull()
+        expect(opexActingView(gameState(null))).toBeNull()
+    })
+
+    it("o chat mostra um único balão \"agindo…\", que troca de personagem e some quando a vez passa", () => {
+        const view = render(list({ opexActing: { memberId: "m9", characterName: "Tork", portraitUrl: null } }))
+        const bubble = screen.getByTestId("opex-acting")
+        expect(bubble).toHaveTextContent("Tork está agindo…")
+        expect(within(bubble).getByTestId("opex-chip")).toBeInTheDocument()
+        expect(within(bubble).getByRole("status")).toBeInTheDocument()
+        view.rerender(list({ opexActing: { memberId: "m9", characterName: "Tork", portraitUrl: null } }))
+        expect(screen.getAllByTestId("opex-acting")).toHaveLength(1)
+        view.rerender(list({ opexActing: { memberId: "m8", characterName: "Brunna", portraitUrl: null } }))
+        expect(screen.getAllByTestId("opex-acting")).toHaveLength(1)
+        expect(screen.getByTestId("opex-acting")).toHaveTextContent("Brunna está agindo…")
+        view.rerender(list({ opexActing: null, narrating: true }))
+        expect(screen.queryByTestId("opex-acting")).not.toBeInTheDocument()
+        expect(screen.getByTestId("maddox-writing")).toHaveTextContent("O Maddox está narrando…")
+    })
+
+    it("o diário (só leitura) nunca mostra o balão", () => {
+        render(list({ readOnly: true, opexActing: { memberId: "m9", characterName: "Tork", portraitUrl: null } }))
+        expect(screen.queryByTestId("opex-acting")).not.toBeInTheDocument()
+    })
+
+    it("a lateral não mostra chip de situação para o Personagem Opex; o humano mantém o dele e o dono segue podendo pular o Opex", () => {
+        const presence = { available: true, online: new Set(["u-owner"]) }
+        const view = render(<TurnPanel state={gameState(actor())} presence={presence} color="#3b82f6" skipping={false} onSkip={vi.fn()} />)
+        const opexSeat = screen.getByTestId("seat-m9")
+        for (const label of ["Agindo…", "Aguardando", "Parado: aguardando o dono", "Declarou"]) expect(opexSeat).not.toHaveTextContent(label)
+        expect(within(opexSeat).getByRole("button", { name: "Pular Tork" })).toBeInTheDocument()
+        expect(screen.getByTestId("seat-m1")).toHaveTextContent("Aguardando")
+        view.rerender(<TurnPanel state={gameState(actor({ failed: true, error: "x" }))} presence={presence} color="#3b82f6" skipping={false} onSkip={vi.fn()} />)
+        expect(screen.getByTestId("seat-m9")).not.toHaveTextContent("Parado")
     })
 })
 
