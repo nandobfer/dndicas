@@ -910,7 +910,7 @@ ela fecha e o turno do mestre segue. Mesa toda offline não avança sozinha (reg
 
 | Rota | Comportamento |
 | --- | --- |
-| `POST …/game/combat/actions` `{ economy, optionId, targets?, spellLevel?, skill?, freeText?, readyOptionId?, readyTrigger? }` | A opção precisa estar na lista recalculada da ficha (`OPTION_UNAVAILABLE`); alvo validado; opção sem os dados para resolver = 409 `OPTION_UNRESOLVABLE` antes de qualquer gasto; a economia é reservada primeiro (`ACTION_ALREADY_USED`) e só então espaço de magia, carga e item são gastos (gasto recusado devolve a economia); uma ação pendente por vez (`ACTION_PENDING`). "Outra ação" (ou habilidade de custo não identificado) passa pelo `validateDeclaration` com o contexto do combate: inválida = 409 `ACTION_INVALID` com o motivo, nada gasto |
+| `POST …/game/combat/actions` `{ economy, optionId, targets?, spellLevel?, skill?, freeText?, readyOptionId?, readyTrigger?, sneakAttack? }` | A opção precisa estar na lista recalculada da ficha (`OPTION_UNAVAILABLE`); alvo validado; opção sem os dados para resolver = 409 `OPTION_UNRESOLVABLE` antes de qualquer gasto; a economia é reservada primeiro (`ACTION_ALREADY_USED`) e só então espaço de magia, carga e item são gastos (gasto recusado devolve a economia); uma ação pendente por vez (`ACTION_PENDING`). "Outra ação" (ou habilidade de custo não identificado) passa pelo `validateDeclaration` com o contexto do combate: inválida = 409 `ACTION_INVALID` com o motivo, nada gasto |
 | `POST …/combat/actions/[id]/roll` `{}` | Reivindica o passo antes de rolar (`combatAction.rollingStep`/`rollingAt`, troca condicional; a chamada concorrente recebe 409 `ACTION_RESOLVED`; trava mais velha que `MADDOX_COMBAT_ROLL_CLAIM_STALE_MS` (30 s) é tida como abandonada e a próxima tentativa assume; só o dono da reivindicação grava). Rola o próximo passo: ataque (vantagem/desvantagem pelas condições; acerto contra a CA do alvo, que não aparece; 20 natural = crítico com dados dobrados), dano (resistências; adversário a 0 PV = `defeated`), cura (sai dos 0 PV), magia de salvaguarda (o servidor rola a salvaguarda de cada alvo; metade no sucesso pelo texto/perfil), teste (Esconder = Furtividade CD 15 → Invisível) |
 | `DELETE …/combat/actions/[id]` | Cancela a ação sem rolagem e sem recurso gasto; a economia volta (`ACTION_NOT_CANCELLABLE`) |
 | `POST …/combat/rolls/[id]/roll` `{}` | Reivindicada antes de rolar (`combatRoll.rolling`/`rollingAt`, mesma expiração; concorrente = 409 `ROLL_NOT_PENDING`). Iniciativa, teste contra a morte (encerra a vez), concentração, salvaguarda contra um adversário (aplica o dano pré-rolado), dano pedido pelo Maddox. O dono pode rolar no lugar (auditado) |
@@ -918,7 +918,10 @@ ela fecha e o turno do mestre segue. Mesa toda offline não avança sozinha (reg
 | `POST …/combat/end-turn` `{ movimento? }` | Encerra a vez (409 com ação ou rolagem pendente); grava a declaração da vez com o resumo das ações e o "Movimento e posição" |
 
 **O que o personagem pode usar** (`buildCombatOptions`, revalidado a cada ação): armas equipadas do catálogo (Força; Acuidade = o maior
-entre Força e Destreza; Munição = Destreza) e o ataque desarmado; Ataque Extra pelo nome da habilidade (2/3/4 ataques na mesma Ação);
+entre Força e Destreza; Munição = Destreza) e o ataque desarmado — as propriedades vêm de `properties[].name` ou, quando ele está vazio
+(o caso do catálogo, DND-41), do texto da menção em `properties[].description` sem o prefixo "Propriedade:" (`weaponProperties`); Versátil
+gera "X (duas mãos)" com o dado do parêntese, sem escudo equipado e sem ataque com outra arma no turno; Arremesso gera "X (arremesso)", à
+distância, com o mesmo modificador (`weapon:<id>:two-handed`, `weapon:<id>:thrown`; o id do item sai de `weaponItemId`); Ataque Extra pelo nome da habilidade (2/3/4 ataques na mesma Ação);
 a outra arma Leve na Ação bônus depois de atacar com uma Leve (sem o modificador no dano, salvo negativo; a mesma arma só com quantidade ≥ 2, por `economy.lightWeaponId`); magias preparadas (ou
 truques) com o custo do tempo de conjuração e espaço livre no círculo ou acima (seletor de círculo), **uma magia com espaço por turno**
 (2024), truques escalando pelo nível; consumíveis com quantidade (poção de cura: Ação bônus em si, Ação em aliado; os demais em
@@ -986,6 +989,89 @@ contêiner e à janela; categorias em `OptionTabs`, alvos/círculo/perícia em `
 
 Sem permissão nova (`maddox.play` cobre). Fora do escopo: grid e alcance medido (o movimento é texto), ações lendárias e de covil,
 XP e subida de nível, reações dos adversários além do ataque de oportunidade conduzido pelo Maddox, novo personagem depois da morte.
+
+## Preparação da mesa de combate (DND-41)
+
+Durante a iniciativa do combate tático, o Maddox prepara a mesa de **cada personagem, um por um** (inclusive os Personagens Opex): confere
+ações, ações bônus, habilidades, recursos e danos contra a ficha inteira, corrige a ficha quando ela está errada e guarda o que muda nas
+opções. Sem permissão nova (`maddox.play` e ser membro cobrem).
+
+Código: parte pura em `combat-prep.ts` (`applyCombatPrep`, `detectSneakAttack`, `sneakEligible`, `onlyFreeBonus`) e o contrato da resposta
+da IA em `combat-prep-schemas.ts` (validação tolerante, item a item: `parseList`); servidor em `server/combat-prep.ts` (agendamento, job,
+retomada, decisões do dono, contexto da ficha `loadPrepSheet`, `interpretPrep`, `mergeOverlay`), `server/combat-prep-ai.ts` (chamadas de IA,
+mockadas inteiras nos testes), `server/combat-sheet-writes.ts` (gravação na ficha) e `server/combat-adjustments.ts` (pedido de ajuste).
+
+**Modelo `maddox_combat_preps`** (um por `combatId` + `actorKey`, único; fora do `maddox_combats` para não disputar o `rev` com os
+jogadores): `status` (`pending | running | ready | failed | skipped | discarded`), `turnNumber`/`waitRound` da iniciativa, `error` (motivo
+completo; no DTO só para o dono da campanha), `overlay { modify[], remove[], add[], suppress[] }`, `riders[]` (ataque furtivo), `changes[]`
+(o que era, o que ficou, o motivo, `applied`) e `adjustments[]` (pedidos de ajuste).
+
+**Fluxo.** `createTacticalCombat` cria uma preparação por personagem com ficha e `scheduleCombatPreps` põe um job `combat-prep` por
+personagem na fila serial da campanha (rodam depois da narração que abriu o combate, enquanto os jogadores rolam). O job lê a ficha
+inteira (atributos, proficiências, ataques, itens com as propriedades do catálogo, características de classe e espécie, talentos, magias,
+recursos), a lista base completa (`ignoreResources`) e o ataque furtivo detectado, chama a revisão com o modelo do narrador no grau da
+campanha e as instruções configuráveis, confere a resposta contra a lista e a ficha (id desconhecido, valor fora da faixa ou recurso que a
+ficha não tem = descartado, com log) e grava. **A ficha mudou durante a preparação** (carimbo `readSheetStamp`: `updatedAt` da ficha + hash
+das coleções filhas) = a revisão roda de novo sobre o dado novo (até `MADDOX_COMBAT_PREP_CONFLICT_RETRIES`). Combate encerrado ou membro que
+saiu = `discarded`, nada gravado. IA indisponível ou erro do provedor (teto técnico `MADDOX_COMBAT_PREP_TIMEOUT_MS`) = `failed`.
+
+**A ordem espera.** `finishInitiativeIfReady` não fecha a ordem com preparação `pending`, `running` ou `failed`; `hasRoundWaits(pendingOnly)`
+conta a preparação da rodada como espera (a continuação do mestre não entra). Sem tempo limite. Ao terminar a última, o job chama
+`finishInitiativeIfReady` e `advanceAfterChecks`. Retomada depois de um reinício: o `check` chama `scheduleCombatPreps`, que reenfileira as
+pendentes e as `running` sem job vivo há mais que `MADDOX_COMBAT_PREP_STALE_MS`.
+
+**Falha.** Só o dono da campanha recebe o motivo (`combat.tactical.preparation.failures`) e decide, com auditoria: `POST
+…/game/combat/preps/[prepId]/retry` ("Tentar de novo": volta para a fila) e `POST …/game/combat/preps/[prepId]/skip` ("Seguir sem
+preparação": a ficha usa a lista base, já com o cálculo corrigido e o ataque furtivo detectado pelo servidor). Os demais veem só o selo
+"Falhou" e "Aguardando o dono da campanha"; outro jogador recebe 403 `OWNER_ONLY`.
+
+**Gravação na ficha** (lista fechada de operações, `combatSheetChangeSchema`): atributo, proficiência em salvaguarda e perícia, atributo de
+conjuração, espaços de magia, cargas de recurso, ataques (`characterattacks`: criar, alterar, remover), características e talentos
+(criar, alterar), magia (preparada, círculo), item equipado e texto acrescentado ao fim de um campo de características. Cada operação é
+condicional ao valor atual, auditada (entidade `FichaPersonagem`, antes, depois, motivo e `by: "maddox"`) e avisa a ficha aberta
+(`publishSheetPatched`/`publishCollectionChanged`). Uma criação ligada a uma opção acrescentada (`ref`/`fromChange`) entra em
+`overlay.suppress` para a lista base não a mostrar duas vezes.
+
+**Lista do turno.** `loadCharacterOptions(states, campaignId, combatId)` recalcula a lista base com a economia e os recursos ao vivo e
+aplica a preparação `ready`/`skipped` por cima (`applyCombatPrep`): a IA não é chamada de novo; acréscimos só aparecem com a economia livre
+e com carga, item ou espaço de magia disponível; a opção ajustada traz `adjusted.reason` ("Ajustado pelo Maddox: …"). A revalidação de
+`POST …/combat/actions` usa a mesma lista.
+
+**Card privado** `combat-prep` ("Sua mesa está pronta"; `content` vazio, fora da transcrição e do Diário): `visibleTo` só o entrega ao
+dono do personagem (o do Personagem Opex, ao dono da campanha). Sem mudanças, o card diz isso.
+
+**Pedido de ajuste** (`POST …/game/combat/adjustments { economy, optionId, text }`): só o dono do personagem, só na vez dele
+(`loadMyCombatTurn`), com a mesa preparada (`PREP_NOT_READY`), numa opção que existe (`OPTION_UNAVAILABLE`); Personagem Opex não pede. Não
+gasta Ação nem Ação bônus. Entra em `adjustments` como `pending` e vira um job `combat-adjust` na fila (dois pedidos em ordem; o segundo vê
+o primeiro). O JEV "Pedido de ajuste fora das regras" (chave desligada por padrão) recusa na hora o que claramente burla; senão, o narrador
+decide (`accept` corrige a opção e a ficha pelas mesmas regras; `refuse` não muda nada), sempre com o motivo. Falha da IA = mensagem
+genérica para o jogador; o motivo técnico só para o dono da campanha.
+
+**Ataque furtivo.** Detectado pelo servidor pela classe (Ladino/Rogue) ou pela característica "Ataque Furtivo" (menção ou registro),
+⌈nível/2⌉d6; a preparação pode corrigir os dados com motivo. Vira `attack.riders` nas opções de arma com Acuidade ou à distância (a
+arremessada só com Acuidade; reações ficam fora). `POST …/combat/actions { sneakAttack: true }`: sem o rider = `SNEAK_ATTACK_UNAVAILABLE`;
+já usado = `SNEAK_ATTACK_USED`; condição conferida **antes de qualquer gasto** — desvantagem recusa, vantagem aceita, sem nenhuma das duas o
+JEV "Condição do ataque furtivo" (com a chave ligada) ou uma geração curta do narrador confere o aliado a até 1,5 m do alvo
+(`SNEAK_ATTACK_DENIED` com o motivo); falha da conferência aceita (log). Os dados entram no passo de dano (o crítico dobra também) e
+`economy.sneakAttackUsed` só é marcado quando esse dano é rolado (o ataque que erra não gasta). O Personagem Opex pode marcar
+(`ataqueFurtivo`).
+
+**Configuração.** Mesma feature `maddox` do narrador: `combatPrepInstructions` e `combatAdjustInstructions` (aba Agente Maddox → Geral →
+"Combate tático", com "Restaurar padrão"); o formato da resposta é fixo no código. Origens de consumo `maddox-combat-prep`,
+`maddox-combat-adjust` e `maddox-sneak-attack`.
+
+**Tela.** `CombatWaitBar` ("O mestre está preparando o combate"; travada: "Aguardando o dono da campanha"), `InitiativeTracker` (selos
+"Aguardando", "Preparando…", "Pronto", "Falhou", também na faixa compacta), `CombatPrepBlockedNotice` (dono: motivo, "Tentar de novo" e
+"Seguir sem preparação" com confirmação), `CombatPrepCard`, e no `CombatActionMenu` o "Ajustado pelo Maddox", a marcação "Ataque furtivo
+(+Xd6)" (desabilitada depois de usada), o pedido de ajuste com o resultado e os avisos de falta (`combatMenuNotices`: sem armas, sem
+habilidades, só "Outra ação" na Ação bônus). Hooks `useRetryCombatPrep`, `useSkipCombatPrep`, `useRequestCombatAdjustment`.
+
+Fora do escopo: personagem que entra no combate depois que ele começou (hoje a lista de personagens é montada na abertura).
+
+**Testes.** `tests/backend/maddox/combat-prep.test.ts` (parte pura), os blocos DND-41 de `tests/backend/maddox/tactical-combat.test.ts`
+(espera, falha e decisões, gravação, card, conflito, descarte, ajuste, furtivo) e `tests/frontend/maddox/maddox-combat-prep.test.tsx`.
+Testes que abrem combate tático mockam `@/features/maddox/server/combat-prep-ai` com `combatPrepAiModule`
+(`tests/helpers/combat-prep-mock.ts`, padrão "sem mudanças") e esperam `waitForCombatPreps()` (o `settleCampaign` já espera).
 
 ## Injetar Lembrança (DND-25)
 

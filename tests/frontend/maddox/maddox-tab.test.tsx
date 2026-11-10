@@ -252,6 +252,22 @@ describe("aba Agente Maddox", () => {
         expect(input.topics[0].text).not.toBe(defaultMaddoxScript("scenario").topics[0]!.text)
     })
 
+    it("Geral (DND-41): instruções da preparação do combate e dos pedidos de ajuste, com Restaurar padrão, no mesmo Salvar", async () => {
+        renderTab()
+        const prep = (await screen.findByLabelText("Preparação do combate")) as HTMLTextAreaElement
+        const adjust = screen.getByLabelText("Pedidos de ajuste no combate") as HTMLTextAreaElement
+        expect([prep.value, adjust.value]).toEqual([DEFAULT_MADDOX_SETTINGS.combatPrepInstructions, DEFAULT_MADDOX_SETTINGS.combatAdjustInstructions])
+        fireEvent.change(prep, { target: { value: "Prepare com rigor." } })
+        fireEvent.change(adjust, { target: { value: "Recuse o que não estiver na ficha." } })
+        await waitFor(() => expect((screen.getByRole("button", { name: "Salvar" }) as HTMLButtonElement).disabled).toBe(false))
+        fireEvent.click(screen.getByRole("button", { name: "Salvar" }))
+        await waitFor(() => expect(saveSettings).toHaveBeenCalled())
+        expect([lastSaved().combatPrepInstructions, lastSaved().combatAdjustInstructions]).toEqual(["Prepare com rigor.", "Recuse o que não estiver na ficha."])
+        fireEvent.change(screen.getByLabelText("Preparação do combate"), { target: { value: "Outra." } })
+        fireEvent.click(within(screen.getByLabelText("Preparação do combate").parentElement!).getByRole("button", { name: /Restaurar padrão/ }))
+        expect((screen.getByLabelText("Preparação do combate") as HTMLTextAreaElement).value).toBe(DEFAULT_MADDOX_SETTINGS.combatPrepInstructions)
+    })
+
     it("Personagem Opex (DND-26): instruções com Restaurar padrão no mesmo Salvar e memórias globais salvas à parte", async () => {
         opexMemories = [{ id: "m_1", title: "Coopere", text: "Prefira cooperar.", updatedAt: null }]
         createOpexMemory.mockReset()
