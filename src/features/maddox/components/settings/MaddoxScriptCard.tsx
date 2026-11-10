@@ -84,7 +84,7 @@ export function MaddoxScriptCard({ kind, state, draft, onChange }: MaddoxScriptC
                 <CardHeader>
                     <CardTitle className="text-base">Roteiro · {label}</CardTitle>
                     <CardDescription>
-                        O Maddox conduz a entrevista livremente: pergunta o que precisar conforme o andamento, seguindo o guia e usando os tópicos como roteiro sugerido. Cada gravação cria uma versão; a entrevista usa sempre a versão com que começou. Vigente: v{state.current.version}.
+                        O Maddox conduz a entrevista livremente: pergunta o que precisar conforme o andamento, seguindo o guia e usando os tópicos como roteiro sugerido. Este guia vale só para esta entrevista e se soma às instruções gerais do entrevistador (aba Geral); pode definir o ritmo da conversa, como quantas perguntas por mensagem. Cada gravação cria uma versão; a entrevista usa sempre a versão com que começou. Vigente: v{state.current.version}.
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-5">
@@ -92,7 +92,10 @@ export function MaddoxScriptCard({ kind, state, draft, onChange }: MaddoxScriptC
                         <label htmlFor={guideId} className="text-xs font-semibold">
                             Guia da entrevista
                         </label>
-                        <Textarea id={guideId} rows={14} className="font-mono text-xs" value={draft.guide} maxLength={MADDOX_SCRIPT_GUIDE_MAX} onChange={(event) => onChange({ ...draft, guide: event.target.value })} />
+                        <p id={`${guideId}-help`} className="text-[11px] text-muted-foreground">
+                            Específico desta entrevista e versionado: cada gravação cria uma versão, e a entrevista em andamento usa a versão com que começou.
+                        </p>
+                        <Textarea id={guideId} aria-describedby={`${guideId}-help`} rows={14} className="font-mono text-xs" value={draft.guide} maxLength={MADDOX_SCRIPT_GUIDE_MAX} onChange={(event) => onChange({ ...draft, guide: event.target.value })} />
                         <div className="flex items-center justify-between gap-2">
                             <span className="text-[11px] text-muted-foreground">
                                 {draft.guide.length.toLocaleString("pt-BR")} / {MADDOX_SCRIPT_GUIDE_MAX.toLocaleString("pt-BR")}

@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest"
 import { DEFAULT_MADDOX_SETTINGS } from "@/features/maddox/schemas"
-import { MADDOX_PROPOSAL_MARKER } from "@/features/maddox/constants"
+import { DEFAULT_MADDOX_CHARACTER_GUIDE, DEFAULT_MADDOX_INTERVIEWER_INSTRUCTIONS, DEFAULT_MADDOX_SCENARIO_GUIDE, MADDOX_PROPOSAL_MARKER } from "@/features/maddox/constants"
+import { defaultMaddoxScript } from "@/features/maddox/script-draft"
 import {
+    MADDOX_PACE_RULE,
+    MADDOX_RESPONSE_FORMAT,
+    openingPrompt,
     buildConsolidationInstructions,
     buildInterviewInstructions,
     createMarkerFilter,
@@ -303,3 +307,77 @@ describe("nível inicial e construção da ficha (Maddox 5)", () => {
     })
 })
 
+
+describe("ritmo da conversa (DND-40)", () => {
+    /** Qualquer quantidade fixa de perguntas (por extenso ou em algarismo) ou os textos antigos do código. */
+    const FIXED_COUNT = /\b(uma|duas|três|tres|\d+)\s+(a\s+\w+\s+)?perguntas?\b|no máximo \w+ perguntas|uma a três|duas perguntas/i
+    const neutral = (over: Partial<InterviewPromptContext> = {}) => base({ interviewerInstructions: "Você é o entrevistador.", script: { version: 1, guide: "Converse com calma.", topics: [] }, ...over })
+
+    it("o formato da resposta só fala de renderização, sem quantidade de perguntas", () => {
+        expect(MADDOX_RESPONSE_FORMAT).not.toMatch(FIXED_COUNT)
+        expect(MADDOX_RESPONSE_FORMAT).not.toMatch(/perguntas/i)
+        expect(MADDOX_RESPONSE_FORMAT).toContain("Responda em Markdown")
+        expect(MADDOX_RESPONSE_FORMAT).toContain("**negrito**")
+        expect(MADDOX_RESPONSE_FORMAT).toContain("{{Tipo:Nome oficial em português}}")
+        expect(MADDOX_RESPONSE_FORMAT).toContain("citação (`>`)")
+    })
+
+    it("a seção de ritmo remete às instruções e ao guia, sem número", () => {
+        expect(MADDOX_PACE_RULE).toContain("## Ritmo da conversa")
+        expect(MADDOX_PACE_RULE).toContain("instruções do entrevistador")
+        expect(MADDOX_PACE_RULE).toContain("guia do roteiro")
+        expect(MADDOX_PACE_RULE).toContain("não aplique um limite fixo")
+        expect(MADDOX_PACE_RULE).not.toMatch(FIXED_COUNT)
+    })
+
+    it("o ritmo entra depois do formato e antes da conclusão, nas duas entrevistas", () => {
+        for (const kind of ["scenario", "character"] as const) {
+            const text = buildInterviewInstructions(neutral({ kind, character: kind === "character" ? { name: "Nala" } : null }))
+            const format = text.indexOf("## Formato da resposta")
+            const pace = text.indexOf("## Ritmo da conversa")
+            expect(format).toBeGreaterThan(-1)
+            expect(pace).toBeGreaterThan(format)
+            expect(text.indexOf("## Conclusão")).toBeGreaterThan(pace)
+        }
+    })
+
+    it.each(["Faça uma pergunta por vez.", "Faça duas perguntas por vez."])("preserva \"%s\" do guia ou das instruções, sem outra quantidade", (rule) => {
+        const other = rule.includes("uma") ? /duas perguntas|uma a três/i : /uma pergunta por vez|uma a três/i
+        for (const text of [
+            buildInterviewInstructions(neutral({ script: { version: 1, guide: `# Guia\n${rule}`, topics: [] } })),
+            buildInterviewInstructions(neutral({ interviewerInstructions: `Você é o entrevistador. ${rule}` })),
+        ]) {
+            expect(text).toContain(rule)
+            expect(text).not.toMatch(other)
+        }
+    })
+
+    it("sem regra escrita, o prompt não impõe número de perguntas", () => {
+        expect(buildInterviewInstructions(neutral())).not.toMatch(FIXED_COUNT)
+        expect(buildInterviewInstructions(neutral({ kind: "character", character: { name: "Nala" } }))).not.toMatch(FIXED_COUNT)
+    })
+
+    it("a abertura não induz plural nem número", () => {
+        for (const kind of ["scenario", "character"] as const) {
+            const text = openingPrompt(kind)
+            expect(text).not.toContain("primeiras perguntas")
+            expect(text).toContain("primeira rodada de perguntas")
+            expect(text).toContain("seguindo as instruções e o guia")
+            expect(text.slice(text.indexOf("inicie a conversa"))).not.toMatch(/\b(uma|duas|três|\d+)\b/i)
+        }
+    })
+
+    it("os textos padrão (Restaurar padrão) não trazem quantidade de perguntas", () => {
+        for (const text of [DEFAULT_MADDOX_INTERVIEWER_INSTRUCTIONS, DEFAULT_MADDOX_SETTINGS.interviewerInstructions, DEFAULT_MADDOX_SCENARIO_GUIDE, DEFAULT_MADDOX_CHARACTER_GUIDE, defaultMaddoxScript("scenario").guide, defaultMaddoxScript("character").guide]) {
+            expect(text).not.toMatch(FIXED_COUNT)
+        }
+    })
+
+    it("o prompt montado com os padrões não impõe quantidade", () => {
+        for (const kind of ["scenario", "character"] as const) {
+            const script = defaultMaddoxScript(kind)
+            const text = buildInterviewInstructions(base({ kind, interviewerInstructions: DEFAULT_MADDOX_SETTINGS.interviewerInstructions, script: { version: 0, guide: script.guide, topics: script.topics }, character: kind === "character" ? { name: "Nala" } : null }))
+            expect(text).not.toMatch(FIXED_COUNT)
+        }
+    })
+})
