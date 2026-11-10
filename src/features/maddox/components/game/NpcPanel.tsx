@@ -22,7 +22,7 @@ export interface NpcPortraitActions {
 }
 
 /**
- * NPCs que os jogadores conhecem: nome e foto (ou as iniciais); cada um abre o NPC no Diário da campanha e o dono pede o
+ * NPCs que os jogadores conhecem, um por linha (DND-43): nome e foto (ou as iniciais); cada um abre o NPC no Diário da campanha e o dono pede o
  * retrato (Maddox 10). NPC Opex ganha o chip para todos e o dono com a permissão promove ou remove (DND-27). Os segredos do
  * mestre nunca chegam aqui.
  */
@@ -38,7 +38,7 @@ export function NpcPanel({ npcs, color, campaignId, portraits = null, manageOpex
                 {npcs.length === 0 ? (
                     <p className="text-xs text-white/60">Ninguém ainda: os NPCs aparecem aqui quando o grupo os conhece.</p>
                 ) : (
-                    <ul className="grid grid-cols-2 gap-2.5" aria-label="NPCs conhecidos">
+                    <ul className="flex flex-col gap-1.5" aria-label="NPCs conhecidos">
                         {npcs.map((npc) => {
                             const painting = Boolean(npc.portraitGenerating) || portraits?.requesting === npc.id
                             return (
@@ -49,7 +49,7 @@ export function NpcPanel({ npcs, color, campaignId, portraits = null, manageOpex
                                         title={`Ver ${npc.name} no diário`}
                                     >
                                         <span className="relative shrink-0">
-                                            <MemberAvatar name={npc.name} imageUrl={npc.portraitUrl} color={color} className={cn("h-8 w-8 shrink-0", npc.status === "dead" && "grayscale")} />
+                                            <MemberAvatar name={npc.name} imageUrl={npc.portraitUrl} color={color} className={cn("h-9 w-9 shrink-0", npc.status === "dead" && "grayscale")} />
                                             {painting && (
                                                 <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/60" role="status" aria-label={`Pintando o retrato de ${npc.name}`}>
                                                     <Loader2 className="h-3.5 w-3.5 animate-spin text-white" aria-hidden />

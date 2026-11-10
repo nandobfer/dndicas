@@ -595,7 +595,8 @@ provavelmente exige teste; você decide)". Chave desligada, falha ou teto: narra
   fica bloqueado com o motivo; o Maddox não aparece "narrando" enquanto espera.
 - **Minha ficha**: botão no cabeçalho da mesa, só com ficha (`me.sheet`, só a minha chega ao DTO). Abre a janela `maddox-sheet`
   (`GlassWindow` do `WindowProvider`) com o `SheetForm` editável (auto-save e tempo real da própria ficha) e "Abrir em nova aba".
-- **NPCs conhecidos**: card abaixo de "Na mesa" com nome e foto (ou iniciais) dos NPCs com `visibility: "players"`. Os personagens
+- **NPCs conhecidos**: card abaixo de "Na mesa" com nome e foto (ou iniciais) dos NPCs com `visibility: "players"`, **um NPC por
+  linha** (DND-43: foto, nome, chip Opex, situação e ações na mesma linha; a lista do Diário também tem uma coluna). Os personagens
   dos outros já aparecem com nome e retrato em "Na mesa"; a ficha deles não é exposta.
 
 **Painel de dados.** O `DiceRollerPanel` ganhou `rollRequest` (quem faz a rolagem oficial; padrão `requestDiceRoll`),
@@ -1195,7 +1196,7 @@ do Diário vêm do Engramind (seção "Memórias de campanha no Engramind").
 card de busca com espera de 300 ms e resultados agrupados (Situação atual, NPCs, Locais, Missões, Outras anotações, Grupo,
 Histórico da mesa) com o termo destacado; abas `IntegrationTabs` (`?aba=historico|npcs|locais|missoes|anotacoes|grupo`):
 histórico em modo leitura (`GameMessageList readOnly`: nenhum card é "meu", então nada de rolar, cancelar ou reagir;
-`?msg=<id>` carrega até 10 páginas atrás da mensagem e a destaca, depois avisa "Mensagem muito antiga"), NPCs (morto esmaecido),
+`?msg=<id>` carrega até 10 páginas atrás da mensagem e a destaca, depois avisa "Mensagem muito antiga"), NPCs (um por linha; morto esmaecido),
 locais, missões (filtro por situação em `GlassSelector` com as cores de raridade, na URL `?situacao=` — o link de um resultado
 da busca o zera), anotações (`?tipo=evento|relacao|fato|outro`) e grupo. NPCs e anotações abertos por link fora da primeira
 página: a lista carrega as páginas seguintes até o item (até 10, `MADDOX_JOURNAL_SEEK_PAGES`) e depois avisa "Item muito antigo:
@@ -1242,6 +1243,7 @@ Sem atalho de teclado: Ctrl/⌘+K já é a busca global do app.
 Código: `server/scene-images.ts` (regras, cota, reserva, geração em segundo plano, pedidos do dono, DTO), `server/scene-image-references.ts`
 (referências), `server/scene-image-appearance.ts` (aparência dos personagens, DND-33), `server/scene-image-hints.ts` (JEV), `server/scene-image-describer.ts` (descrição para o pedido manual),
 `server/combat-image.ts` (fim de batalha), ferramenta `request_scene_image` e `save_npc.gerarRetrato` em `server/master-tools.ts`,
+retrato automático (`scheduleAutoNpcPortraits`, chamado pelo `save_npc` e por `linkCombatant` em `server/combat.ts`, DND-43),
 coleção `maddox_scene_images` (`models/maddox-scene-image.ts`), `components/game/GameSceneImage.tsx`, `SceneImageButton.tsx`,
 `NpcPanel.tsx`, `components/campaigns/SceneImagesField.tsx`, `components/settings/MaddoxSceneImagesCard.tsx`,
 `hooks/useMaddoxSceneImages.ts`. Usa o **Gerador de imagens** já integrado (`generateAndStoreDndImage`).
@@ -1252,8 +1254,8 @@ recente pela data do pedido (`createdAt`, desempate por `_id`). O `CampaignCard`
 escuro), cai na `coverUrl` e, sem nenhuma (ou se a imagem não carregar), nas espadas. Imagem nova aparece na próxima carga da lista
 (não há evento próprio). Falha da agregação loga aviso e devolve a lista sem imagens.
 
-**Configuração** (`settings.sceneImages`, seção "Imagens" da aba; padrão tudo desligado; configuração antiga recebe o padrão):
-`enabled`, `situations` (fixas, `MADDOX_SCENE_IMAGE_SITUATIONS`: abertura da campanha, novo local ou cenário, fim de batalha, clímax ou
+**Configuração** (`settings.sceneImages`, seção "Imagens" da aba; padrão tudo desligado, menos o retrato automático; configuração
+antiga recebe o padrão): `enabled`, `autoPortraits` ("Retrato automático de NPC", padrão **ligado**, DND-43; só age com `enabled`), `situations` (fixas, `MADDOX_SCENE_IMAGE_SITUATIONS`: abertura da campanha, novo local ou cenário, fim de batalha, clímax ou
 cena importante, primeiro encontro com NPC importante, missão concluída, retrato de NPC), `custom` (até 10 personalizadas: nome,
 "quando acontece" — orienta o Maddox e o JEV —, ativa), `minNarrationsBetween` (0–50, padrão 3), `maxPerDay` (1–100, padrão 10),
 `aspectRatio` (padrão 16:9; retrato sempre 1:1) e `style` (estilo visual). A aba avisa quando o Gerador está indisponível ou o modelo
@@ -1267,7 +1269,19 @@ Desligadas" na criação e na edição, muda a qualquer momento) — desligada, 
 | `tool` | `request_scene_image { situacao, descricaoVisual, legenda?, personagens?, npcs?, catalogo? }` | Só nas narrações; situação ativa (fixa ou personalizada) e chave da campanha; intervalo, uma por turno e teto; JEV opcional | Narração |
 | `combat-end` | `onCombatEnded` com a `finalScene` | Situação "Fim de batalha" ativa e chave da campanha; intervalo, uma por turno e teto | Card "Fim do combate" |
 | `manual` | Botão **"Gerar imagem da cena"** do dono | Só o teto diário e uma manual por vez (ignora situações, chaves e intervalo) | Última narração |
-| `npc-portrait` | `save_npc { gerarRetrato: true }` ou **"Gerar retrato"** do dono | Automático: situação "Retrato de NPC", chave da campanha, NPC conhecido dos jogadores e sem retrato (uma vez). Dono: só o teto | `npc.portraitUrl` |
+| `npc-portrait` | `save_npc { gerarRetrato: true }`, **retrato automático** ou **"Gerar retrato"** do dono | `gerarRetrato`: só na narração, situação "Retrato de NPC", chave da campanha, NPC conhecido dos jogadores e sem retrato (uma vez). Automático: ver abaixo. Dono: só o teto | `npc.portraitUrl` |
+
+**Retrato automático (DND-43).** Com `enabled` e `autoPortraits` ligados e a chave da campanha ligada (independe da situação "Retrato
+de NPC"), `scheduleAutoNpcPortraits` pede o retrato de todo NPC **conhecido dos jogadores, sem retrato e sem pedido anterior**
+(`pending`, `generating`, `done` ou `failed`: uma tentativa por NPC; a nova fica no "Gerar retrato" do dono). Gatilhos: `save_npc` que
+deixa o NPC com `visibility: "players"` (criação, mudança de visibilidade ou atualização de NPC já conhecido e ainda sem retrato) e
+o NPC registrado ao abrir um combate (`linkCombatant`, já nasce conhecido; o NPC existente só ligado ao combate não dispara). Pede na
+hora, sem rascunho, dentro ou fora da narração (pergunta, Opex); o retorno do `save_npc` traz `retrato: "pedido automaticamente…"`
+e, nesse caso, o `gerarRetrato` da mesma chamada não pede outro. O slot `portrait` só conta no **teto diário**: o intervalo
+`minNarrationsBetween` e a regra de uma por turno não se aplicam. Gerador indisponível, teto ou erro: o NPC é salvo, nada é gerado e o
+motivo vai ao log (`origin: "auto"`, `trigger: "save_npc" | "combat"`). A mesa fica sabendo pelo aviso do job que salvou o NPC e de
+novo quando o retrato fica pronto. Com a chave ligada, a regra "## Imagens da cena" diz ao narrador que o NPC conhecido ganha retrato
+sozinho (no lugar da orientação do `gerarRetrato`).
 
 **Ferramenta.** Validação restritiva: situação inexistente ou inativa, personagem desconhecido, NPC desconhecido ou só do mestre e
 entidade fora do catálogo recusam com a lista das opções e nada é guardado; `combat-end`/`npc-portrait` pela ferramenta, segunda imagem

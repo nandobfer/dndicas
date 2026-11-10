@@ -145,7 +145,10 @@ function memoryToolError(error: unknown): never {
 
 type SaveNpcInput = { name: string; newName?: string; publicDescription?: string; masterNotes?: string; visibility?: (typeof MADDOX_VISIBILITIES)[number]; status?: (typeof MADDOX_NPC_STATUSES)[number] }
 
-async function saveNpc(context: MaddoxToolContext, input: SaveNpcInput): Promise<{ saved: true; created: boolean; name: string; truncated?: string[]; note?: string }> {
+type SavedNpc = { saved: true; created: boolean; name: string; truncated?: string[]; note?: string }
+
+/** Grava o NPC; `npcId` e `visibility` (a final) ficam fora da saída da ferramenta e servem ao retrato automático. */
+async function saveNpc(context: MaddoxToolContext, input: SaveNpcInput): Promise<{ output: SavedNpc; npcId: Types.ObjectId; visibility: (typeof MADDOX_VISIBILITIES)[number] }> {
     const fit = fitter()
     const name = clip(input.name, MADDOX_TOOL_NAME_MAX)
     const nameKey = keyOf(name)
@@ -155,7 +158,7 @@ async function saveNpc(context: MaddoxToolContext, input: SaveNpcInput): Promise
     if (input.masterNotes !== undefined) set.masterNotes = fit.fit("masterNotes", input.masterNotes)
     if (input.visibility) set.visibility = input.visibility
     if (input.status) set.status = input.status
-    const existing = await MaddoxNpcModel.findOne({ campaignId: context.campaignId, nameKey }).select("_id name").lean<{ _id: Types.ObjectId; name: string }>()
+    const existing = await MaddoxNpcModel.findOne({ campaignId: context.campaignId, nameKey }).select("_id name visibility").lean<{ _id: Types.ObjectId; name: string; visibility: (typeof MADDOX_VISIBILITIES)[number] }>()
     if (existing) {
         // A grafia gravada é a canônica: só muda com `newName` explícito.
         const newName = input.newName?.trim() ? clip(input.newName, MADDOX_TOOL_NAME_MAX) : null
@@ -165,10 +168,10 @@ async function saveNpc(context: MaddoxToolContext, input: SaveNpcInput): Promise
         }
         if (newName) Object.assign(set, { name: newName, nameKey: keyOf(newName) })
         await MaddoxNpcModel.updateOne({ _id: existing._id }, { $set: set })
-        return { saved: true, created: false, name: newName ?? existing.name, ...fit.notice() }
+        return { output: { saved: true, created: false, name: newName ?? existing.name, ...fit.notice() }, npcId: existing._id, visibility: input.visibility ?? existing.visibility }
     }
-    await MaddoxNpcModel.create({ campaignId: context.campaignId, name, nameKey, ...set })
-    return { saved: true, created: true, name, ...fit.notice() }
+    const created = await MaddoxNpcModel.create({ campaignId: context.campaignId, name, nameKey, ...set })
+    return { output: { saved: true, created: true, name, ...fit.notice() }, npcId: created._id, visibility: created.visibility }
 }
 
 /**
@@ -262,17 +265,19 @@ export const MADDOX_MASTER_TOOLS: readonly MaddoxMasterTool[] = [
             masterNotes: optionalText.describe("Conhecimento exclusivo do mestre"),
             visibility: z.enum(MADDOX_VISIBILITIES).optional().describe("players = os jogadores já conhecem; master = só o mestre"),
             status: z.enum(MADDOX_NPC_STATUSES).optional(),
-            gerarRetrato: z.boolean().optional().describe("true = NPC importante que os jogadores conhecem: ganha um retrato (uma vez), se a situação \"Retrato de NPC\" estiver ativa"),
+            gerarRetrato: z.boolean().optional().describe("true = NPC importante que os jogadores conhecem: ganha um retrato (uma vez), se a situação \"Retrato de NPC\" estiver ativa. Com o retrato automático ligado, NPC conhecido ganha retrato sem este campo"),
         }),
         async execute(context, input) {
-            const saved = await saveNpc(context, input)
+            const { output: saved, npcId, visibility } = await saveNpc(context, input)
             // NPC Opex que morre deixa de ser Opex sozinho (DND-27).
             if (input.status === "dead") {
-                const npc = await MaddoxNpcModel.findOne({ campaignId: context.campaignId, nameKey: keyOf(saved.name) }).select("_id").lean<{ _id: Types.ObjectId }>()
-                if (npc) {
-                    const { retireOpexNpcIfDead } = await import("./opex-npcs")
-                    if (await retireOpexNpcIfDead(context.campaignId, npc._id)) Object.assign(saved, { npcOpex: "deixou de ser NPC Opex (morreu)" })
-                }
+                const { retireOpexNpcIfDead } = await import("./opex-npcs")
+                if (await retireOpexNpcIfDead(context.campaignId, npcId)) Object.assign(saved, { npcOpex: "deixou de ser NPC Opex (morreu)" })
+            }
+            // Retrato automático do NPC conhecido (DND-43): dentro ou fora da narração; desligado, segue o `gerarRetrato`.
+            if (visibility === "players") {
+                const { scheduleAutoNpcPortraits } = await import("./scene-images")
+                if ((await scheduleAutoNpcPortraits(context.campaignId, [npcId], "save_npc")).length) return { ...saved, retrato: "pedido automaticamente: o retrato é pintado em segundo plano." }
             }
             if (!input.gerarRetrato) return saved
             return { ...saved, retrato: await requestNpcPortraitDraft(context, saved.name) }

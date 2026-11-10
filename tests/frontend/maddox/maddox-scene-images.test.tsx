@@ -1,6 +1,6 @@
 /** @vitest-environment happy-dom */
 import { describe, expect, it, vi } from "vitest"
-import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { useForm } from "react-hook-form"
 import type { MaddoxGameNpcDto, MaddoxGameSceneImageDto, MaddoxSceneImageControlDto } from "@/features/maddox/game-types"
 import type { CreateMaddoxCampaignInput } from "@/features/maddox/campaign-schemas"
@@ -8,7 +8,8 @@ import { GameSceneImage } from "@/features/maddox/components/game/GameSceneImage
 import { SceneImageButton } from "@/features/maddox/components/game/SceneImageButton"
 import { NpcPanel } from "@/features/maddox/components/game/NpcPanel"
 import { SceneImagesField } from "@/features/maddox/components/campaigns/SceneImagesField"
-import { sceneImagesGeneratorNotice } from "@/features/maddox/components/settings/MaddoxSceneImagesCard"
+import { MaddoxSceneImagesCard, sceneImagesGeneratorNotice } from "@/features/maddox/components/settings/MaddoxSceneImagesCard"
+import { DEFAULT_MADDOX_SETTINGS, type MaddoxSettings } from "@/features/maddox/schemas"
 
 /** Maddox 10 — imagens nas cenas na tela: imagem na bolha, botão do dono, retrato de NPC e a chave da campanha. */
 
@@ -79,6 +80,17 @@ describe("NpcPanel — retrato", () => {
         expect(screen.getByRole("status", { name: "Pintando o retrato de Mira" })).toBeTruthy()
     })
 
+    it("um NPC por linha (DND-43), com foto, nome, chip, situação e ações na mesma linha", () => {
+        render(<NpcPanel npcs={[...npcs, { id: "n3", name: "Ivo", portraitUrl: null, status: "dead", opex: true } as MaddoxGameNpcDto]} color="#3b82f6" campaignId="c1" portraits={{ canRequest: true, requesting: null, onRequest: vi.fn() }} />)
+        const list = screen.getByRole("list", { name: "NPCs conhecidos" })
+        expect(list.className).not.toMatch(/grid-cols-2/)
+        expect(list.className).toContain("flex-col")
+        const ivo = screen.getByTestId("npc-n3")
+        expect(ivo.textContent).toContain("Ivo")
+        expect(ivo.textContent).toContain("Morto")
+        expect(within(ivo).getByRole("button", { name: "Gerar retrato de Ivo" })).toBeTruthy()
+    })
+
     it("jogador não vê o botão", () => {
         render(<NpcPanel npcs={npcs} color="#3b82f6" campaignId="c1" />)
         expect(screen.queryByRole("button", { name: /Gerar retrato/ })).toBeNull()
@@ -104,6 +116,24 @@ describe("SceneImagesField (chave da campanha)", () => {
         fireEvent.click(screen.getByRole("button", { name: "Ligadas" }))
         await waitFor(() => expect(value).toBe(true))
         expect(field.textContent).toContain("O Maddox ilustra os momentos marcantes")
+    })
+})
+
+describe("MaddoxSceneImagesCard — retrato automático (DND-43)", () => {
+    function Harness({ onValue }: { onValue: (value: boolean | undefined) => void }) {
+        const form = useForm<MaddoxSettings>({ defaultValues: DEFAULT_MADDOX_SETTINGS })
+        onValue(form.watch("sceneImages.autoPortraits"))
+        return <MaddoxSceneImagesCard form={form} generator={undefined} />
+    }
+
+    it("switch na seção Imagens, ligado por padrão, desliga o campo do formulário", async () => {
+        let value: boolean | undefined
+        render(<Harness onValue={(next) => (value = next)} />)
+        const toggle = screen.getByLabelText("Retrato automático de NPC") as HTMLInputElement
+        expect(toggle.checked).toBe(true)
+        expect(screen.getByText(/sem o Maddox precisar pedir/)).toBeTruthy()
+        fireEvent.click(toggle)
+        await waitFor(() => expect(value).toBe(false))
     })
 })
 

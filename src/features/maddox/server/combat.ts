@@ -120,6 +120,9 @@ async function linkCombatant(campaignId: Types.ObjectId, combatant: MaddoxDraftC
     else if (combatant.registerNpc) {
         const created = await MaddoxNpcModel.create({ campaignId, name, nameKey, publicDescription: combatant.description, visibility: "players" })
         npcId = created._id
+        // Já nasce conhecido dos jogadores: retrato automático (DND-43); nunca derruba o combate.
+        const { scheduleAutoNpcPortraits } = await import("./scene-images")
+        await scheduleAutoNpcPortraits(campaignId, [created._id], "combat")
     }
     return { name, nameKey, side: combatant.side, quantity: combatant.quantity, description: combatant.description, condition: combatant.condition, npcId, outcome: null }
 }

@@ -113,6 +113,8 @@ export type MaddoxSceneImageCustom = z.infer<typeof maddoxSceneImageCustomSchema
 export const maddoxSceneImagesSchema = z.object({
     enabled: z.boolean({ error: "Informe se as imagens nas cenas estão ligadas" }),
     situations: z.object(Object.fromEntries(MADDOX_SCENE_IMAGE_SITUATIONS.map((situation) => [situation, z.boolean({ error: "Chave da situação inválida" })])) as Record<MaddoxSceneImageSituation, z.ZodBoolean>),
+    /** Retrato automático (DND-43): NPC conhecido dos jogadores e sem retrato ganha um, sem `gerarRetrato`. */
+    autoPortraits: z.boolean({ error: "Informe se o retrato automático de NPC está ligado" }),
     custom: z
         .array(maddoxSceneImageCustomSchema)
         .max(MADDOX_SCENE_IMAGE_CUSTOM_MAX, `Até ${MADDOX_SCENE_IMAGE_CUSTOM_MAX} situações personalizadas`)
@@ -135,6 +137,7 @@ export type MaddoxSceneImagesSettings = z.infer<typeof maddoxSceneImagesSchema>
 export const DEFAULT_MADDOX_SCENE_IMAGES: MaddoxSceneImagesSettings = {
     enabled: false,
     situations: Object.fromEntries(MADDOX_SCENE_IMAGE_SITUATIONS.map((situation) => [situation, false])) as MaddoxSceneImagesSettings["situations"],
+    autoPortraits: true,
     custom: [],
     minNarrationsBetween: MADDOX_SCENE_IMAGE_GAP_DEFAULT,
     maxPerDay: MADDOX_SCENE_IMAGE_DAILY_DEFAULT,

@@ -14,6 +14,7 @@ import { IMAGE_ASPECT_RATIOS, type ImageAspectRatio } from "@/features/ai/consta
 import type { ImageGeneratorSettingsDto } from "@/features/ai/types"
 import { imageModelSupportsReferences, isAiImageProviderId } from "@/lib/ai/providers"
 import {
+    MADDOX_SCENE_IMAGE_AUTO_PORTRAITS_DEF,
     MADDOX_SCENE_IMAGE_CUSTOM_DESCRIPTION_MAX,
     MADDOX_SCENE_IMAGE_CUSTOM_LABEL_MAX,
     MADDOX_SCENE_IMAGE_CUSTOM_MAX,
@@ -73,7 +74,7 @@ export function MaddoxSceneImagesCard({ form, generator }: { form: UseFormReturn
             <Card>
                 <CardHeader>
                     <CardTitle className="text-base">Situações</CardTitle>
-                    <CardDescription>Só as situações ativas geram imagem. O fim de batalha usa a cena final do combate; o retrato de NPC vale para NPCs importantes que os jogadores conhecem.</CardDescription>
+                    <CardDescription>Só as situações ativas geram imagem. O fim de batalha usa a cena final do combate; o retrato de NPC vale para NPCs importantes que os jogadores conhecem; com o retrato automático, todo NPC conhecido ganha o seu.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
                     {MADDOX_SCENE_IMAGE_SITUATIONS.map((situation) => (
@@ -91,6 +92,18 @@ export function MaddoxSceneImagesCard({ form, generator }: { form: UseFormReturn
                             }
                         />
                     ))}
+                    <ToggleRow
+                        id="maddox-scene-auto-portraits"
+                        label={MADDOX_SCENE_IMAGE_AUTO_PORTRAITS_DEF.label}
+                        description={MADDOX_SCENE_IMAGE_AUTO_PORTRAITS_DEF.description}
+                        right={
+                            <Controller
+                                control={form.control}
+                                name="sceneImages.autoPortraits"
+                                render={({ field }) => <Switch id="maddox-scene-auto-portraits" checked={Boolean(field.value)} onCheckedChange={field.onChange} aria-label={MADDOX_SCENE_IMAGE_AUTO_PORTRAITS_DEF.label} />}
+                            />
+                        }
+                    />
 
                     <div className="space-y-3 border-t pt-4" data-testid="scene-images-custom">
                         <div className="flex items-center justify-between gap-2">

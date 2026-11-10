@@ -297,6 +297,14 @@ describe("regra das imagens da cena (Maddox 10)", () => {
         expect(portraitsOnly).toContain("gerarRetrato")
     })
 
+    it("retrato automático (DND-43): avisa que o NPC conhecido ganha retrato sozinho, no lugar do gerarRetrato", () => {
+        const auto = sceneImagesRule({ situations: [], portraits: true, autoPortraits: true, blocked: null })!
+        expect(auto).toContain("ganha um retrato sozinho")
+        expect(auto).not.toContain("save_npc { gerarRetrato: true }")
+        expect(sceneImagesRule({ situations: [], portraits: false, autoPortraits: true, blocked: null })).toContain("ganha um retrato sozinho")
+        expect(sceneImagesRule({ situations: [], portraits: true, autoPortraits: false, blocked: null })).toContain("save_npc { gerarRetrato: true }")
+    })
+
     it("entra nas instruções e, no OpenCode, a ferramenta aparece na lista do MCP", () => {
         const withImages = buildNarratorInstructions(context({ sceneImages: { situations, portraits: false, blocked: null } }), { kind: "mcp", server: "dndicas-maddox", turnToken: "t", sceneImages: true })
         expect(withImages).toContain("## Imagens da cena")
