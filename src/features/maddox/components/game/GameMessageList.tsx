@@ -110,7 +110,13 @@ export function GameMessageList({ messages, myMemberId, maddoxAvatarUrl, color, 
     }
 
     const liveNarration = live.some((item) => item.kind === "narration")
-    const lastTurn = messages.at(-1)?.turnNumber ?? null
+    // Divisor das gerações ao vivo: só quando a narração muda de turno em relação ao item anterior (mensagem ou geração).
+    let shownTurn = messages.at(-1)?.turnNumber ?? null
+    const liveItems = live.map((item) => {
+        const divider = item.kind === "narration" && item.turnNumber !== shownTurn
+        if (item.kind === "narration") shownTurn = item.turnNumber
+        return { item, divider }
+    })
     const signature = `${messages.length}:${messages.at(-1)?.id ?? ""}:${narrating ? 1 : 0}:${actionOptions ? actionOptions.view.messageId : ""}:${live.map((item) => `${item.liveId}:${item.text.length}:${item.tool ? 1 : 0}`).join(",")}`
     const highlightLoaded = highlightId !== null && byId.has(highlightId)
     useLayoutEffect(() => {
@@ -188,9 +194,9 @@ export function GameMessageList({ messages, myMemberId, maddoxAvatarUrl, color, 
                         </Fragment>
                     )
                 })}
-                {live.map((item) => (
+                {liveItems.map(({ item, divider }) => (
                     <Fragment key={item.liveId}>
-                        {item.kind === "narration" && item.turnNumber !== lastTurn && <TurnDivider number={item.turnNumber} color={color} />}
+                        {divider && <TurnDivider number={item.turnNumber} color={color} />}
                         <LiveGeneration item={item} replyTo={item.replyToId ? (byId.get(item.replyToId) ?? null) : null} maddoxAvatarUrl={maddoxAvatarUrl} color={color} />
                     </Fragment>
                 ))}
