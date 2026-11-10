@@ -1156,6 +1156,17 @@ describe("mesa Maddox — Personagem Opex parado (DND-26)", () => {
         await renderGame(stuck(false))
         expect(screen.queryByTestId("opex-failure")).toBeNull()
     })
+
+    it("na vez do Opex (sem falha), a mesa mostra no chat o balão \"agindo…\"; parado, o balão some (DND-45)", async () => {
+        const acting = gameState({ ...stuck(false), turn: { ...stuck(false).turn, opexActor: { memberId: "m9", characterName: "Tork", failed: false, error: null, combat: false } } })
+        const view = await renderGame(acting)
+        const panel = screen.getByTestId("game-panel")
+        expect(await within(panel).findByTestId("opex-acting")).toHaveTextContent("Tork está agindo…")
+        view.unmount()
+        await renderGame(stuck(true))
+        await screen.findByTestId("opex-failure")
+        expect(screen.queryByTestId("opex-acting")).toBeNull()
+    })
 })
 
 describe("mesa Maddox — preparação do combate (DND-41)", () => {
