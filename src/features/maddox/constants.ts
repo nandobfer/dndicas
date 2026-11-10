@@ -589,8 +589,13 @@ export const MADDOX_COMBAT_ADJUST_TIMEOUT_MS = 2 * 60_000
 export const MADDOX_COMBAT_ADJUST_TEXT_MAX = 500
 /** Conferência da condição do ataque furtivo (JEV ou geração curta do narrador). */
 export const MADDOX_SNEAK_ATTACK_CHECK_TIMEOUT_MS = 20_000
-/** Motivos de mudança guardados (o card e o painel mostram até isto). */
-export const MADDOX_COMBAT_PREP_REASON_MAX = 400
+/**
+ * Tetos TÉCNICOS do texto gerado pela IA na preparação e nos ajustes (proteção contra resposta descontrolada, folgados
+ * acima do que o prompt pede): abaixo deles o texto é gravado inteiro; a tela quebra a linha, não corta.
+ */
+export const MADDOX_COMBAT_PREP_TEXT_CEILING = { reason: 4_000, label: 300, detail: 1_000, name: 300, append: 10_000, description: 30_000 } as const
+/** Trecho de cada característica e talento que vai ao modelo; acima disso (ou com menções) ele só acrescenta, não reescreve. */
+export const MADDOX_COMBAT_PREP_TRAIT_TEXT_MAX = 400
 /** Mensagem dos demais quando a preparação de uma ficha falhou (o motivo só vai ao dono da campanha). */
 export const MADDOX_COMBAT_PREP_FAILED_MESSAGE = "A preparação desta ficha falhou. Aguardando o dono da campanha."
 /** Mensagem do jogador quando o pedido de ajuste não pôde ser examinado (o motivo só vai ao dono da campanha). */

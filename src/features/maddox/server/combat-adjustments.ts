@@ -48,7 +48,7 @@ export async function requestCombatAdjustment(campaignId: string, input: MaddoxC
     await MaddoxCombatPrepModel.updateOne({ _id: prep._id }, { $push: { adjustments: adjustment } })
     log.info({ campaignId, character: actor.name, option: option.id }, "[maddox] pedido de ajuste de opção no combate")
     const { enqueueMaddoxJob } = await import("./game-live")
-    trackCombatPrepWork(enqueueMaddoxJob(campaignId, "combat-adjust", async () => runAdjustment(campaign._id, prep._id, adjustment.id)))
+    trackCombatPrepWork(enqueueMaddoxJob(campaignId, "combat-adjust", async () => runAdjustment(campaign._id, prep._id, adjustment.id, userId)))
     const { publishGameChanged, getGameState } = await import("./game")
     await publishGameChanged(campaign._id)
     return getGameState(campaignId, userId)
@@ -59,7 +59,7 @@ async function decide(prepId: Types.ObjectId, adjustmentId: string, set: Partial
     await MaddoxCombatPrepModel.updateOne({ _id: prepId, "adjustments.id": adjustmentId }, { $set: fields })
 }
 
-async function runAdjustment(campaignId: Types.ObjectId, prepId: Types.ObjectId, adjustmentId: string): Promise<void> {
+async function runAdjustment(campaignId: Types.ObjectId, prepId: Types.ObjectId, adjustmentId: string, requestedBy: string): Promise<void> {
     const prep = await MaddoxCombatPrepModel.findById(prepId).lean<IMaddoxCombatPrep>()
     const adjustment = prep?.adjustments.find((item) => item.id === adjustmentId)
     if (!prep || !adjustment || adjustment.status !== "pending") return
@@ -101,8 +101,15 @@ async function runAdjustment(campaignId: Types.ObjectId, prepId: Types.ObjectId,
         // As opções atuais (já preparadas) também são ids válidos para corrigir.
         const options = { action: [...context.options.action, ...(view?.options.action ?? [])], bonus: [...context.options.bonus, ...(view?.options.bonus ?? [])], reactions: context.options.reactions, attacksPerAction: context.options.attacksPerAction }
         const interpretation = interpretPrep({ sheetChanges: response.sheetChanges, modify: response.modify, remove: response.remove, add: response.add }, { ...context, options })
-        const written = await applyInterpretation(interpretation, { sheetId: state.sheetId, campaign, characterName: prep.characterName, origin: "combat-adjust" })
+        const written = await applyInterpretation(interpretation, { sheetId: state.sheetId, campaign, characterName: prep.characterName, origin: "combat-adjust", requestedBy })
         const changes: CombatPrepChange[] = [...written.changes, ...interpretation.optionChanges]
+        if (interpretation.dropped) log.warn({ campaignId: String(campaignId), option: adjustment.optionId, dropped: interpretation.dropped }, "[maddox] itens do pedido de ajuste descartados na validação")
+        // Aceito, mas nada válido para aplicar (id errado, valor fora da faixa, ficha mudou): não é "aceito" para o jogador.
+        if (!changes.some((change) => change.applied)) {
+            await decide(prepId, adjustmentId, { status: "error", reason: null, error: `O Maddox aceitou, mas nenhuma correção válida sobrou (${interpretation.dropped} item(ns) descartado(s)).` })
+            log.warn({ campaignId: String(campaignId), option: adjustment.optionId }, "[maddox] pedido de ajuste aceito sem mudança aplicável")
+            return
+        }
         // Sem mudança na opção pedida, o motivo fica na própria opção (o jogador vê "Ajustado pelo Maddox").
         const overlay = { ...interpretation.overlay, suppress: written.suppress }
         const fresh = await MaddoxCombatPrepModel.findById(prepId).select("overlay").lean<Pick<IMaddoxCombatPrep, "overlay">>()

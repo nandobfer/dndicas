@@ -1010,10 +1010,12 @@ completo; no DTO só para o dono da campanha), `overlay { modify[], remove[], ad
 personagem na fila serial da campanha (rodam depois da narração que abriu o combate, enquanto os jogadores rolam). O job lê a ficha
 inteira (atributos, proficiências, ataques, itens com as propriedades do catálogo, características de classe e espécie, talentos, magias,
 recursos), a lista base completa (`ignoreResources`) e o ataque furtivo detectado, chama a revisão com o modelo do narrador no grau da
-campanha e as instruções configuráveis, confere a resposta contra a lista e a ficha (id desconhecido, valor fora da faixa ou recurso que a
+campanha e as instruções configuráveis (texto gerado gravado inteiro até o teto técnico `MADDOX_COMBAT_PREP_TEXT_CEILING`, folgado acima
+do que o prompt pede; a tela quebra a linha), confere a resposta contra a lista e a ficha (id desconhecido, valor fora da faixa ou recurso que a
 ficha não tem = descartado, com log) e grava. **A ficha mudou durante a preparação** (carimbo `readSheetStamp`: `updatedAt` da ficha + hash
 das coleções filhas) = a revisão roda de novo sobre o dado novo (até `MADDOX_COMBAT_PREP_CONFLICT_RETRIES`). Combate encerrado ou membro que
-saiu = `discarded`, nada gravado. IA indisponível ou erro do provedor (teto técnico `MADDOX_COMBAT_PREP_TIMEOUT_MS`) = `failed`.
+saiu = `discarded`, nada gravado; o descarte de quem sai (`discardMemberPrep`) e o job que encontra a preparação já descartada também
+fecham a ordem quando era a última pendente. IA indisponível ou erro do provedor (teto técnico `MADDOX_COMBAT_PREP_TIMEOUT_MS`) = `failed`.
 
 **A ordem espera.** `finishInitiativeIfReady` não fecha a ordem com preparação `pending`, `running` ou `failed`; `hasRoundWaits(pendingOnly)`
 conta a preparação da rodada como espera (a continuação do mestre não entra). Sem tempo limite. Ao terminar a última, o job chama
@@ -1027,8 +1029,11 @@ preparação": a ficha usa a lista base, já com o cálculo corrigido e o ataque
 
 **Gravação na ficha** (lista fechada de operações, `combatSheetChangeSchema`): atributo, proficiência em salvaguarda e perícia, atributo de
 conjuração, espaços de magia, cargas de recurso, ataques (`characterattacks`: criar, alterar, remover), características e talentos
-(criar, alterar), magia (preparada, círculo), item equipado e texto acrescentado ao fim de um campo de características. Cada operação é
-condicional ao valor atual, auditada (entidade `FichaPersonagem`, antes, depois, motivo e `by: "maddox"`) e avisa a ficha aberta
+(criar, alterar), magia (preparada, círculo), item equipado e texto acrescentado ao fim de um campo de características. O modelo vê só um
+trecho de cada característica e talento (`MADDOX_COMBAT_PREP_TRAIT_TEXT_MAX`): descrição maior que o trecho, ou com menções, não é
+reescrita — a correção é acrescentada ao fim. Cada operação é condicional ao valor atual, auditada (entidade `FichaPersonagem`, antes
+completo, depois, motivo, `by: "maddox"` e `requestedBy`; o usuário da auditoria é quem pediu o ajuste, ou o dono da campanha na
+preparação automática) e avisa a ficha aberta
 (`publishSheetPatched`/`publishCollectionChanged`). Uma criação ligada a uma opção acrescentada (`ref`/`fromChange`) entra em
 `overlay.suppress` para a lista base não a mostrar duas vezes.
 
@@ -1044,7 +1049,9 @@ dono do personagem (o do Personagem Opex, ao dono da campanha). Sem mudanças, o
 (`loadMyCombatTurn`), com a mesa preparada (`PREP_NOT_READY`), numa opção que existe (`OPTION_UNAVAILABLE`); Personagem Opex não pede. Não
 gasta Ação nem Ação bônus. Entra em `adjustments` como `pending` e vira um job `combat-adjust` na fila (dois pedidos em ordem; o segundo vê
 o primeiro). O JEV "Pedido de ajuste fora das regras" (chave desligada por padrão) recusa na hora o que claramente burla; senão, o narrador
-decide (`accept` corrige a opção e a ficha pelas mesmas regras; `refuse` não muda nada), sempre com o motivo. Falha da IA = mensagem
+decide (`accept` corrige a opção e a ficha pelas mesmas regras; `refuse` não muda nada), sempre com o motivo. Aceito sem nenhuma mudança
+aplicável (id errado, valor fora da faixa) vira falha, com a mensagem genérica para o jogador tentar de novo. Correção parcial do ataque
+(`modify` sem `light`, `ranged`, `damageType` ou `finesse`) herda esses campos da opção. Falha da IA = mensagem
 genérica para o jogador; o motivo técnico só para o dono da campanha.
 
 **Ataque furtivo.** Detectado pelo servidor pela classe (Ladino/Rogue) ou pela característica "Ataque Furtivo" (menção ou registro),

@@ -382,7 +382,7 @@ export function CombatPrepCard({ message }: { message: MaddoxGameMessageDto }) {
                 ) : (
                     <ul className="space-y-1.5" data-testid="combat-prep-changes">
                         {changes.map((change, index) => (
-                            <li key={`${change.label}-${index}`} className="rounded-lg border border-white/10 px-2.5 py-1.5 text-xs" data-applied={change.applied} data-testid="combat-prep-change">
+                            <li key={`${change.label}-${index}`} className="break-words rounded-lg border border-white/10 px-2.5 py-1.5 text-xs" data-applied={change.applied} data-testid="combat-prep-change">
                                 <p className="flex flex-wrap items-center gap-1.5 text-white/85">
                                     <span className="font-semibold text-white">{change.label}</span>
                                     <span className="text-white/50 line-through">{change.before}</span>
@@ -390,7 +390,7 @@ export function CombatPrepCard({ message }: { message: MaddoxGameMessageDto }) {
                                     <span>{change.after}</span>
                                     {!change.applied && <RarityChip color={rarityColors.artifact}>não aplicada: a ficha mudou</RarityChip>}
                                 </p>
-                                <p className="mt-0.5 text-white/60">{change.reason}</p>
+                                <p className="mt-0.5 whitespace-pre-wrap break-words text-white/60">{change.reason}</p>
                             </li>
                         ))}
                     </ul>

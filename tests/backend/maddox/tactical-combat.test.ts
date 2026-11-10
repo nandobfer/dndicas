@@ -145,6 +145,17 @@ const combatPrep = await import("@/features/maddox/server/combat-prep")
 const adjustments = await import("@/features/maddox/server/combat-adjustments")
 const { combatPrepAi } = await import("../../helpers/combat-prep-mock")
 const { recordAudit } = await import("@/lib/db")
+const { opexUserIdFor } = await import("@/features/maddox/server/opex-members")
+const { waitForOpexIdle } = await import("@/features/maddox/server/opex-runtime")
+
+/** Transforma a Lyra em Personagem Opex do Kael (dono da campanha). Devolve o userId sintético. */
+async function makeLyraOpex(id: string, lyra: { memberId: string; characterId: string }, ownerUserId: string) {
+    const opexUserId = opexUserIdFor(new mongoose.Types.ObjectId(lyra.memberId))
+    await MaddoxCampaignMemberModel.updateOne({ _id: lyra.memberId }, { $set: { kind: "opex", userId: opexUserId, opex: { ownerUserId, prompt: "", interviewMode: "autonomous", addedAt: new Date(), run: null, engramind: null } } })
+    await MaddoxCharacterModel.updateOne({ _id: lyra.characterId }, { $set: { userId: opexUserId } })
+    await MaddoxCombatModel.updateOne({ campaignId: id }, { $set: { "tactical.characters.$[pc].userId": opexUserId } }, { arrayFilters: [{ "pc.memberId": lyra.memberId }] })
+    return opexUserId
+}
 
 let mongo: MongoMemoryServer
 const oid = () => new mongoose.Types.ObjectId()
@@ -686,9 +697,9 @@ async function addSecondGoblin(id: string, options: { defeated?: boolean } = {})
 }
 
 /** Combate que começa agora (fase de iniciativa) com 2 goblins e 1 lobo; a mesa espera as rolagens no turno 3 do mestre. */
-async function initiativeScene(surprise: "adversarios" | null = null, options: { waitPreps?: boolean; beforeCombat?: () => void } = {}) {
+async function initiativeScene(surprise: "adversarios" | null = null, options: { waitPreps?: boolean; beforeCombat?: (context: { id: string; lyra: Awaited<ReturnType<typeof scene>>["lyra"] }) => unknown } = {}) {
     const { id, kael, lyra } = await scene()
-    options.beforeCombat?.()
+    await options.beforeCombat?.({ id, lyra })
     await MaddoxCombatModel.deleteMany({ campaignId: id })
     const campaignId = new mongoose.Types.ObjectId(id)
     const draft = (name: string, quantity: number, iniciativa: number) => ({ name, side: "inimigo" as const, quantity, description: "", condition: "", registerNpc: false, stats: monsterStatsFromCustom({ ca: 12, pv: 7, iniciativa, acoes: [{ nome: "Mordida", tipo: "ataque", bonus: 4, dano: "1d6" }] }) })
@@ -1277,5 +1288,88 @@ describe("DND-41 — ataque furtivo", () => {
         await MaddoxCombatModel.updateOne({ campaignId: id }, { $set: { "combatants.0.tactical.conditions": [{ key: "prone", untilRound: null, source: "queda" }] } })
         await actions.submitCombatAction(id, { economy: "action", optionId: dagger.id, targets: ["npc:gob"], sneakAttack: true }, kael.userId)
         expect(combatPrepAi.sneak).not.toHaveBeenCalled()
+    })
+})
+
+describe("DND-41 — revisão (rodada 1 do revisor)", () => {
+    it("Personagem Opex é preparado e o card dele vai ao dono da campanha; ele não pede ajuste", async () => {
+        let kaelId = ""
+        const { id, kael, lyra } = await initiativeScene(null, {
+            beforeCombat: async ({ id: campaignId, lyra: target }) => {
+                const ownerId = (await MaddoxCampaignModel.findById(campaignId).lean())!.ownerId
+                kaelId = ownerId
+                await makeLyraOpex(campaignId, target, ownerId)
+            },
+        })
+        await waitForOpexIdle()
+        const opexUserId = opexUserIdFor(new mongoose.Types.ObjectId(lyra.memberId))
+        const prep = (await prepsOf(id)).find((item) => item.characterName === "Lyra")!
+        expect([prep.status, prep.userId]).toEqual(["ready", opexUserId])
+        expect(combatPrepAi.review.mock.calls.map(([input]) => input.characterName).sort()).toEqual(["Kael", "Lyra"])
+        const cards = (await game.getGameState(id, kaelId)).messages.filter((message) => message.kind === "combat-prep").map((message) => message.combatPrep!.characterName)
+        expect(cards.sort()).toEqual(["Kael", "Lyra"])
+        expect(kael.userId).toBe(kaelId)
+        // Na vez do Opex, o pedido de ajuste é recusado.
+        await MaddoxCombatModel.updateOne({ campaignId: id }, { $set: { "tactical.phase": "running", "tactical.order": [{ actorKey: lyra.actorKey, kind: "character", name: "Lyra", total: 15, d20: 14, modifier: 1, dexterity: 12, joinIndex: 0, groupKey: lyra.actorKey }], "tactical.activeIndex": 0 } })
+        await MaddoxCampaignModel.updateOne({ _id: id }, { $set: { "turn.phase": "players", "turn.awaitingChecks": false, "turn.combatActor": { combatId: prep.combatId, actorKey: lyra.actorKey, memberId: new mongoose.Types.ObjectId(lyra.memberId), offlineSince: null }, "turn.eligibleMemberIds": [new mongoose.Types.ObjectId(lyra.memberId)] } })
+        await expect(adjustments.requestCombatAdjustment(id, { economy: "action", optionId: "unarmed", text: "acho que está errado" }, opexUserId)).rejects.toMatchObject({ code: "OPEX_NOT_ALLOWED" })
+        await waitForOpexIdle()
+    })
+
+    it("quem sai durante a preparação: a preparação dele é descartada e a ordem fecha com as demais prontas", async () => {
+        combatPrepAi.review.mockImplementation(async (input) => {
+            if (input.characterName === "Lyra") throw new Error("fora do ar")
+            return { sheetChanges: [], modify: [], remove: [], add: [] }
+        })
+        const { id, kael, lyra, cardOf } = await initiativeScene()
+        await rollInitiatives(id, { kael, lyra }, cardOf)
+        await settleCampaign(id)
+        expect((await MaddoxCombatModel.findOne({ campaignId: id }).lean())!.tactical!.phase).toBe("initiative")
+        await actions.onMemberLeftCombat(new mongoose.Types.ObjectId(id), new mongoose.Types.ObjectId(lyra.memberId))
+        await settleCampaign(id)
+        expect((await prepsOf(id)).find((prep) => prep.characterName === "Lyra")!.status).toBe("discarded")
+        expect((await MaddoxCombatModel.findOne({ campaignId: id }).lean())!.tactical!.phase).toBe("running")
+    })
+
+    it("característica longa (ou com menções) não é reescrita: a correção é acrescentada e a auditoria guarda o texto completo", async () => {
+        const long = `<p>${"Texto da característica. ".repeat(80)}</p><p><span data-type="mention" class="mention">Regra: Vantagem</span></p>`
+        let traitId = ""
+        combatPrepAi.review.mockImplementation(async (input) => {
+            if (input.characterName !== "Kael") return { sheetChanges: [], modify: [], remove: [], add: [] }
+            traitId = /\[id="([a-f0-9]{24})"\] Ataque Furtivo/.exec(input.sheetText)![1]!
+            return { sheetChanges: [{ type: "trait-upsert", id: traitId, name: "Ataque Furtivo", description: "Uma vez por turno, +1d6.", reason: "Faltava o dano." }] }
+        })
+        const { kael } = await initiativeScene(null, {
+            beforeCombat: async ({ id: campaignId }) => {
+                const sheetId = (await MaddoxCharacterModel.findOne({ campaignId, name: "Kael" }).lean())!.sheetId!
+                await CharacterTrait.collection.insertOne({ sheetId, catalogTraitId: null, name: "Ataque Furtivo", description: long, origin: "class" })
+            },
+        })
+        const trait = (await CharacterTrait.findById(traitId).lean<{ description: string }>())!
+        expect(trait.description.startsWith(long)).toBe(true)
+        expect(trait.description.endsWith("<p>Uma vez por turno, +1d6.</p>")).toBe(true)
+        const audit = vi.mocked(recordAudit).mock.calls.map(([input]) => input).find((input) => input.entidade === "FichaPersonagem" && input.entidadeId === kael.sheetId)!
+        expect(audit.antes).toEqual({ "Característica Ataque Furtivo": { name: "Ataque Furtivo", description: long } })
+    })
+
+    it("ajuste aceito sem nenhuma mudança aplicável vira falha (mensagem genérica), não 'aceito'", async () => {
+        const { id, kael, combatId } = await scene()
+        await readyPrep(id, combatId, kael)
+        combatPrepAi.adjust.mockImplementation(async () => ({ decision: "accept", reason: "Você tem razão.", modify: [{ optionId: "weapon:nao-existe", attack: { bonus: 6, damage: "1d8+3" }, reason: "x" }] }))
+        await adjustments.requestCombatAdjustment(id, { economy: "action", optionId: "unarmed", text: "acho que está errado" }, kael.userId)
+        await combatPrep.waitForCombatPreps()
+        expect((await game.getGameState(id, kael.userId)).me.combat!.adjustments!.at(-1)).toMatchObject({ status: "error" })
+        expect((await MaddoxCombatPrepModel.findOne({ campaignId: id }).lean())!.overlay.modify).toEqual([])
+    })
+
+    it("a auditoria do ajuste fica no nome de quem pediu (requestedBy), não do dono da campanha", async () => {
+        const { id, lyra, combatId } = await scene()
+        await readyPrep(id, combatId, lyra, { characterName: "Lyra" })
+        await MaddoxCampaignModel.updateOne({ _id: id }, { $set: { "turn.combatActor.actorKey": lyra.actorKey, "turn.combatActor.memberId": new mongoose.Types.ObjectId(lyra.memberId), "turn.eligibleMemberIds": [new mongoose.Types.ObjectId(lyra.memberId)] } })
+        await MaddoxCombatModel.updateOne({ campaignId: id }, { $set: { "tactical.activeIndex": 2 } })
+        combatPrepAi.adjust.mockImplementation(async () => ({ decision: "accept", reason: "Corrigido.", sheetChanges: [{ type: "ability", attribute: "dexterity", value: 15, reason: "Valor da entrevista." }] }))
+        await adjustments.requestCombatAdjustment(id, { economy: "action", optionId: "unarmed", text: "minha destreza é 15" }, lyra.userId)
+        await combatPrep.waitForCombatPreps()
+        expect(vi.mocked(recordAudit)).toHaveBeenCalledWith(expect.objectContaining({ userId: lyra.userId, entidade: "FichaPersonagem", entidadeId: lyra.sheetId, depois: expect.objectContaining({ requestedBy: lyra.userId, origin: "combat-adjust" }) }))
     })
 })

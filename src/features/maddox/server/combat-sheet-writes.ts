@@ -8,7 +8,7 @@ import { MADDOX_ABILITY_LABELS } from "../check-modifier"
 import { plainText } from "../combat-options"
 import type { CombatSheetChange } from "../combat-prep-schemas"
 import type { CombatPrepChange } from "../combat-types"
-import { MADDOX_SHEET_AUDIT_ENTITY } from "../constants"
+import { MADDOX_COMBAT_PREP_TRAIT_TEXT_MAX, MADDOX_SHEET_AUDIT_ENTITY } from "../constants"
 
 /**
  * Gravação das correções do Maddox na ficha (DND-41) — SOMENTE servidor. Só as operações da lista fechada
@@ -72,8 +72,10 @@ export async function readSheetStamp(sheetId: string): Promise<string> {
 export interface SheetWriteContext {
     sheetId: string
     campaignId: string
-    /** Quem aparece na auditoria (o dono da campanha; o autor é o Maddox, em `depois.by`). */
+    /** Quem aparece na auditoria: quem pediu o ajuste, ou o dono da campanha na preparação automática (autor: `depois.by`). */
     auditUserId: string
+    /** Jogador que pediu o ajuste (`null` na preparação automática). */
+    requestedBy?: string | null
     characterName: string
     /** Origem: preparação do combate ou pedido de ajuste. */
     origin: "combat-prep" | "combat-adjust"
@@ -85,7 +87,16 @@ export interface SheetWriteResult {
     created: Map<string, string>
 }
 
-type Outcome = { label: string; before: string; after: string; applied: boolean; sheet?: boolean; collection?: { name: CharacterSheetCollectionName; action: "created" | "updated" | "deleted"; recordId: string } } | null
+type Outcome = {
+    label: string
+    before: string
+    after: string
+    applied: boolean
+    sheet?: boolean
+    collection?: { name: CharacterSheetCollectionName; action: "created" | "updated" | "deleted"; recordId: string }
+    /** Valor anterior completo para a auditoria (quando `before` é só um resumo). */
+    auditBefore?: unknown
+} | null
 
 const abilityLabel = (attribute: string) => MADDOX_ABILITY_LABELS[attribute as AttributeType] ?? attribute
 
@@ -116,8 +127,8 @@ export async function applySheetChanges(changes: readonly CombatSheetChange[], c
             entidade: MADDOX_SHEET_AUDIT_ENTITY,
             entidadeId: context.sheetId,
             acao: AcaoAuditoria.ATUALIZAR,
-            antes: { [outcome.label]: outcome.before },
-            depois: { by: "maddox", origin: context.origin, campaign: context.campaignId, character: context.characterName, [outcome.label]: outcome.after, reason: change.reason },
+            antes: { [outcome.label]: outcome.auditBefore ?? outcome.before },
+            depois: { by: "maddox", origin: context.origin, requestedBy: context.requestedBy ?? null, campaign: context.campaignId, character: context.characterName, [outcome.label]: outcome.after, reason: change.reason },
         })
     }
     await publish(context.sheetId, sheetTouched, collectionEvents, m)
@@ -245,8 +256,20 @@ async function applyOne(change: CombatSheetChange, sheetId: Types.ObjectId, m: M
             if (change.id && Types.ObjectId.isValid(change.id)) {
                 const current = await Model.findOne({ _id: new Types.ObjectId(change.id), sheetId }).lean<{ _id: Types.ObjectId; name: string; description: string }>()
                 if (!current) return { label, before: "—", after: change.name, applied: false }
-                const updated = await Model.updateOne({ _id: current._id, description: current.description }, { $set: { name: change.name, description } })
-                return { label, before: plainText(current.description).slice(0, 160) || plainText(current.name), after: change.description.slice(0, 160), applied: updated.modifiedCount > 0, collection: { name: collection, action: "updated", recordId: String(current._id) } }
+                // O modelo só viu um trecho em texto puro: descrição maior que o trecho, ou com menções, não é reescrita
+                // (perderia o texto e as menções). Nesse caso a correção é acrescentada ao fim, e o nome fica.
+                const original = current.description ?? ""
+                const replace = plainText(original).length <= MADDOX_COMBAT_PREP_TRAIT_TEXT_MAX && !/data-type="mention"/.test(original)
+                const next = replace ? { name: change.name, description } : { description: `${original}${description}` }
+                const updated = await Model.updateOne({ _id: current._id, description: current.description }, { $set: next })
+                return {
+                    label,
+                    before: plainText(original).slice(0, 160) || plainText(current.name),
+                    after: replace ? change.description.slice(0, 160) : `acrescentado: ${change.description.slice(0, 160)}`,
+                    applied: updated.modifiedCount > 0,
+                    auditBefore: { name: current.name, description: original },
+                    collection: { name: collection, action: "updated", recordId: String(current._id) },
+                }
             }
             const doc = await Model.create({ sheetId, name: change.name, description, ...(change.type === "trait-upsert" ? { origin: "manual" } : {}) })
             if (change.ref) created.set(change.ref, `ability:${prefix}:${String(doc._id)}`)

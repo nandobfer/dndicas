@@ -9,7 +9,7 @@ import { detectSneakAttack, riderLabel } from "../combat-prep"
 import { combatAddSchema, combatModifySchema, combatPrepResponseSchema, combatRemoveSchema, combatSheetChangeSchema, parseList, sneakAttackSchema, type CombatSheetChange } from "../combat-prep-schemas"
 import { abilityModifier } from "../combat-rules"
 import { emptyOverlay, type CombatOptionPatch, type CombatPrepChange, type CombatPrepOverlay, type CombatPrepRider, type PreparedCombatOption, type TacticalCharacterState } from "../combat-types"
-import { MADDOX_CAMPAIGN_AUDIT_ENTITY, MADDOX_COMBAT_PREP_CONFLICT_RETRIES, MADDOX_COMBAT_PREP_STALE_MS } from "../constants"
+import { MADDOX_CAMPAIGN_AUDIT_ENTITY, MADDOX_COMBAT_PREP_CONFLICT_RETRIES, MADDOX_COMBAT_PREP_STALE_MS, MADDOX_COMBAT_PREP_TRAIT_TEXT_MAX } from "../constants"
 import { MaddoxCampaignMessageModel, MaddoxCampaignModel, MaddoxCombatPrepModel, type IMaddoxCampaign, type IMaddoxCombatPrep } from "../models"
 
 /**
@@ -201,8 +201,8 @@ export async function loadPrepSheet(state: TacticalCharacterState, campaignId?: 
                 })
                 .join("\n") || "(nenhum)"
         }`,
-        `## Características registradas\n${traits.map((trait) => `- [id="${trait._id}"] ${plainText(trait.name)} — ${clip(plainText(trait.description ?? ""), 400)}`).join("\n") || "(nenhuma)"}`,
-        `## Talentos registrados\n${feats.map((feat) => `- [id="${feat._id}"] ${plainText(feat.name)} — ${clip(plainText(feat.description ?? ""), 400)}`).join("\n") || "(nenhum)"}`,
+        `## Características registradas\n${traits.map((trait) => `- [id="${trait._id}"] ${plainText(trait.name)} — ${clip(plainText(trait.description ?? ""), MADDOX_COMBAT_PREP_TRAIT_TEXT_MAX)}`).join("\n") || "(nenhuma)"}`,
+        `## Talentos registrados\n${feats.map((feat) => `- [id="${feat._id}"] ${plainText(feat.name)} — ${clip(plainText(feat.description ?? ""), MADDOX_COMBAT_PREP_TRAIT_TEXT_MAX)}`).join("\n") || "(nenhum)"}`,
         `## Magias\n${spells.map((spell) => `- [spellId="${spell._id}"] ${plainText(spell.name)} · ${spell.circle === 0 ? "truque" : spell.circle ? `${spell.circle}º círculo` : "círculo ?"} · ${spell.prepared ? "preparada" : "não preparada"} · ${spell.castingTime || "—"}${spell.concentration ? " · concentração" : ""}`).join("\n") || "(nenhuma)"}`,
     ]
     return {
@@ -261,7 +261,18 @@ export function interpretPrep(raw: unknown, context: Pick<PrepSheetContext, "opt
             ...(item.label ? { label: item.label } : {}),
             ...(item.detail ? { detail: item.detail } : {}),
             ...(item.economy ? { economy: item.economy } : {}),
-            ...(item.attack ? { attack: { ...item.attack, finesse: item.attack.finesse ?? option.attack?.finesse } } : {}),
+            ...(item.attack
+                ? {
+                      attack: {
+                          bonus: item.attack.bonus,
+                          damage: item.attack.damage,
+                          damageType: item.attack.damageType !== undefined ? item.attack.damageType : (option.attack?.damageType ?? null),
+                          ranged: item.attack.ranged ?? option.attack?.ranged ?? false,
+                          light: item.attack.light ?? option.attack?.light ?? false,
+                          finesse: item.attack.finesse ?? option.attack?.finesse,
+                      },
+                  }
+                : {}),
             ...(item.save ? { save: item.save as CombatOptionPatch["save"] } : {}),
             ...(item.heal ? { heal: item.heal } : {}),
         }
@@ -326,9 +337,13 @@ export function mergeOverlay(base: CombatPrepOverlay, next: CombatPrepOverlay): 
 }
 
 /** Grava as correções na ficha e liga cada criação à opção acrescentada (a lista base não a mostra duas vezes). */
-export async function applyInterpretation(interpretation: PrepInterpretation, context: { sheetId: string; campaign: Pick<IMaddoxCampaign, "_id" | "ownerId">; characterName: string; origin: "combat-prep" | "combat-adjust" }): Promise<{ changes: CombatPrepChange[]; suppress: string[] }> {
+/**
+ * Auditoria: no pedido de ajuste, a alteração fica no nome de quem pediu (`requestedBy`); na preparação automática, que
+ * ninguém pediu, no do dono da campanha (quem abriu o combate e responde pela mesa).
+ */
+export async function applyInterpretation(interpretation: PrepInterpretation, context: { sheetId: string; campaign: Pick<IMaddoxCampaign, "_id" | "ownerId">; characterName: string; origin: "combat-prep" | "combat-adjust"; requestedBy?: string | null }): Promise<{ changes: CombatPrepChange[]; suppress: string[] }> {
     const { applySheetChanges } = await import("./combat-sheet-writes")
-    const written = await applySheetChanges(interpretation.sheetChanges, { sheetId: context.sheetId, campaignId: String(context.campaign._id), auditUserId: context.campaign.ownerId, characterName: context.characterName, origin: context.origin })
+    const written = await applySheetChanges(interpretation.sheetChanges, { sheetId: context.sheetId, campaignId: String(context.campaign._id), auditUserId: context.requestedBy ?? context.campaign.ownerId, requestedBy: context.requestedBy ?? null, characterName: context.characterName, origin: context.origin })
     const suppress: string[] = []
     for (const [ref] of interpretation.links) {
         const created = written.created.get(ref)
@@ -366,7 +381,12 @@ async function discard(prepId: Types.ObjectId, reason: string) {
 
 async function runCombatPrep(campaignId: Types.ObjectId, prepId: Types.ObjectId, jobId: string): Promise<void> {
     const claimed = await MaddoxCombatPrepModel.findOneAndUpdate({ _id: prepId, status: "pending" }, { $set: { status: "running", startedAt: new Date(), jobId, error: null }, $inc: { attempts: 1 } }, { returnDocument: "after" }).lean<PrepDoc>()
-    if (!claimed) return
+    if (!claimed) {
+        // Descartada enquanto esperava na fila (o jogador saiu): pode ter sido a última que segurava a ordem.
+        const settled = await MaddoxCombatPrepModel.findById(prepId).select("status combatId turnNumber waitRound").lean<Pick<PrepDoc, "status" | "combatId" | "turnNumber" | "waitRound">>()
+        if (settled?.status === "discarded") await afterPrepSettled(campaignId, settled)
+        return
+    }
     const { publishGameChanged } = await import("./game")
     await publishGameChanged(campaignId)
     try {
@@ -492,9 +512,17 @@ export async function discardCombatPreps(combatId: Types.ObjectId): Promise<void
     await MaddoxCombatPrepModel.updateMany({ combatId, status: { $in: BLOCKING } }, { $set: { status: "discarded", finishedAt: new Date(), jobId: null } })
 }
 
-/** O membro saiu do combate: a preparação dele deixa de bloquear a ordem. */
+/**
+ * O membro saiu do combate: a preparação dele deixa de bloquear a ordem. Se era a última pendente (ou a que tinha falhado),
+ * a ordem de iniciativa fecha agora — quem chama segue com o `advanceAfterChecks` da rodada.
+ */
 export async function discardMemberPrep(combatId: Types.ObjectId, memberId: Types.ObjectId): Promise<void> {
+    const prep = await MaddoxCombatPrepModel.findOne({ combatId, memberId, status: { $in: BLOCKING } }).select("campaignId turnNumber waitRound").lean<Pick<PrepDoc, "campaignId" | "turnNumber" | "waitRound">>()
+    if (!prep) return
     await MaddoxCombatPrepModel.updateMany({ combatId, memberId, status: { $in: BLOCKING } }, { $set: { status: "discarded", finishedAt: new Date(), jobId: null } })
+    if (await preparationPending(combatId)) return
+    const { finishInitiativeIfReady } = await import("./tactical-combat")
+    await finishInitiativeIfReady(prep.campaignId, prep.turnNumber, prep.waitRound + 1)
 }
 
 /** Preparações do combate (para o DTO), na ordem de criação. */

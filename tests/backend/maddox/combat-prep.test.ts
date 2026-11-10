@@ -3,6 +3,7 @@ import { buildCombatOptions, type CombatOptionsInput } from "@/features/maddox/c
 import { applyCombatPrep, detectSneakAttack, onlyFreeBonus, sneakEligible } from "@/features/maddox/combat-prep"
 import { combatSheetChangeSchema, parseList } from "@/features/maddox/combat-prep-schemas"
 import { freshEconomy } from "@/features/maddox/combat-rules"
+import { MADDOX_COMBAT_PREP_TEXT_CEILING } from "@/features/maddox/constants"
 import { emptyOverlay, type CombatPrepOverlay } from "@/features/maddox/combat-types"
 import { interpretPrep, mergeOverlay } from "@/features/maddox/server/combat-prep"
 
@@ -130,9 +131,31 @@ describe("DND-41 — validação da resposta da IA", () => {
         expect(result.optionChanges[0]).toMatchObject({ label: "Adaga", before: "+5 para acertar · 1d4+3 perfurante", after: "+5 para acertar · 1d4+3 perfurante" })
     })
 
-    it("texto longo é cortado (não invalida a operação)", () => {
-        const { valid } = parseList(combatSheetChangeSchema, [{ type: "ability", attribute: "wisdom", value: 12, reason: "x".repeat(2_000) }])
-        expect(valid[0]!.reason.length).toBeLessThanOrEqual(400)
+    it("texto longo é gravado inteiro abaixo do teto técnico; só acima dele é cortado (sem invalidar a operação)", () => {
+        const { valid } = parseList(combatSheetChangeSchema, [
+            { type: "ability", attribute: "wisdom", value: 12, reason: "x".repeat(2_000) },
+            { type: "trait-upsert", name: "Ataque Furtivo", description: "y".repeat(5_000), reason: "z".repeat(9_000) },
+            { type: "text-append", field: "classFeatures", text: "w".repeat(3_000), reason: "ok" },
+        ])
+        expect(valid).toHaveLength(3)
+        expect(valid[0]!.reason).toHaveLength(2_000)
+        const trait = valid[1] as Extract<(typeof valid)[number], { type: "trait-upsert" }>
+        expect(trait.description).toHaveLength(5_000)
+        expect(trait.reason.length).toBe(MADDOX_COMBAT_PREP_TEXT_CEILING.reason)
+        expect(trait.reason.endsWith("…")).toBe(true)
+        expect((valid[2] as Extract<(typeof valid)[number], { type: "text-append" }>).text).toHaveLength(3_000)
+    })
+
+    it("correção parcial do ataque herda Leve, à distância, tipo de dano e Acuidade da opção (o servidor segue liberando a ação bônus da arma Leve)", () => {
+        const options = buildCombatOptions(input({ ignoreResources: true }))
+        const result = interpretPrep({ modify: [{ optionId: "weapon:adaga", attack: { bonus: 5, damage: "1d4+3" }, reason: "Acuidade." }, { optionId: "weapon:arco", attack: { bonus: 5, damage: "1d6+3" }, reason: "Destreza." }] }, { options, chargeIds: new Set(), itemIds: new Set() })
+        expect(result.overlay.modify.map((item) => item.patch.attack)).toEqual([
+            { bonus: 5, damage: "1d4+3", damageType: "perfurante", ranged: false, light: true, finesse: true },
+            { bonus: 5, damage: "1d6+3", damageType: "perfurante", ranged: true, light: false, finesse: false },
+        ])
+        const base = buildCombatOptions(input())
+        const dagger = applyCombatPrep(base, live(result.overlay)).action.find((option) => option.id === "weapon:adaga")!
+        expect(dagger.attack).toMatchObject({ bonus: 5, damage: "1d4+3", damageType: "perfurante", light: true, ranged: false })
     })
 
     it("o pedido aceito mais novo vence pelo id da opção", () => {
