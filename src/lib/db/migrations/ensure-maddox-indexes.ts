@@ -23,7 +23,7 @@ import {
  * memberId }` das declarações da mesa (uma por membro e turno) e `{ campaignId, turnNumber, check.round,
  * memberId }` dos testes pedidos pelo Maddox (um por personagem em cada rodada) e `{ campaignId }` do combate
  * ativo (Maddox 6: um por campanha), a janela de reação pendente por personagem e o cache do classificador de custo
- * (Maddox 7), uma imagem automática por turno do mestre (Maddox 10) e um retrato por turno jogado (DND-44). Idempotente.
+ * (Maddox 7), uma imagem automática por turno do mestre (Maddox 10) e um retrato por turno jogado (DND-44) e uma cópia das fichas do início por campanha (DND-50). Idempotente.
  */
 export async function ensureMaddoxIndexes(): Promise<void> {
     await Promise.all([

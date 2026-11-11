@@ -99,6 +99,19 @@ export interface MaddoxCampaignDetailDto extends Omit<MaddoxCampaignListItemDto,
     rigorLocked: boolean
     /** O usuário pode adicionar Personagens Opex (dono com a permissão `maddox.opex`; só no GET do detalhe). */
     canAddOpex?: boolean
+    /** Reiniciar a campanha (DND-50): só o dono, com a campanha ativa, pausada, encerrada ou arquivada. */
+    canReset?: boolean
+    /** A limpeza do reinício ainda roda: "Iniciar campanha" fica bloqueado. */
+    resetting?: boolean
+    /** Ajustes de ficha pelo Maddox depois do reinício, ainda em andamento ou com falha (só o dono recebe). */
+    sheetRestores?: MaddoxSheetRestoreDto[]
+}
+
+/** Ajuste da ficha de um personagem pelo Maddox depois do reinício (DND-50). */
+export interface MaddoxSheetRestoreDto {
+    characterId: string
+    characterName: string
+    status: "pending" | "failed"
 }
 
 export interface MaddoxInviteLinkDto {

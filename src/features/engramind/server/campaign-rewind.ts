@@ -241,3 +241,31 @@ export async function restorePendingWrites(rows: readonly Record<string, unknown
     await dbConnect()
     await PendingWrite.bulkWrite(rows.map((row) => ({ replaceOne: { filter: { _id: row._id as string }, replacement: row as unknown as IPendingWrite, upsert: true } })))
 }
+
+/**
+ * Reinício da campanha (DND-50): exclui TODAS as memórias da partida nos canais da campanha (Jogadores e Mestre) e nos
+ * canais individuais dos Personagens Opex e dos NPCs Opex (`npcTokenBoxes`). As entrevistas não gravam nesses canais, então
+ * nada do que veio delas se perde. Canal Opex sem acesso (token revogado) é ignorado; com a rede fora, lança
+ * `MemoryRewindUnavailableError` (repetir é seguro). Devolve quantas foram excluídas; `null` = integração desligada.
+ */
+export async function purgeCampaignMemories(campaignId: string, npcTokenBoxes: ReadonlyMap<string, unknown>): Promise<number | null> {
+    const channels = await resolveRewindChannels(campaignId, npcTokenBoxes)
+    if (!channels) return null
+    let deleted = 0
+    for (const channel of channels) {
+        try {
+            const memories = await listChannel(channel.client, channel.channels)
+            for (const memory of memories) {
+                await channel.client.memories.delete(memory.id).catch(ignoreNotFound)
+                deleted++
+            }
+        } catch (error) {
+            if (isLostAgentChannel(channel, error)) {
+                engramindLog.warn({ ref: channel.ref, err: messageOf(error) }, "[engramind] canal Opex sem acesso no reinício da campanha: ignorado")
+                continue
+            }
+            throw new MemoryRewindUnavailableError(error)
+        }
+    }
+    return deleted
+}

@@ -45,7 +45,7 @@ import { checkSucceeded, keptD20 } from "../check-modifier"
 import { isHiddenPlayerAction, type PlayerActionsViewer } from "../player-actions-visibility"
 import { assertMemberCanPlay, isMemberReadyToPlay, loadMembership } from "./campaigns"
 import { getMaddoxMaster, type MaddoxMasterDeclaration } from "./game-master"
-import { beginLive, enqueueMaddoxJob, isCampaignBusy, takeDraftActionOptions, takeDraftChecks, takeDraftCombat, takeDraftImages, takeDraftOpexNpcFailures } from "./game-live"
+import { beginLive, enqueueMaddoxJob, isActiveMaddoxJob, isCampaignBusy, maddoxJobSignal, takeDraftActionOptions, takeDraftChecks, takeDraftCombat, takeDraftImages, takeDraftOpexNpcFailures } from "./game-live"
 import { onlineUserIds } from "./game-presence"
 import { isOpexMember, isOpexUserId, realUserIds } from "./opex-members"
 
@@ -176,7 +176,9 @@ async function runMasterTurn(campaignId: Types.ObjectId, token: string, turnNumb
             live = beginLive(String(campaignId), { kind: "narration", turnNumber, replyToId: null }, jobId)
             const master = await getMaddoxMaster()
             const sink = live
-            const content = await withGenerationTimeout((signal) => master.narrate({ campaignId: String(campaignId), jobId, turnNumber, round, declarations, combatHint, signal }, sink))
+            const content = await withGenerationTimeout((signal) => master.narrate({ campaignId: String(campaignId), jobId, turnNumber, round, declarations, combatHint, signal }, sink), maddoxJobSignal(String(campaignId), jobId))
+            // Reinício da campanha (DND-50) durante a geração: o job deixou de valer e nada desta narração é gravado.
+            if (!isActiveMaddoxJob(String(campaignId), jobId)) throw new GenerationInterruptedError()
             // Os testes pedidos nesta geração só viram mensagens agora, logo abaixo da narração (ordem dos `_id`).
             const { draftCheckMessage } = await import("./game-checks")
             const drafts = takeDraftChecks(String(campaignId), jobId)
@@ -265,6 +267,12 @@ async function runMasterTurn(campaignId: Types.ObjectId, token: string, turnNumb
             else await (await import("./turn-snapshots")).captureTurnSnapshot(campaignId, turnNumber)
         }
     } catch (error) {
+        if (error instanceof GenerationInterruptedError || !isActiveMaddoxJob(String(campaignId), jobId)) {
+            // Reinício da campanha (DND-50): a trava e as lembranças já foram zeradas pela limpeza; nada a gravar.
+            log.info({ campaignId: String(campaignId), turnNumber, round }, "[maddox] narração interrompida: a campanha foi reiniciada")
+            live?.end({ messageId: null, error: null })
+            return
+        }
         // Libera a trava e marca a falha: a retomada só acontece depois de `MADDOX_MASTER_RETRY_MS` (no `GET`/`check`).
         // Sem aviso aos clientes: o estado não mudou, e recarregar já faria a próxima tentativa sem espera.
         log.error({ err: error instanceof Error ? error.message : error, campaignId: String(campaignId), turnNumber, round, retryInMs: MADDOX_MASTER_RETRY_MS }, "[maddox] Falha no turno do mestre")
@@ -436,19 +444,37 @@ const segmentFilter = (round: number) => (round === 0 ? { segment: { $in: [0, nu
  * Teto de duração de uma geração do mestre: passado `MADDOX_MASTER_GENERATION_TIMEOUT_MS`, aborta o provedor (sinal) e
  * rejeita mesmo que a geração não respeite o sinal — o job termina, a fila anda e o pulso da trava para.
  */
-async function withGenerationTimeout<T>(run: (signal: AbortSignal) => Promise<T>): Promise<T> {
+async function withGenerationTimeout<T>(run: (signal: AbortSignal) => Promise<T>, jobSignal: AbortSignal | null = null): Promise<T> {
     const controller = new AbortController()
     let timer: ReturnType<typeof setTimeout> | null = null
+    let onJobAbort: (() => void) | null = null
     const timeout = new Promise<never>((_, reject) => {
         timer = setTimeout(() => {
             controller.abort()
             reject(new Error(MADDOX_MASTER_TIMEOUT_MESSAGE))
         }, MADDOX_MASTER_GENERATION_TIMEOUT_MS)
+        // Reinício da campanha (DND-50): o job foi interrompido; a geração para na hora, mesmo que ignore o sinal.
+        if (jobSignal) {
+            onJobAbort = () => {
+                controller.abort()
+                reject(new GenerationInterruptedError())
+            }
+            if (jobSignal.aborted) onJobAbort()
+            else jobSignal.addEventListener("abort", onJobAbort, { once: true })
+        }
     })
     try {
         return await Promise.race([run(controller.signal), timeout])
     } finally {
         if (timer) clearTimeout(timer)
+        if (jobSignal && onJobAbort) jobSignal.removeEventListener("abort", onJobAbort)
+    }
+}
+
+/** A geração foi interrompida pelo reinício da campanha (DND-50): nada dela é gravado. */
+class GenerationInterruptedError extends Error {
+    constructor() {
+        super("geração interrompida: a campanha foi reiniciada")
     }
 }
 
@@ -622,12 +648,20 @@ export async function startCampaign(campaignId: string, userId: string): Promise
         throw new DomainError(409, "Esta campanha já foi iniciada.", "CAMPAIGN_ALREADY_STARTED")
     }
     await assertMemberCanPlay(campaignId, userId)
+    // Depois de um reinício (DND-50): a limpeza, as memórias da partida anterior e os ajustes de ficha precisam ter terminado.
+    if (campaign.reset) {
+        const [{ assertResetSettled }, { assertSheetsSettled }] = await Promise.all([import("./campaign-reset"), import("./sheet-restore")])
+        await assertResetSettled(campaign)
+        await assertSheetsSettled(campaign)
+    }
+    // Cópia das fichas do início (DND-50): é para onde o reinício as devolve.
+    await (await import("./turn-snapshots")).captureStartCopy(campaign._id)
 
     const token = randomUUID()
     const now = new Date()
     const started = await MaddoxCampaignModel.updateOne(
-        { _id: campaign._id, status: "lobby", "scenarioInterview.status": "done" },
-        { $set: { status: "active", startedAt: now, turn: { number: 1, phase: "master", startedAt: now, eligibleMemberIds: [], declaredMemberIds: [], generating: { token, startedAt: now }, failedAt: null, checkRound: 0, awaitingChecks: false } } },
+        { _id: campaign._id, status: "lobby", "scenarioInterview.status": "done", ...(campaign.reset ? { "reset.id": campaign.reset.id } : { reset: null }) },
+        { $set: { status: "active", startedAt: now, reset: null, turn: { number: 1, phase: "master", startedAt: now, eligibleMemberIds: [], declaredMemberIds: [], generating: { token, startedAt: now }, failedAt: null, checkRound: 0, awaitingChecks: false } } },
     )
     if (started.modifiedCount === 0) throw new DomainError(409, "Esta campanha já foi iniciada.", "CAMPAIGN_ALREADY_STARTED")
     await recordAudit({ userId, entidade: MADDOX_CAMPAIGN_AUDIT_ENTITY, entidadeId: campaignId, acao: AcaoAuditoria.ATUALIZAR, antes: { status: campaign.status }, depois: { status: "active", turn: 1 } })
@@ -701,8 +735,14 @@ export async function answerQuestion(campaignId: Types.ObjectId, jobId: string, 
     let error: string | null = null
     try {
         const master = await getMaddoxMaster()
-        content = await withGenerationTimeout((signal) => master.answer({ campaignId: String(campaignId), jobId, turnNumber, questionId: String(questionId), characterName, question, signal }, live))
+        content = await withGenerationTimeout((signal) => master.answer({ campaignId: String(campaignId), jobId, turnNumber, questionId: String(questionId), characterName, question, signal }, live), maddoxJobSignal(String(campaignId), jobId))
+        if (!isActiveMaddoxJob(String(campaignId), jobId)) throw new GenerationInterruptedError()
     } catch (failure) {
+        // Reinício da campanha (DND-50): a resposta não é gravada (a pergunta também some na limpeza).
+        if (failure instanceof GenerationInterruptedError || !isActiveMaddoxJob(String(campaignId), jobId)) {
+            live.end({ messageId: null, error: null })
+            return { content: "", error: MADDOX_ANSWER_FAILED_MESSAGE }
+        }
         log.warn({ err: failure instanceof Error ? failure.message : String(failure), campaignId: String(campaignId), turnNumber }, "[maddox] Falha ao responder a pergunta")
         error = MADDOX_ANSWER_FAILED_MESSAGE
     }
@@ -1067,6 +1107,7 @@ export async function getGameState(campaignId: string, userId: string): Promise<
         name: campaign.name,
         rigor: campaign.rigor,
         status: campaign.status,
+        resetAt: campaign.reset && campaign.status !== "active" ? new Date(campaign.reset.startedAt).toISOString() : null,
         ownerId: campaign.ownerId,
         maddoxAvatarUrl: avatarUrl,
         turn: {

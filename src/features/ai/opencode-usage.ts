@@ -40,6 +40,7 @@ export const AI_CONSUMPTION_ORIGIN_LABELS: Record<string, string> = {
     "maddox-combat-prep": "Agente Maddox (preparação do combate)",
     "maddox-combat-adjust": "Agente Maddox (ajustes no combate)",
     "maddox-sneak-attack": "Agente Maddox (ataque furtivo)",
+    "maddox-sheet-restore": "Agente Maddox (fichas no reinício da campanha)",
     "maddox-scene-image": "Agente Maddox (imagens nas cenas)",
     "maddox-character-portrait": "Agente Maddox (retratos dos personagens)",
     "maddox-opex-interview": "Personagens Opex (entrevistas)",

@@ -34,7 +34,7 @@ const MUTABLE_KINDS = ["check", "combat-roll", "combat-reaction", "combat-action
 
 type Doc = Record<string, unknown> & { _id: Types.ObjectId }
 
-async function sheetsOf(sheetIds: readonly Types.ObjectId[]): Promise<IMaddoxSheetSnapshot[]> {
+export async function sheetsOf(sheetIds: readonly Types.ObjectId[]): Promise<IMaddoxSheetSnapshot[]> {
     if (!sheetIds.length) return []
     const [{ CharacterSheet }, { CharacterItem }, { CharacterAttack }, { CharacterTrait }, { CharacterFeat }, { CharacterSpell }] = await Promise.all([
         import("@/features/character-sheets/models/character-sheet"),
@@ -161,33 +161,7 @@ export async function restoreSnapshot(snapshot: IMaddoxCampaignSnapshot): Promis
         await MaddoxCharacterModel.updateOne({ _id: character._id }, { $set: { currentState: character.currentState, currentStatePublic: character.currentStatePublic, status: character.status } }, { timestamps: false })
     }
 
-    if (snapshot.sheets.length) {
-        const [{ CharacterSheet }, { CharacterItem }, { CharacterAttack }, { CharacterTrait }, { CharacterFeat }, { CharacterSpell }] = await Promise.all([
-            import("@/features/character-sheets/models/character-sheet"),
-            import("@/features/character-sheets/models/character-item"),
-            import("@/features/character-sheets/models/character-attack"),
-            import("@/features/character-sheets/models/character-trait"),
-            import("@/features/character-sheets/models/character-feat"),
-            import("@/features/character-sheets/models/character-spell"),
-        ])
-        const children = [
-            [CharacterItem, "items"],
-            [CharacterAttack, "attacks"],
-            [CharacterTrait, "traits"],
-            [CharacterFeat, "feats"],
-            [CharacterSpell, "spells"],
-        ] as const
-        for (const entry of snapshot.sheets) {
-            if (entry.sheet) await CharacterSheet.replaceOne({ _id: entry.sheetId }, entry.sheet, { upsert: true, timestamps: false })
-            for (const [model, field] of children) {
-                const rows = entry[field]
-                await (model as unknown as typeof CharacterItem).deleteMany({ sheetId: entry.sheetId })
-                if (rows.length) await (model as unknown as typeof CharacterItem).insertMany(rows as never[], { ordered: false })
-            }
-        }
-        const { publishPatched } = await import("./combat-sheet")
-        for (const entry of snapshot.sheets) await publishPatched(String(entry.sheetId))
-    }
+    await restoreSheets(snapshot.sheets)
 
     // Combates: o que nasceu depois do retrato some (desfaz o combate iniciado depois); os ativos no retrato voltam inteiros.
     const removedCombats = idsOf(await MaddoxCombatModel.find({ campaignId, _id: { $nin: snapshot.combatIds } }).select("_id").lean<{ _id: Types.ObjectId }[]>())
@@ -202,4 +176,81 @@ export async function restoreSnapshot(snapshot: IMaddoxCampaignSnapshot): Promis
         await MaddoxCampaignMessageModel.replaceOne({ _id: message._id as Types.ObjectId }, { ...message, discardedBy: null }, { ...INCLUDE_DISCARDED, timestamps: false })
     }
     for (const entry of snapshot.opexRuns) await MaddoxCampaignMemberModel.updateOne({ _id: entry.memberId, opex: { $ne: null } }, { $set: { "opex.run": entry.run } })
+}
+
+/** Repõe as fichas (com itens, ataques, traços, talentos e magias) e avisa as fichas abertas. */
+export async function restoreSheets(sheets: readonly IMaddoxSheetSnapshot[]): Promise<void> {
+    if (!sheets.length) return
+    const [{ CharacterSheet }, { CharacterItem }, { CharacterAttack }, { CharacterTrait }, { CharacterFeat }, { CharacterSpell }] = await Promise.all([
+        import("@/features/character-sheets/models/character-sheet"),
+        import("@/features/character-sheets/models/character-item"),
+        import("@/features/character-sheets/models/character-attack"),
+        import("@/features/character-sheets/models/character-trait"),
+        import("@/features/character-sheets/models/character-feat"),
+        import("@/features/character-sheets/models/character-spell"),
+    ])
+    const children = [
+        [CharacterItem, "items"],
+        [CharacterAttack, "attacks"],
+        [CharacterTrait, "traits"],
+        [CharacterFeat, "feats"],
+        [CharacterSpell, "spells"],
+    ] as const
+    for (const entry of sheets) {
+        if (entry.sheet) await CharacterSheet.replaceOne({ _id: entry.sheetId }, entry.sheet, { upsert: true, timestamps: false })
+        for (const [model, field] of children) {
+            const rows = entry[field]
+            await (model as unknown as typeof CharacterItem).deleteMany({ sheetId: entry.sheetId })
+            if (rows.length) await (model as unknown as typeof CharacterItem).insertMany(rows as never[], { ordered: false })
+        }
+    }
+    const { publishPatched } = await import("./combat-sheet")
+    for (const entry of sheets) await publishPatched(String(entry.sheetId))
+}
+
+// ── Cópia das fichas no início (DND-50) ─────────────────────────────────────
+
+/** Fichas dos personagens com a entrevista concluída. */
+async function startSheetIds(campaignId: Types.ObjectId): Promise<Types.ObjectId[]> {
+    const characters = await MaddoxCharacterModel.find({ campaignId, "interview.status": "done", sheetId: { $ne: null } }).select("sheetId").lean<{ sheetId: Types.ObjectId }[]>()
+    return characters.map((character) => character.sheetId)
+}
+
+/**
+ * "Iniciar campanha" (DND-50): guarda a cópia das fichas para onde o reinício as devolve (substitui a anterior). Nunca
+ * lança: sem cópia, o reinício usa o retrato do 1º turno ou o ajuste pelo Maddox.
+ */
+export async function captureStartCopy(campaignId: Types.ObjectId): Promise<void> {
+    try {
+        await dbConnect()
+        const sheets = await sheetsOf(await startSheetIds(campaignId))
+        await MaddoxCampaignSnapshotModel.replaceOne(
+            { campaignId, kind: "start" },
+            { campaignId, kind: "start", turnNumber: 0, rewindId: null, takenAt: new Date(), boundaryMessageId: null, excerpt: "", state: null, turn: null, npcs: [], characters: [], sheets, combats: [], combatIds: [], preps: [], messages: [], opexRuns: [], memories: [], pendingWrites: [], phase: null },
+            { upsert: true },
+        )
+    } catch (error) {
+        log.warn({ err: error instanceof Error ? error.message : String(error), campaignId: String(campaignId) }, "[maddox] falha ao guardar a cópia das fichas do início")
+    }
+}
+
+/**
+ * Entrevista concluída com a campanha já iniciada (DND-50): a ficha desse personagem entra na cópia do início (ou a
+ * substitui). Sem cópia (campanha iniciada antes do DND-50), cria uma só com ela. Nunca lança.
+ */
+export async function addToStartCopy(campaignId: Types.ObjectId, sheetId: Types.ObjectId): Promise<void> {
+    try {
+        await dbConnect()
+        const [entry] = await sheetsOf([sheetId])
+        if (!entry) return
+        const existing = await MaddoxCampaignSnapshotModel.findOne({ campaignId, kind: "start" }).select("sheets").lean<Pick<IMaddoxCampaignSnapshot, "sheets">>()
+        const sheets = [...(existing?.sheets ?? []).filter((item) => String(item.sheetId) !== String(sheetId)), entry]
+        await MaddoxCampaignSnapshotModel.updateOne(
+            { campaignId, kind: "start" },
+            { $set: { sheets }, $setOnInsert: { turnNumber: 0, rewindId: null, takenAt: new Date(), boundaryMessageId: null, excerpt: "", state: null, turn: null, npcs: [], characters: [], combats: [], combatIds: [], preps: [], messages: [], opexRuns: [], memories: [], pendingWrites: [], phase: null } },
+            { upsert: true },
+        )
+    } catch (error) {
+        log.warn({ err: error instanceof Error ? error.message : String(error), campaignId: String(campaignId), sheetId: String(sheetId) }, "[maddox] falha ao guardar a ficha na cópia do início")
+    }
 }

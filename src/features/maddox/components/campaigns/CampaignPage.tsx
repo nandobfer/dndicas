@@ -1,10 +1,10 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
-import { AlertTriangle, ArrowLeft, BookOpen, Bot, CheckCircle2, Crown, Dices, DoorOpen, Hourglass, ImageOff, Loader2, MessageCircle, Pencil, Play, RefreshCw, ScrollText, Swords, UserMinus, UserRound, Users } from "lucide-react"
+import { AlertTriangle, ArrowLeft, BookOpen, Bot, CheckCircle2, Crown, Dices, DoorOpen, Hourglass, ImageOff, Loader2, MessageCircle, Pencil, Play, RefreshCw, RotateCcw, ScrollText, Swords, UserMinus, UserRound, Users } from "lucide-react"
 import { Button } from "@/components/ui/opex/button"
 import { ConfirmDialog } from "@/components/ui/opex/confirm-dialog"
 import { Skeleton } from "@/components/ui/opex/skeleton"
@@ -12,9 +12,9 @@ import { ErrorState } from "@/components/feedback/ErrorState"
 import { EmptyState } from "@/components/feedback/EmptyState"
 import { GlassCard as Card, GlassCardContent as CardContent, GlassCardDescription as CardDescription, GlassCardHeader as CardHeader, GlassCardTitle as CardTitle } from "@/components/ui/glass-card"
 import { useAuth } from "@/core/hooks/useAuth"
-import { MADDOX_CHARACTER_UNNAMED_LABEL, MADDOX_OPEX_INTERVIEW_MODE_LABELS, MADDOX_OPEX_UNNAMED_LABEL, MADDOX_RIGOR_LEVEL_DEFS, MADDOX_TACTICAL_COMBAT_RIGORS, MADDOX_TURN_PHASE_LABELS } from "../../constants"
+import { MADDOX_CHARACTER_UNNAMED_LABEL, MADDOX_OPEX_INTERVIEW_MODE_LABELS, MADDOX_OPEX_UNNAMED_LABEL, MADDOX_RESET_NOTICE_PARAM, MADDOX_RESET_NOTICE_VALUE, MADDOX_RESET_TEXTS, MADDOX_RIGOR_LEVEL_DEFS, MADDOX_TACTICAL_COMBAT_RIGORS, MADDOX_TURN_PHASE_LABELS, maddoxSheetRestoreFailedMessage } from "../../constants"
 import type { MaddoxCampaignCharacterDto, MaddoxCampaignDetailDto, MaddoxCampaignMemberDto } from "../../campaign-types"
-import { useMaddoxCampaign, useMaddoxCampaignsRealtime, useRemoveMaddoxMember, useRetryMaddoxCharacterPortrait } from "../../hooks/useMaddoxCampaigns"
+import { useMaddoxCampaign, useMaddoxCampaignsRealtime, useRemoveMaddoxMember, useResetMaddoxCampaign, useRetryMaddoxCharacterPortrait, useRetryMaddoxSheetRestore } from "../../hooks/useMaddoxCampaigns"
 import { useStartMaddoxCampaign } from "../../hooks/useMaddoxGame"
 import { useMaddoxOpexLobbyActions } from "../../hooks/useMaddoxOpex"
 import { AddOpexDialog } from "./AddOpexDialog"
@@ -85,7 +85,22 @@ function CampaignView({ campaign, userId }: { campaign: MaddoxCampaignDetailDto;
     const scenarioDone = campaign.scenarioStatus === "done"
     const active = campaign.status === "active"
     const meReady = campaign.members.find((member) => member.id === campaign.myMemberId)?.ready ?? false
-    const startBlocked = campaign.status !== "lobby" || !scenarioDone ? "Conclua a entrevista de cenário com o Maddox" : !meReady ? "Conclua a sua entrevista de personagem" : null
+    const sheetRestores = campaign.sheetRestores ?? []
+    const adjusting = sheetRestores.some((item) => item.status === "pending")
+    const startBlocked =
+        campaign.status !== "lobby" || !scenarioDone
+            ? "Conclua a entrevista de cenário com o Maddox"
+            : !meReady
+              ? "Conclua a sua entrevista de personagem"
+              : campaign.resetting
+                ? MADDOX_RESET_TEXTS.inProgress
+                : adjusting
+                  ? MADDOX_RESET_TEXTS.sheetsAdjusting
+                  : null
+    const reset = useResetMaddoxCampaign(campaign.id)
+    const retrySheet = useRetryMaddoxSheetRestore(campaign.id)
+    const [confirmingReset, setConfirmingReset] = useState(false)
+    const resetNotice = useResetNotice()
 
     return (
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
@@ -135,6 +150,11 @@ function CampaignView({ campaign, userId }: { campaign: MaddoxCampaignDetailDto;
                                 <Bot aria-hidden /> Adicionar Personagem Opex
                             </Button>
                         )}
+                        {campaign.canReset === true && (
+                            <Button variant="outline" className="text-destructive hover:text-destructive" onClick={() => setConfirmingReset(true)}>
+                                <RotateCcw aria-hidden /> {MADDOX_RESET_TEXTS.button}
+                            </Button>
+                        )}
                         {isOwner ? (
                             <Button variant="outline" onClick={() => setEditing(true)}>
                                 <Pencil aria-hidden /> Editar
@@ -147,6 +167,33 @@ function CampaignView({ campaign, userId }: { campaign: MaddoxCampaignDetailDto;
                     </div>
                 </div>
             </header>
+
+            {resetNotice && (
+                <p className="flex items-start gap-2 rounded-lg border border-amber-400/30 bg-amber-400/10 p-3 text-sm text-amber-100" role="status" data-testid="campaign-reset-notice">
+                    <RotateCcw className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+                    {MADDOX_RESET_TEXTS.notice}
+                </p>
+            )}
+
+            {isOwner && adjusting && (
+                <p className="flex items-start gap-2 rounded-lg border border-white/10 bg-white/[0.03] p-3 text-sm text-white/70" role="status" data-testid="sheet-restore-pending">
+                    <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-primary" aria-hidden />
+                    {MADDOX_RESET_TEXTS.sheetsAdjusting}
+                </p>
+            )}
+
+            {isOwner &&
+                sheetRestores
+                    .filter((item) => item.status === "failed")
+                    .map((item) => (
+                        <div key={item.characterId} className="flex flex-wrap items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-white/80" role="alert" data-testid="sheet-restore-failed">
+                            <AlertTriangle className="h-4 w-4 shrink-0 text-destructive" aria-hidden />
+                            <span className="min-w-0 flex-1">{maddoxSheetRestoreFailedMessage(item.characterName)}</span>
+                            <Button size="sm" variant="outline" onClick={() => retrySheet.mutate(item.characterId)} disabled={retrySheet.isPending}>
+                                {retrySheet.isPending && retrySheet.variables === item.characterId ? <Loader2 className="animate-spin" aria-hidden /> : <RefreshCw aria-hidden />} {MADDOX_RESET_TEXTS.retry}
+                            </Button>
+                        </div>
+                    ))}
 
             {(campaign.status === "lobby" || campaign.status === "interview") && (
                 <p className="flex items-start gap-2 rounded-lg border border-white/10 bg-white/[0.03] p-3 text-sm text-white/70">
@@ -282,6 +329,19 @@ function CampaignView({ campaign, userId }: { campaign: MaddoxCampaignDetailDto;
                 pending={start.isPending}
                 onConfirm={() => start.mutate(undefined, { onSuccess: () => router.push(`/campanhas/${campaign.id}/mesa`), onSettled: () => setStarting(false) })}
             />
+            {campaign.canReset === true && (
+                <ConfirmDialog
+                    open={confirmingReset}
+                    onOpenChange={setConfirmingReset}
+                    title={MADDOX_RESET_TEXTS.dialogTitle}
+                    description={MADDOX_RESET_TEXTS.dialogBody}
+                    confirmLabel={MADDOX_RESET_TEXTS.button}
+                    cancelLabel={MADDOX_RESET_TEXTS.cancel}
+                    variant="destructive"
+                    pending={reset.isPending}
+                    onConfirm={() => reset.mutate(undefined, { onSettled: () => setConfirmingReset(false) })}
+                />
+            )}
             <ConfirmDialog
                 open={leaving}
                 onOpenChange={setLeaving}
@@ -294,6 +354,21 @@ function CampaignView({ campaign, userId }: { campaign: MaddoxCampaignDetailDto;
             />
         </motion.div>
     )
+}
+
+/**
+ * Aviso "O dono reiniciou a campanha." vindo da mesa (`?aviso=reiniciada`, DND-50): mostrado uma vez e tirado da URL
+ * (sem nova navegação). A tela da campanha só monta a visão no cliente, depois da leitura.
+ */
+function useResetNotice(): boolean {
+    const [shown] = useState(() => typeof window !== "undefined" && new URLSearchParams(window.location.search).get(MADDOX_RESET_NOTICE_PARAM) === MADDOX_RESET_NOTICE_VALUE)
+    useEffect(() => {
+        if (!shown) return
+        const url = new URL(window.location.href)
+        url.searchParams.delete(MADDOX_RESET_NOTICE_PARAM)
+        window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`)
+    }, [shown])
+    return shown
 }
 
 /** Situação do Personagem Opex no lobby (DND-26): entrevistando, aguardando aprovação (link), falha com "Tentar de novo". */

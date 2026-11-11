@@ -198,8 +198,16 @@ export interface BuildSheetInput {
     reserved: string[]
 }
 
-/** Grava a ficha completa (campos + itens, ataques e magias). */
-export async function writeCharacterSheet(input: BuildSheetInput): Promise<void> {
+/** Ficha que a entrevista gera (campos + itens, ataques e magias), sem gravar: a conclusão grava; o reinício (DND-50) compara. */
+export interface ComputedCharacterSheet {
+    set: Record<string, unknown>
+    items: Record<string, unknown>[]
+    attacks: Record<string, unknown>[]
+    spells: Record<string, unknown>[]
+}
+
+/** Calcula a ficha completa da entrevista (sem gravar nada). */
+export async function computeCharacterSheet(input: BuildSheetInput): Promise<ComputedCharacterSheet> {
     const build = input.doc.build ?? emptyBuild()
     const catalog = await loadBuildCatalog(build)
     const level = effectiveLevel(build, input.ctx) ?? 1
@@ -223,16 +231,6 @@ export async function writeCharacterSheet(input: BuildSheetInput): Promise<void>
     set.resourceCharges = await resourceCharges(set, featMentions, items.filter((row): row is { entry: typeof row.entry; item: CatalogItem } => Boolean(row.item)).map((row) => row.item), level, prof, mods)
     set.weaponMasteries = await initialWeaponMasteries(catalog, level, items.map((row) => row.item))
 
-    const [{ CharacterSheet }, { CharacterItem }, { CharacterAttack }, { CharacterSpell }] = await Promise.all([
-        import("@/features/character-sheets/models/character-sheet"),
-        import("@/features/character-sheets/models/character-item"),
-        import("@/features/character-sheets/models/character-attack"),
-        import("@/features/character-sheets/models/character-spell"),
-    ])
-    await CharacterSheet.updateOne({ _id: input.sheetId }, { $set: set })
-
-    // Coleções reconstruídas: confirmar de novo não duplica nada.
-    await Promise.all([CharacterItem.deleteMany({ sheetId: input.sheetId }), CharacterAttack.deleteMany({ sheetId: input.sheetId }), CharacterSpell.deleteMany({ sheetId: input.sheetId })])
     const itemDocs = items.map(({ entry, item }) => {
         const label = item?.name ?? entry.name
         return {
@@ -250,7 +248,6 @@ export async function writeCharacterSheet(input: BuildSheetInput): Promise<void>
             catalogAcBonus: item?.acBonus ?? null,
         }
     })
-    if (itemDocs.length) await CharacterItem.insertMany(itemDocs)
 
     const calc = { profBonus: { value: prof }, attrMods: { strength: { value: mods.strength }, dexterity: { value: mods.dexterity } } }
     const attacks: { sheetId: Types.ObjectId; name: string; attackBonus: string; damageType: string; notes: string }[] = []
@@ -270,8 +267,25 @@ export async function writeCharacterSheet(input: BuildSheetInput): Promise<void>
         if (!spell || spell.circle !== 0 || !spell.baseDice) continue
         attacks.push({ sheetId: input.sheetId, name: paragraph({ id: String(spell._id), entityType: "Magia", label: spell.name }), ...buildSpellAttackAutofill(spell as never, { spellAttackBonus: { value: prof + spellMod } }, level), notes: getAutoSpellAttackNotes(String(spell._id)) })
     }
-    if (spellDocs.length) await CharacterSpell.insertMany(spellDocs)
-    if (attacks.length) await CharacterAttack.insertMany(attacks)
+    return { set, items: itemDocs, attacks, spells: spellDocs }
+}
+
+/** Grava a ficha completa (campos + itens, ataques e magias). */
+export async function writeCharacterSheet(input: BuildSheetInput): Promise<void> {
+    const computed = await computeCharacterSheet(input)
+    const [{ CharacterSheet }, { CharacterItem }, { CharacterAttack }, { CharacterSpell }] = await Promise.all([
+        import("@/features/character-sheets/models/character-sheet"),
+        import("@/features/character-sheets/models/character-item"),
+        import("@/features/character-sheets/models/character-attack"),
+        import("@/features/character-sheets/models/character-spell"),
+    ])
+    await CharacterSheet.updateOne({ _id: input.sheetId }, { $set: computed.set })
+
+    // Coleções reconstruídas: confirmar de novo não duplica nada.
+    await Promise.all([CharacterItem.deleteMany({ sheetId: input.sheetId }), CharacterAttack.deleteMany({ sheetId: input.sheetId }), CharacterSpell.deleteMany({ sheetId: input.sheetId })])
+    if (computed.items.length) await CharacterItem.insertMany(computed.items)
+    if (computed.spells.length) await CharacterSpell.insertMany(computed.spells)
+    if (computed.attacks.length) await CharacterAttack.insertMany(computed.attacks)
 }
 
 /**

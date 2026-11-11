@@ -29,6 +29,10 @@ const service = {
 vi.doMock("@/features/maddox/server/campaigns", () => service)
 const portraits = { retryCharacterPortrait: vi.fn(async () => ({ id: "c1" })) }
 vi.doMock("@/features/maddox/server/character-portrait", () => portraits)
+const resets = { resetCampaign: vi.fn(async () => ({ id: "c1", status: "lobby" })) }
+vi.doMock("@/features/maddox/server/campaign-reset", () => resets)
+const sheetRestores = { retrySheetRestore: vi.fn(async () => ({ id: "c1" })) }
+vi.doMock("@/features/maddox/server/sheet-restore", () => sheetRestores)
 
 const ctx = <P extends Record<string, string>>(params: P) => ({ params: Promise.resolve(params) })
 const load = <T>(path: string) => importFresh<T>(path)
@@ -39,6 +43,8 @@ describe("rotas das Campanhas Maddox", () => {
         permissions.length = 0
         Object.values(service).forEach((fn) => fn.mockClear())
         portraits.retryCharacterPortrait.mockClear()
+        resets.resetCampaign.mockClear()
+        sheetRestores.retrySheetRestore.mockClear()
     })
 
     it("todas exigem maddox.play: sem login 401, sem permissão 403", async () => {
@@ -111,5 +117,29 @@ describe("rotas das Campanhas Maddox", () => {
         const response = await route.POST(makeJsonRequest("http://localhost/api/maddox/campaigns", { method: "POST", body: JSON.stringify({ name: "Brumas", rigor: "narrativo" }) }), ctx({}) as never)
         expect(response.status).toBe(409)
         expect(await response.json()).toMatchObject({ success: false, code: "MADDOX_UNAVAILABLE" })
+    })
+
+    it("reiniciar a campanha e tentar de novo o ajuste da ficha (DND-50): maddox.play, usuário efetivo e recusas padronizadas", async () => {
+        const route = await load<typeof import("@/app/api/maddox/campaigns/[id]/reset/route")>("@/app/api/maddox/campaigns/[id]/reset/route")
+        const response = await route.POST(makeRequest("http://localhost/api/maddox/campaigns/c1/reset", { method: "POST" }), ctx({ id: "c1" }))
+        expect(response.status).toBe(200)
+        expect(await response.json()).toMatchObject({ data: { status: "lobby" } })
+        expect(resets.resetCampaign).toHaveBeenCalledWith("c1", "user-1")
+
+        const { DomainError } = await import("@/lib/api/route")
+        resets.resetCampaign.mockRejectedValueOnce(new DomainError(403, "Só o dono da campanha pode reiniciá-la.", "FORBIDDEN") as never)
+        const refused = await route.POST(makeRequest("http://localhost/api/maddox/campaigns/c1/reset", { method: "POST" }), ctx({ id: "c1" }))
+        expect(refused.status).toBe(403)
+        expect(await refused.json()).toMatchObject({ success: false, code: "FORBIDDEN" })
+
+        who = "noPermission"
+        expect((await route.POST(makeRequest("http://localhost/api/maddox/campaigns/c1/reset", { method: "POST" }), ctx({ id: "c1" }))).status).toBe(403)
+        expect(resets.resetCampaign).toHaveBeenCalledTimes(2)
+        who = "player"
+
+        const retry = await load<typeof import("@/app/api/maddox/campaigns/[id]/reset/sheets/[characterId]/route")>("@/app/api/maddox/campaigns/[id]/reset/sheets/[characterId]/route")
+        expect((await retry.POST(makeRequest("http://localhost/api/maddox/campaigns/c1/reset/sheets/ch1", { method: "POST" }), ctx({ id: "c1", characterId: "ch1" }))).status).toBe(200)
+        expect(sheetRestores.retrySheetRestore).toHaveBeenCalledWith("c1", "ch1", "user-1")
+        expect(new Set(permissions)).toEqual(new Set(["maddox.play"]))
     })
 })

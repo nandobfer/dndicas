@@ -49,3 +49,12 @@ export function runOpexOnce(key: string, task: () => Promise<void>): Promise<voi
 export async function waitForOpexIdle(): Promise<void> {
     for (let round = 0; round < 50 && runtime.running.size > 0; round++) await Promise.allSettled([...runtime.running.values()])
 }
+
+/** Espera as execuções vivas destas chaves, com teto (reinício da campanha, DND-50). Nunca rejeita. */
+export async function waitForOpexKeys(keys: readonly string[], timeoutMs: number): Promise<void> {
+    const runs = keys.map((key) => runtime.running.get(key)).filter((run): run is Promise<void> => Boolean(run))
+    if (!runs.length) return
+    let timer: ReturnType<typeof setTimeout> | null = null
+    await Promise.race([Promise.allSettled(runs), new Promise<void>((resolve) => (timer = setTimeout(resolve, timeoutMs)))])
+    if (timer) clearTimeout(timer)
+}

@@ -1,4 +1,4 @@
-export { MaddoxCampaignModel, type IMaddoxCampaign, type MaddoxRewindOp } from "./maddox-campaign"
+export { MaddoxCampaignModel, type IMaddoxCampaign, type MaddoxCampaignReset, type MaddoxRewindOp } from "./maddox-campaign"
 export { MaddoxCampaignMemberModel, type IMaddoxCampaignMember, type IMaddoxOpexMember } from "./maddox-campaign-member"
 export { MaddoxCharacterModel, type IMaddoxCharacter } from "./maddox-character"
 export { MaddoxNpcModel, type IMaddoxNpc, type IMaddoxNpcOpex } from "./maddox-npc"

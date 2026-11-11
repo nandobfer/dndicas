@@ -137,7 +137,7 @@ continua.
 | `maddox_interviews` | entrevistas (Maddox 2): conversa (`messages`), versão do roteiro, status, trava `generating`, resultado consolidado, `build` (ficha) e `world` (povos e classes do cenário no Fiel); única por `{ campaignId, kind, memberId }` |
 | `maddox_opencode_sessions` | sessões do OpenCode do Maddox |
 | `maddox_scene_images` | imagens nas cenas (Maddox 10): origem, vaga (`auto`/`manual`/`portrait`; `discarded` = lápide de uma imagem perdida ao voltar a um turno, DND-44), situação, descrição (só servidor), legenda, referências, situação da geração, `counts` (ocupa a cota), URL, `discardedBy`; uma automática por turno (índice único parcial) |
-| `maddox_campaign_snapshots` | retratos da mesa (DND-44): um por turno jogado (vez dos jogadores aberta) e o de origem da volta pendente |
+| `maddox_campaign_snapshots` | retratos da mesa (DND-44): um por turno jogado (vez dos jogadores aberta) e o de origem da volta pendente; `kind: "start"` = cópia das fichas tirada em "Iniciar campanha" (DND-50, uma por campanha) |
 | `maddox_memory_repairs` | exclusões de memória pendentes da perda definitiva de uma volta (DND-44) |
 
 Os índices (inclusive os únicos que sustentam regras: `{ kind, version }` dos roteiros, uma sessão `active`
@@ -188,7 +188,7 @@ Telas (`src/features/maddox/components/campaigns/`, rotas pt-BR):
 | Rota | Conteúdo |
 | --- | --- |
 | `/campanhas` | Campanhas em que sou **dono ou membro ativo** (`joined`), da mais recente; um card largo por linha (capa: a **última imagem de cena** da campanha — DND-35 —, senão `coverUrl`, sempre atrás do gradiente na cor do rigor; sem imagem, gradiente e espadas; chips de rigor/status/papel em cores de raridade, meu personagem, avatares dos membros, "atualizada há…"). Clicar abre a campanha. "Nova campanha" abre a criação |
-| `/campanhas/[id]` | Cabeçalho, lobby (participantes e personagens), "Criar personagem" (link para a entrevista de personagem), "Gerar retrato (de novo)", "Editar" (dono), "Sair da campanha" (jogador), "Remover" (dono, com confirmação) e o painel "Convidar jogadores" (dono) |
+| `/campanhas/[id]` | Cabeçalho, lobby (participantes e personagens), "Criar personagem" (link para a entrevista de personagem), "Gerar retrato (de novo)", "Editar" (dono), "Reiniciar campanha" (dono, campanha já iniciada, com confirmação — DND-50), "Sair da campanha" (jogador), "Remover" (dono, com confirmação) e o painel "Convidar jogadores" (dono) |
 | `/campanhas/convite/[token]` | Resumo da campanha do link e "Entrar na campanha". Sem login vai ao login e volta; sem a permissão mostra "Acesso restrito" |
 
 **Criação:** nome (3–80) e **slider de rigor** (`RigorCard`), cópia do card de criticidade do agente
@@ -1842,6 +1842,76 @@ Toda rolagem do Maddox leva as parcelas nomeadas do modificador dentro do própr
 
 Os passos guardam as parcelas em `CombatActionStep.modifierParts` e as rolagens avulsas em `IMaddoxCombatRoll.modifierParts` (campos `Mixed`, sem migração); `rollExpression(expr, { modifierParts })` as repassa ao motor. Dano crítico e ataque furtivo só acrescentam dados: as parcelas não mudam.
 
+## Reiniciar campanha (DND-50)
+
+Código: `server/campaign-reset.ts` (operação, limpeza, retomada, memórias pendentes), `server/sheet-restore.ts` (ajuste da
+ficha pelo Maddox, "Tentar de novo", bloqueio do início), `server/sheet-restore-ai.ts` (chamada de IA, mockada inteira nos
+testes), `sheet-restore-schemas.ts` (lista fechada), `server/turn-snapshots.ts` (`captureStartCopy`, `addToStartCopy`,
+`restoreSheets`), `server/game-live.ts` (`cancelCampaignJobs`) e `src/features/engramind/server/campaign-rewind.ts`
+(`purgeCampaignMemories`). API: `POST /api/maddox/campaigns/[id]/reset` e `POST …/reset/sheets/[characterId]` ("Tentar de
+novo"), ambas com `maddox.play` + dono (403 no serviço). **Sem chave nova no Perfix.**
+
+Na tela da campanha, o **dono** vê **"Reiniciar campanha"** ao lado de "Editar" quando a campanha está **Ativa, Pausada,
+Encerrada ou Arquivada** (`canReset` no detalhe; nunca no lobby, na entrevista nem na mesa). O diálogo: título **"Reiniciar
+campanha?"**, corpo **"A história jogada, o diário, os NPCs, os combates, as imagens de cena e as memórias da campanha serão
+apagados. Os personagens voltam à ficha do fim da entrevista. Membros, cenário e configurações são mantidos. Essa ação não pode
+ser desfeita."**, botões "Cancelar" e "Reiniciar campanha" (textos em `MADDOX_RESET_TEXTS`).
+
+| Item | Depois do reinício |
+| --- | --- |
+| Nome, rigor, capa, densidade, dificuldade de combate, imagens de cena (configuração), mostrar CD, ocultar declarações | Preservado |
+| Cenário, situação inicial, entrevista de cenário, mundo, nível/estágio iniciais, versões de roteiro | Preservado |
+| Membros e link de convite | Preservado (quem saiu ou foi removido continua fora) |
+| Personagens Opex, perfil, retrato e entrevista dos personagens | Preservados (os Opex seguem com o agente; só a execução da mesa, `opex.run` de `stage: "table"`, volta a `idle`) |
+| Ficha | Volta à do fim da entrevista (abaixo) |
+| `currentState`, `currentStatePublic`, `status` do personagem | `""`, `false`, **`active`** (também para mortos, aposentados e inativos) |
+| Mensagens (Diário), estado da história, turno, volta pendente, `memoryRepair` | Apagados / zerados (turno 0, fase do mestre, sem travas; `startedAt: null`) |
+| NPCs, combates, `maddox_combat_preps`, retratos de turno e de origem, `maddox_memory_repairs`, `engramind_pending_writes` | Apagados (a cópia `start` fica) |
+| Imagens de cena e retratos de NPC | Viram registros sem arquivo (`slot: "discarded"`, `url`/`key` nulos, `discardedBy.rewindId = "reset:<id>"`): somem da tela e do S3, mas **seguem no teto diário** |
+| Memórias no Engramind | Excluídas nos canais Jogadores e Mestre e nos canais individuais dos Personagens e NPCs Opex; depois, os agentes dos NPCs Opex apagados são aposentados |
+| Sessão do narrador no OpenCode | Trocada (`rotateNarratorSession`): a próxima partida começa com sessão nova |
+
+**Fluxo.** O serviço decide a origem das fichas antes de apagar qualquer coisa, troca a campanha para `lobby` num
+`updateOne` condicional (com `reset { id, status: "cleaning", previousStatus, byUserId, memories: "pending", npcTokenBoxes }`,
+turno e estado zerados) — o motor só anda com `status: "active"`, então nenhuma ação nova é aceita a partir daí —, interrompe
+a mesa (`cancelCampaignJobs`: aborta o sinal do job em andamento, que deixa de ser job ativo — o token de turno do MCP e as
+ferramentas param de valer, e `runMaddoxTool` recusa gravações de um job interrompido —, descarta os jobs que esperavam a vez e
+encerra as gerações ao vivo com `live-end`; `cancelCampaignTimers`; espera até 5 s as execuções vivas dos Personagens Opex) e
+roda a limpeza na fila da campanha, depois do job interrompido. A narração e a resposta interrompidas não gravam nada
+(`withGenerationTimeout` corre contra o sinal do job e confere `isActiveMaddoxJob` antes de gravar). Campanha **arquivada**
+restaura os canais das memórias antes de apagar os NPCs. No fim: `reset.status: "done"`, auditoria `CampanhaMaddox`
+(`depois: { reset: "lobby", fichas: { <personagem>: "copia" | "maddox" | "sem-ficha" } }`), aviso `maddox.campaign.changed`
+a todos os membros e `notifyJournalChanged`.
+
+**Idempotência e falhas.** Repetir o reinício com a campanha já no lobby não dá erro: refaz a limpeza que não terminou
+(`reset.status: "cleaning"`; a leitura do detalhe também a retoma em segundo plano depois de um reinício do processo) ou só as
+memórias pendentes. Com o Engramind fora, a campanha fica no lobby (`reset.memories: "pending"`, `lastError` só no banco e no
+log); a rotina de sincronização das memórias (`processPendingResetPurges`) e o próximo reinício tentam de novo, e **"Iniciar
+campanha" tenta de novo e recusa** com 409 `ENGRAMIND_UNAVAILABLE` **"A rede de memórias está indisponível: as memórias da
+partida anterior ainda não foram apagadas. Tente de novo em instantes."** enquanto não conseguir (assim nada da partida antiga
+entra na nova). Durante a limpeza, o início responde 409 `RESET_IN_PROGRESS` "O reinício da campanha ainda está em andamento.".
+Recusas do reinício: jogador 403 "Só o dono da campanha pode reiniciá-la.", quem não participa 404, lobby/entrevista nunca
+iniciada 409 `CAMPAIGN_NOT_STARTED` "A campanha ainda não começou: não há o que reiniciar.".
+
+**Mesa aberta.** O estado da mesa traz `resetAt` quando a campanha saiu de `active` por um reinício: a mesa redireciona para
+`/campanhas/[id]?aviso=reiniciada` e a tela da campanha mostra **"O dono reiniciou a campanha."** uma vez (o parâmetro sai da
+URL). Sem tempo real, a próxima ação da mesa recebe 409 `CAMPAIGN_NOT_ACTIVE`, a leitura é refeita e o redirecionamento acontece.
+
+### Restauração da ficha
+
+| Fonte | Quando | Como |
+| --- | --- | --- |
+| 1. Cópia do início | "Iniciar campanha" guarda a ficha de cada personagem com entrevista concluída (`captureStartCopy`, snapshot `kind: "start"`, substituída a cada início e **preservada** no reinício). Quem conclui a entrevista com a campanha já iniciada entra na cópia (`addToStartCopy` em `completeCharacter`) | `restoreSheets` repõe a ficha com itens, ataques, traços, talentos e magias; `photo` fica com o `portraitUrl` atual do personagem |
+| 2. Retrato do 1º turno | Campanhas iniciadas antes do DND-50 (sem a ficha na cópia) | A ficha do retrato do turno 1 entra na cópia do início **antes** da limpeza (repetir o reinício encontra a mesma origem) e é reposta como na fonte 1 |
+| 3. Ajuste pelo Maddox | Sem cópia e sem retrato | O personagem fica com `sheetRestore { resetId, status: "pending" }` e um ajuste roda em segundo plano (`runOpexOnce("sheet-restore:<id>")`): o servidor calcula a ficha da entrevista **sem gravar** (`computeCharacterSheet`, o mesmo construtor da conclusão), o Maddox (modelo do narrador no grau) compara com a atual e devolve só a lista fechada `sheetRestoreChangeSchema` — `field` (o campo volta ao valor da referência), `remove` (registro atual pelo `id`) e `restore` (registro da referência pelo `ref`); **os valores vêm sempre da referência**. Alteração inválida, `id`/`ref` desconhecido ou campo sem valor é descartada; cada aplicada é auditada (`FichaPersonagem`, `origin: "campaign-reset"`) e avisa a ficha aberta |
+
+Enquanto houver ajuste `pending`, "Iniciar campanha" fica desabilitado com a dica **"O Maddox está ajustando as fichas."** (e o
+servidor responde 409 `SHEETS_ADJUSTING` com o mesmo texto, para outra aba). Se o ajuste de um personagem falhar, a ficha dele
+fica como estava, o início é liberado para ele e **só o dono** vê o aviso **"O Maddox não conseguiu ajustar a ficha de
+<personagem>. A ficha ficou como estava."** com **"Tentar de novo"**, que refaz só esse personagem. O motivo técnico fica no log
+e no banco, nunca no DTO. Ajuste `pending` sem execução viva é retomado na leitura do detalhe; preso há mais de
+`MADDOX_SHEET_RESTORE_STALE_MS` (10 min), vira falha. Personagem sem ficha (graus narrativos) só tem condição e status zerados.
+
 ## Testes
 
 `tests/backend/maddox/*` (configuração, roteiros, avatar, sessões, rotas, `campaigns.test.ts` com MongoDB em
@@ -1849,6 +1919,13 @@ memória, `campaign-routes.test.ts`, `grant-maddox-play.test.ts`; Personagens Op
 `opex-table.test.ts`, `opex-combat.test.ts`, `opex-prompt.test.ts`, `grant-maddox-opex.test.ts`; NPCs Opex: `opex-npc-tools.test.ts`,
 `opex-npc-combat.test.ts`, `opex-npc-routes.test.ts` e `tests/backend/engramind/opex-npcs.test.ts`) e `tests/frontend/maddox/*`
 (`maddox-tab.test.tsx`, `maddox-campaigns.test.tsx`, `maddox-campaigns-realtime.test.tsx`, `maddox-opex.test.tsx`, `maddox-opex-npc.test.tsx`; happy-dom).
+Reiniciar campanha (DND-50): `campaign-reset.test.ts` (reinício completo — o que apaga e o que preserva —, só o dono, fases aceitas,
+duas vezes seguidas, limpeza interrompida retomada, Engramind fora com início recusado e rotina, narração em andamento interrompida
+sem gravar e job da fila descartado, `resetAt` no estado da mesa), `sheet-restore.test.ts` (as três fontes da ficha, cópia de quem
+entra depois, bloqueio do início durante o ajuste, falha num personagem com "Tentar de novo" só dele e sem o motivo no DTO, ajuste
+preso, personagem sem ficha), `campaign-routes.test.ts` (rotas), `tests/backend/engramind/campaign-rewind.test.ts` (exclusão de todas
+as memórias) e, na tela, `maddox-campaign-reset.test.tsx` (botão, diálogo, bloqueio, aviso de falha, aviso da mesa) e
+`maddox-game.test.tsx` (redirecionamento da mesa, sem o botão na mesa).
 Modelo por rigor (DND-32): `model-resolution.test.ts` (ordem de resolução e o pulo do slider), `settings.test.ts`
 (formato, validação, catálogo, disponibilidade por rigor), `narrator-opencode.test.ts`, `interviews.test.ts`,
 `action-validation.test.ts`, `campaigns.test.ts` e, na tela, `maddox-tab.test.tsx` ("modelo por rigor").

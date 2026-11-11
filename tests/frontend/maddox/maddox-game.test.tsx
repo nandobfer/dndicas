@@ -26,7 +26,8 @@ const acquireChannel = vi.fn(() => channel)
 const releaseChannel = vi.fn()
 
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn(), warning: vi.fn() } }))
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }), usePathname: () => "/campanhas/c1/mesa" }))
+const nav = vi.hoisted(() => ({ replace: vi.fn() }))
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), replace: nav.replace, refresh: vi.fn() }), usePathname: () => "/campanhas/c1/mesa" }))
 vi.mock("@/core/hooks/useAuth", () => ({ useAuth: () => ({ userId: "u-owner", isSignedIn: true, isLoaded: true, can: () => true }) }))
 const addWindow = vi.fn()
 /**
@@ -494,6 +495,24 @@ describe("mesa Maddox — participantes e presença", () => {
         get.mockResolvedValue(ok(gameState({ status: "lobby" })))
         renderWithQueryClient(<GamePage campaignId="c1" />)
         expect(await screen.findByText("A campanha ainda não começou")).toBeInTheDocument()
+    })
+
+    it("reinício da campanha (DND-50): a mesa aberta volta à tela da campanha com o aviso", async () => {
+        nav.replace.mockClear()
+        get.mockResolvedValue(ok(gameState({ status: "lobby", resetAt: "2026-11-11T10:00:00.000Z" })))
+        renderWithQueryClient(<GamePage campaignId="c1" />)
+        await waitFor(() => expect(nav.replace).toHaveBeenCalledWith("/campanhas/c1?aviso=reiniciada"))
+        expect(screen.getByText("O dono reiniciou a campanha.")).toBeInTheDocument()
+        expect(screen.queryByText("A campanha ainda não começou")).not.toBeInTheDocument()
+    })
+
+    it("a mesa nunca mostra o botão Reiniciar campanha (DND-50)", async () => {
+        nav.replace.mockClear()
+        get.mockResolvedValue(ok(gameState()))
+        renderWithQueryClient(<GamePage campaignId="c1" />)
+        await screen.findByTestId("turn-banner")
+        expect(screen.queryByRole("button", { name: /Reiniciar campanha/ })).not.toBeInTheDocument()
+        expect(nav.replace).not.toHaveBeenCalledWith(expect.stringContaining("aviso=reiniciada"))
     })
 
     it("não participante: 404 vira 'Campanha não encontrada'", async () => {

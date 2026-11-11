@@ -187,7 +187,11 @@ async function runOpexTurn(campaignId: Types.ObjectId, memberId: Types.ObjectId,
             const memories = opexMemoriesOf(action)
             if (memories.length) {
                 void import("@/features/engramind/server/opex-characters")
-                    .then(({ saveOpexCharacterMemories }) => saveOpexCharacterMemories({ campaignId: String(campaignId), memberId: String(memberId), characterName: character?.name ?? "" }, memories, turnNumber))
+                    .then(async ({ saveOpexCharacterMemories }) => {
+                        // Reinício da campanha (DND-50) no meio: as memórias da partida apagada não são gravadas.
+                        if (!(await MaddoxCampaignModel.exists({ _id: campaignId, status: "active" }))) return
+                        await saveOpexCharacterMemories({ campaignId: String(campaignId), memberId: String(memberId), characterName: character?.name ?? "" }, memories, turnNumber)
+                    })
                     .catch((error: unknown) => log.warn({ memberId: String(memberId), err: errorText(error) }, "[maddox] memórias do Personagem Opex não gravadas"))
             }
             await MaddoxCampaignModel.updateOne({ _id: campaignId, "turn.number": turnNumber, "turn.opexActor.memberId": memberId }, { $set: { "turn.opexActor": null } })

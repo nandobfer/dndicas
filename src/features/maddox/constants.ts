@@ -195,6 +195,42 @@ export const MADDOX_CAMPAIGN_STATUS_DEFS: Record<MaddoxCampaignStatus, { label: 
 /** Fases em que não se convida mais ninguém (o link responde 409). */
 export const MADDOX_INVITE_CLOSED_STATUSES: readonly MaddoxCampaignStatus[] = ["ended", "archived"]
 
+/** Fases em que o dono pode reiniciar a campanha (DND-50): já começou e não está no lobby nem em entrevista. */
+export const MADDOX_RESET_STATUSES: readonly MaddoxCampaignStatus[] = ["active", "paused", "ended", "archived"]
+
+/** Reiniciar a campanha (DND-50): textos da tela e das recusas. */
+export const MADDOX_RESET_TEXTS = {
+    button: "Reiniciar campanha",
+    dialogTitle: "Reiniciar campanha?",
+    dialogBody:
+        "A história jogada, o diário, os NPCs, os combates, as imagens de cena e as memórias da campanha serão apagados. Os personagens voltam à ficha do fim da entrevista. Membros, cenário e configurações são mantidos. Essa ação não pode ser desfeita.",
+    cancel: "Cancelar",
+    notice: "O dono reiniciou a campanha.",
+    forbidden: "Só o dono da campanha pode reiniciá-la.",
+    notStarted: "A campanha ainda não começou: não há o que reiniciar.",
+    inProgress: "O reinício da campanha ainda está em andamento.",
+    sheetsAdjusting: "O Maddox está ajustando as fichas.",
+    memoriesPending: "A rede de memórias está indisponível: as memórias da partida anterior ainda não foram apagadas. Tente de novo em instantes.",
+    retry: "Tentar de novo",
+} as const
+
+/** Parâmetro da tela da campanha que mostra o aviso do reinício (a mesa aberta redireciona com ele). */
+export const MADDOX_RESET_NOTICE_PARAM = "aviso"
+export const MADDOX_RESET_NOTICE_VALUE = "reiniciada"
+
+/** Aviso ao dono quando o Maddox não conseguiu devolver a ficha ao fim da entrevista (DND-50). */
+export const maddoxSheetRestoreFailedMessage = (characterName: string) => `O Maddox não conseguiu ajustar a ficha de ${characterName || "um personagem"}. A ficha ficou como estava.`
+
+/** Situações do ajuste da ficha pelo Maddox depois do reinício (DND-50). */
+export const MADDOX_SHEET_RESTORE_STATUSES = ["pending", "done", "failed"] as const
+export type MaddoxSheetRestoreStatus = (typeof MADDOX_SHEET_RESTORE_STATUSES)[number]
+/** Ajuste `pending` sem execução viva depois disto (processo reiniciado) vira falha. */
+export const MADDOX_SHEET_RESTORE_STALE_MS = 10 * 60 * 1000
+/** Teto de uma geração do ajuste da ficha. */
+export const MADDOX_SHEET_RESTORE_TIMEOUT_MS = 4 * 60 * 1000
+/** Espera máxima pelas execuções vivas dos Personagens Opex antes da limpeza do reinício. */
+export const MADDOX_RESET_OPEX_WAIT_MS = 5_000
+
 export const MADDOX_CAMPAIGN_AUDIT_ENTITY = "CampanhaMaddox"
 /** Correções do Maddox na ficha de um personagem (DND-41: preparação do combate e pedidos de ajuste). */
 export const MADDOX_SHEET_AUDIT_ENTITY = "FichaPersonagem"
@@ -355,6 +391,7 @@ export const MADDOX_VALIDATION_CONSUMPTION_ORIGIN = "maddox-validation"
 export const MADDOX_COMBAT_PREP_CONSUMPTION_ORIGIN = "maddox-combat-prep"
 export const MADDOX_COMBAT_ADJUST_CONSUMPTION_ORIGIN = "maddox-combat-adjust"
 export const MADDOX_SNEAK_ATTACK_CONSUMPTION_ORIGIN = "maddox-sneak-attack"
+export const MADDOX_SHEET_RESTORE_CONSUMPTION_ORIGIN = "maddox-sheet-restore"
 
 /** Servidor MCP do Maddox registrado no OpenCode (ferramentas do narrador quando o provedor é o OpenCode). */
 export const MADDOX_MCP_SERVER_NAME = "dndicas-maddox"

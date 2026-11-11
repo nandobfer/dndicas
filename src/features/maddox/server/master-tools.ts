@@ -46,7 +46,7 @@ import { normalizeCatalogName } from "../catalog-markup"
 import { MADDOX_HIT_POINT_OPERATIONS } from "../hit-points-ops"
 import { MaddoxCampaignMemberModel, MaddoxCampaignModel, MaddoxCharacterModel, MaddoxNpcModel, type IMaddoxCampaign, type IMaddoxCharacter, type IMaddoxNpc } from "../models"
 import { MADDOX_ABILITIES, MADDOX_ABILITY_LABELS, MADDOX_SKILLS, checkAbility, checkTitle } from "../check-modifier"
-import { addDraftCheck, addDraftCombat, addDraftNpcPortrait, addDraftOpexNpcFailure, deleteJobOpexNpcConsult, jobOpexNpcConsult, linkJobOpexNpcConsult, jobOpexNpcConsultCount, setJobOpexNpcConsult, setDraftActionOptions, jobDraftChecks, jobDraftCombat, jobDraftSceneImage, jobWorkspace, maddoxJobMeta, setDraftSceneImage, type MaddoxDraftCombatReward } from "./game-live"
+import { addDraftCheck, isAbortedMaddoxJob, addDraftCombat, addDraftNpcPortrait, addDraftOpexNpcFailure, deleteJobOpexNpcConsult, jobOpexNpcConsult, linkJobOpexNpcConsult, jobOpexNpcConsultCount, setJobOpexNpcConsult, setDraftActionOptions, jobDraftChecks, jobDraftCombat, jobDraftSceneImage, jobWorkspace, maddoxJobMeta, setDraftSceneImage, type MaddoxDraftCombatReward } from "./game-live"
 import { catalogEntityTypeSchema } from "@/features/mcp/server/catalog-schemas"
 import type { TacticalDraftCombatant } from "./tactical-combat"
 import type { CampaignMemoryView } from "@/features/engramind/campaign-memory-format"
@@ -1193,6 +1193,8 @@ export function findMaddoxTool(name: string): MaddoxMasterTool | undefined {
 
 /** Executa uma ferramenta validando a entrada; falha vira `MaddoxToolError` com mensagem em pt-BR. */
 export async function runMaddoxTool(tool: MaddoxMasterTool, context: MaddoxToolContext, rawInput: unknown): Promise<unknown> {
+    // Reinício da campanha (DND-50): a geração interrompida que ainda roda não grava mais nada.
+    if (!tool.readOnly && context.jobId && isAbortedMaddoxJob(context.jobId)) throw new MaddoxToolError("Esta narração foi interrompida: a campanha foi reiniciada.")
     const parsed = tool.input.safeParse(rawInput ?? {})
     if (!parsed.success) throw new MaddoxToolError(`Entrada inválida para ${tool.name}: ${parsed.error.issues.map((issue) => `${issue.path.join(".") || "entrada"}: ${issue.message}`).join("; ")}`)
     try {
