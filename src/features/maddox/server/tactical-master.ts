@@ -376,6 +376,8 @@ export async function monsterAction(campaignId: Types.ObjectId, jobId: string, t
         const mode = combineModes(computed.mode === "advantage" || asked === "advantage", computed.mode === "disadvantage" || asked === "disadvantage")
         const ac = target.kind === "character" ? (workspace.sheets[target.key]?.armorClass ?? 10) + (target.state.flags.shield ? 5 : 0) : target.state.stats.ac
         const attackRoll = await rollExpression(d20Expression(action.bonus ?? 0), { mode, label: `${attacker.name} · ${action.name}` })
+        // DND-49: a Maestria Drenar vale para a PRÓXIMA jogada de ataque do adversário.
+        if (attacker.state.flags.sapped) attacker.state.flags.sapped = null
         const d20 = keptD20Of(attackRoll)
         const outcome = attackOutcome(d20, attackRoll.total, ac, autoCritical(target.state, ranged))
         showRoll(campaignId, jobId, attackRoll, { actorName: attacker.name, label: `${action.name} · ataque`, step: "attack", targetName: target.name, verdict: outcome.critical ? "critical" : outcome.hit ? "hit" : "miss" })
@@ -645,6 +647,9 @@ export async function tacticalView(campaignId: Types.ObjectId, jobId: string | u
             const actor = findActor(combat, slot.actorKey)
             if (!actor) return { nome: slot.name }
             const conditions = actor.state.conditions.map((condition) => MADDOX_CONDITION_LABELS[condition.key])
+            // DND-49: efeitos de maestria registrados (o Maddox narra; Drenar já pesa na próxima jogada de ataque).
+            if (actor.state.flags.sapped) conditions.push(`Drenado por ${actor.state.flags.sapped.byName} (desvantagem no próximo ataque)`)
+            if (actor.state.flags.slowed) conditions.push(`Lentidão de ${actor.state.flags.slowed.byName} (−3 m de deslocamento)`)
             if (actor.kind === "character") {
                 const hp = sheets[actor.key]
                 return { nome: actor.name, tipo: "personagem", iniciativa: slot.total, ...(hp ? { pv: `${hp.hp}/${hp.hpMax}`, ca: hp.armorClass } : {}), condicoes: conditions, ...(actor.state.dead ? { morto: true } : actor.state.hpZero ? { morrendo: !actor.state.stable, estavel: actor.state.stable } : {}), ...(actor.state.concentration ? { concentracao: actor.state.concentration.spell } : {}) }

@@ -9,6 +9,7 @@ import {
     type MaddoxStandardAction,
 } from "./constants"
 import { abilityModifier, canAct, type CombatCondition, type CombatEconomy } from "./combat-rules"
+import type { MaddoxMasteryKey } from "./weapon-mastery"
 
 /**
  * Opções PURAS do personagem no combate tático (Maddox 7): o que ele PODE usar agora, por Ação, Ação bônus e reação.
@@ -48,6 +49,8 @@ export interface OptionWeapon {
     properties: string[]
     /** Dado da propriedade Versátil ("Versátil (1d8)"): a opção de duas mãos (DND-41). */
     versatileDice?: { quantidade: number; tipo: string } | null
+    /** DND-49: maestria da arma no catálogo, só quando o personagem a domina (`weaponMasteries` da ficha). */
+    mastery?: MaddoxMasteryKey | null
 }
 
 export interface OptionSpell {
@@ -63,6 +66,8 @@ export interface OptionSpell {
     damageType: string | null
     description: string
     profile: CombatProfile | null
+    /** DND-49: componente Verbal (conjurar revela quem está escondido). */
+    verbal?: boolean
 }
 
 export interface OptionItem {
@@ -98,10 +103,11 @@ export interface CombatOption {
     target: CombatOptionTarget
     multiTarget: boolean
     resolution: CombatOptionResolution
-    attack?: { bonus: number; damage: string; damageType: string | null; ranged: boolean; light: boolean; finesse?: boolean; riders?: CombatRider[] }
+    /** `mastery`/`modifier` (DND-49): maestria da arma dominada e o modificador de atributo usado (Garantido, Derrubar). */
+    attack?: { bonus: number; damage: string; damageType: string | null; ranged: boolean; light: boolean; finesse?: boolean; riders?: CombatRider[]; mastery?: MaddoxMasteryKey | null; modifier?: number }
     save?: { ability: AttributeType; dc: number; halfOnSave: boolean; damage: string | null; damageType: string | null }
     heal?: { dice: string }
-    spell?: { circle: number; levels: number[]; concentration: boolean }
+    spell?: { circle: number; levels: number[]; concentration: boolean; verbal?: boolean }
     charges?: { chargeId: string; used: number; total: number }
     /** Ações comuns com teste: perícias que o jogador escolhe. */
     skills?: string[]
@@ -264,9 +270,9 @@ export function weaponProperties(raw: readonly { name?: string | null; descripti
     return { properties, versatileDice }
 }
 
-/** Id do item na ficha a partir do id da opção (`weapon:<id>`, `offhand:<id>`, `weapon:<id>:two-handed`, `weapon:<id>:thrown`). */
+/** Id do item na ficha a partir do id da opção (`weapon:<id>`, `offhand:<id>`, `cleave:<id>`, `weapon:<id>:two-handed`, `weapon:<id>:thrown`). */
 export function weaponItemId(optionId: string): string | null {
-    const match = /^(?:weapon|offhand):([^:]+)/.exec(optionId)
+    const match = /^(?:weapon|offhand|cleave):([^:]+)/.exec(optionId)
     return match ? match[1]! : null
 }
 
@@ -300,8 +306,30 @@ function weaponOption(weapon: OptionWeapon, sheet: OptionSheet, economy: CombatE
         target: "enemy",
         multiTarget: false,
         resolution: "attack",
-        attack: { bonus, damage, damageType: weapon.damageType, ranged, light: isLight(weapon), finesse: isFinesse(weapon) },
+        attack: { bonus, damage, damageType: weapon.damageType, ranged, light: isLight(weapon), finesse: isFinesse(weapon), mastery: weapon.mastery ?? null, modifier },
     }
+}
+
+/**
+ * DND-49 — ataque extra da propriedade Leve: na Ação bônus, ou, com a Maestria Ágil (Nick) da arma do ataque extra,
+ * como parte da ação Atacar (sem gastar a Ação bônus). Uma vez por turno, acertando ou errando o primeiro ataque.
+ */
+function lightExtraOption(weapon: OptionWeapon, sheet: OptionSheet): CombatOption {
+    if (weapon.mastery === "nick") {
+        const option = weaponOption(weapon, sheet, "action", true)
+        return { ...option, label: `${weapon.name} (outra mão · Maestria Ágil)`, detail: `${option.detail} · parte da ação Atacar, sem gastar a Ação bônus` }
+    }
+    return weaponOption(weapon, sheet, "bonus", true)
+}
+
+/**
+ * DND-49 — Maestria Trespassar: depois de acertar um ataque corpo a corpo com a arma, um 2º ataque com a mesma arma
+ * contra OUTRO inimigo a até 1,5 m do primeiro (o jogador declara; o Maddox pode recusar pela cena), uma vez por turno.
+ * O dano não soma o modificador de atributo, a não ser que seja negativo.
+ */
+function cleaveOption(weapon: OptionWeapon, sheet: OptionSheet): CombatOption {
+    const option = weaponOption(weapon, sheet, "action", true)
+    return { ...option, id: `cleave:${weapon.id}`, label: `${weapon.name} (Maestria Trespassar)`, detail: `${option.detail} · outro inimigo a até 1,5 m do primeiro alvo` }
 }
 
 function unarmedOption(sheet: OptionSheet): CombatOption {
@@ -358,7 +386,7 @@ function spellOption(spell: OptionSpell, sheet: OptionSheet, economy: CombatEcon
         target: resolution === "heal" ? "ally" : resolution === "utility" ? "any" : "enemy",
         multiTarget: resolution === "save",
         resolution,
-        spell: { circle: spell.circle, levels: spell.circle === 0 ? [] : levels, concentration: spell.concentration },
+        spell: { circle: spell.circle, levels: spell.circle === 0 ? [] : levels, concentration: spell.concentration, ...(spell.verbal ? { verbal: true } : {}) },
     }
     if (resolution === "attack") {
         option.attack = { bonus: sheet.spellAttackBonus, damage: amount || "0", damageType: spell.damageType, ranged: true, light: false }
@@ -473,12 +501,19 @@ export function buildCombatOptions(input: CombatOptionsInput): CombatOptions {
         }
         action.push(unarmedOption(sheet))
     }
-    if (economy.bonus && economy.lightAttack) {
-        // Propriedade Leve: o ataque extra é com OUTRA arma Leve (ou a mesma, se houver duas).
+    if (economy.lightAttack && !economy.lightExtraUsed) {
+        // Propriedade Leve: o ataque extra é com OUTRA arma Leve (ou a mesma, se houver duas). Com a Maestria Ágil, entra
+        // na ação Atacar; sem ela, gasta a Ação bônus.
         for (const weapon of weapons.filter(isLight)) {
             if (economy.lightWeaponId && weapon.id === economy.lightWeaponId && weapon.quantity < 2) continue
-            bonus.push(weaponOption(weapon, sheet, "bonus", true))
+            const option = lightExtraOption(weapon, sheet)
+            if (option.economy === "action") action.push(option)
+            else if (economy.bonus) bonus.push(option)
         }
+    }
+    if (economy.cleave && !economy.cleaveUsed) {
+        const weapon = weapons.find((item) => item.id === economy.cleave!.weaponId && item.mastery === "cleave")
+        if (weapon) action.push(cleaveOption(weapon, sheet))
     }
 
     for (const spell of input.spells) {

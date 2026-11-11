@@ -110,30 +110,50 @@ describe("DND-41 — a mesa enquanto o mestre prepara o combate", () => {
         render(<CombatPrepCard message={message([])} />)
         expect(screen.getByTestId("combat-prep-no-changes")).toHaveTextContent("Nenhuma mudança")
     })
+
+    it("DND-49: alteração sem fonte no catálogo aparece recusada com o motivo, e o aviso de catálogo não consultado vem primeiro", () => {
+        const message: MaddoxGameMessageDto = {
+            id: "m2", turnNumber: 3, phase: "master", kind: "combat-prep", memberId: "m", characterName: "Uther", portraitUrl: null, content: "", replyToId: null, skippedByName: null, error: null, check: null, combat: null, createdAt: new Date().toISOString(),
+            combatPrep: {
+                characterName: "Uther",
+                changes: [
+                    { area: "aviso", label: "Catálogo", before: "", after: "", reason: "O Maddox não consultou o catálogo do DnDicas: as correções de regra foram descartadas e vale a lista calculada pelo servidor.", applied: false },
+                    { area: "opcao", label: "Impor as Mãos", before: "não existia", after: "Ação · Cura 5 PV", reason: "Paladino de 1º nível.", applied: false, refused: "Não confirmada no catálogo do DnDicas: sem a fonte do catálogo." },
+                ],
+            },
+        }
+        render(<CombatPrepCard message={message} />)
+        expect(screen.getByTestId("combat-prep-notice")).toHaveTextContent("O Maddox não consultou o catálogo do DnDicas")
+        const refused = screen.getByTestId("combat-prep-change")
+        expect(refused).toHaveAttribute("data-refused", "true")
+        expect(refused).toHaveTextContent("recusada")
+        expect(screen.getByTestId("combat-prep-refused")).toHaveTextContent("Não confirmada no catálogo do DnDicas: sem a fonte do catálogo.")
+        expect(refused).not.toHaveTextContent("a ficha mudou")
+    })
 })
 
 describe("DND-41 — painel da vez: ajuste do Maddox, ataque furtivo e pedido de ajuste", () => {
-    it('mostra "Ajustado pelo Maddox", marca o ataque furtivo e envia a marcação na confirmação', async () => {
+    it('DND-49: mostra "Ajustado pelo Maddox" e avisa que o ataque furtivo é perguntado depois do acerto (nada vai na confirmação)', async () => {
         const onAct = vi.fn(async () => true)
         render(bar({ onAct }))
         fireEvent.click(screen.getByTestId("combat-action-button"))
         const menu = await screen.findByTestId("combat-menu")
         fireEvent.click(within(menu).getByText("Adaga"))
         expect(within(menu).getByTestId("combat-option-adjusted")).toHaveTextContent("Ajustado pelo Maddox: A adaga tem Acuidade: vale a Destreza.")
-        fireEvent.click(within(menu).getByText("Ataque furtivo (+1d6)"))
+        expect(within(menu).getByTestId("combat-sneak-attack")).toHaveTextContent("Ataque furtivo (+1d6): se o ataque acertar e a regra permitir, você escolhe somar antes do dano")
+        expect(within(menu).queryByRole("checkbox")).not.toBeInTheDocument()
         fireEvent.click(within(menu).getByText("Goblin"))
         await act(async () => fireEvent.click(within(menu).getByTestId("combat-confirm")))
-        expect(onAct).toHaveBeenCalledWith({ economy: "action", optionId: "weapon:adaga", targets: ["npc:g"], sneakAttack: true })
+        expect(onAct).toHaveBeenCalledWith({ economy: "action", optionId: "weapon:adaga", targets: ["npc:g"] })
     })
 
-    it("ataque furtivo já usado no turno: a marcação fica desabilitada e não vai na confirmação", async () => {
+    it("ataque furtivo já usado no turno: o aviso diz isso", async () => {
         const onAct = vi.fn(async () => true)
         render(bar({ onAct, me: me({ economy: { ...freshEconomy(), sneakAttackUsed: true } }) }))
         fireEvent.click(screen.getByTestId("combat-action-button"))
         const menu = await screen.findByTestId("combat-menu")
         fireEvent.click(within(menu).getByText("Adaga"))
         expect(within(menu).getByTestId("combat-sneak-attack")).toHaveTextContent("já usado neste turno")
-        expect(within(menu).getByTestId("combat-sneak-attack-input")).toBeDisabled()
         fireEvent.click(within(menu).getByText("Goblin"))
         await act(async () => fireEvent.click(within(menu).getByTestId("combat-confirm")))
         expect(onAct).toHaveBeenCalledWith({ economy: "action", optionId: "weapon:adaga", targets: ["npc:g"] })

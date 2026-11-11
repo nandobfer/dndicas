@@ -5,6 +5,8 @@ import type { CalcPart } from "@/features/character-sheets/utils/dnd-calculation
 import { MADDOX_ABILITIES, checkModifier, proficiencyOf, type MaddoxCheckSheet } from "../check-modifier"
 import { plainText, weaponProperties, type OptionAbility, type OptionItem, type OptionSheet, type OptionSpell, type OptionWeapon } from "../combat-options"
 import type { DeathSaves, HitPoints } from "../combat-rules"
+import { masteryKeyFromName } from "../weapon-mastery"
+import { itemMastery } from "./catalog-references"
 
 /**
  * A ficha D&D no combate tático (Maddox 7) — SOMENTE servidor. Lê o que o combate precisa (PV, CA, iniciativa,
@@ -36,6 +38,8 @@ export interface CombatSheet {
 const plain = <T>(value: unknown): T => JSON.parse(JSON.stringify(value)) as T
 
 interface StoredSheet extends MaddoxCheckSheet {
+    /** DND-49: maestrias de arma dominadas (item do catálogo + chave). */
+    weaponMasteries?: { catalogItemId: Types.ObjectId; mastery: string }[]
     _id: Types.ObjectId
     hpMax: number | null
     hpCurrent: number | null
@@ -74,7 +78,7 @@ export async function loadCombatSheets(sheetIds: readonly string[]): Promise<Map
         import("@/features/character-sheets/utils/dnd-calculations"),
     ])
     type StoredItem = Parameters<typeof computeSheetArmorClass>[1][number] & { _id: Types.ObjectId; sheetId: Types.ObjectId; catalogItemId: Types.ObjectId | null; quantity: number; name: string }
-    type StoredSpell = { _id: Types.ObjectId; sheetId: Types.ObjectId; catalogSpellId: Types.ObjectId | null; name: string; circle: number | null; prepared: boolean; castingTime: string; concentration: boolean; notes?: string }
+    type StoredSpell = { _id: Types.ObjectId; sheetId: Types.ObjectId; catalogSpellId: Types.ObjectId | null; name: string; circle: number | null; prepared: boolean; castingTime: string; concentration: boolean; notes?: string; components?: string[] }
     type StoredTrait = { _id: Types.ObjectId; sheetId: Types.ObjectId; catalogTraitId?: Types.ObjectId | null; catalogFeatId?: Types.ObjectId | null; name: string; description: string }
     const [sheets, items, spells, traits, feats] = await Promise.all([
         CharacterSheet.find({ _id: { $in: ids } }).lean<StoredSheet[]>(),
@@ -85,8 +89,8 @@ export async function loadCombatSheets(sheetIds: readonly string[]): Promise<Map
     ])
     const itemIds = items.map((item) => item.catalogItemId).filter((id): id is Types.ObjectId => Boolean(id))
     const spellIds = spells.map((spell) => spell.catalogSpellId).filter((id): id is Types.ObjectId => Boolean(id))
-    type CatalogItem = { _id: Types.ObjectId; type?: string; itemType?: string; damageDice?: Dice; damageType?: string; properties?: { name?: string; description?: string }[]; effectDice?: Dice; description?: string }
-    type CatalogSpell = { _id: Types.ObjectId; circle?: number; castingTime?: string; saveAttribute?: string; baseDice?: Dice; extraDicePerLevel?: Dice; description?: string }
+    type CatalogItem = { _id: Types.ObjectId; type?: string; itemType?: string; damageDice?: Dice; damageType?: string; properties?: { name?: string; description?: string }[]; effectDice?: Dice; description?: string; mastery?: unknown }
+    type CatalogSpell = { _id: Types.ObjectId; circle?: number; castingTime?: string; saveAttribute?: string; baseDice?: Dice; extraDicePerLevel?: Dice; description?: string; component?: string[] }
     const [{ ItemModel }, { Spell }] = await Promise.all([import("@/features/items/database/item"), import("@/features/spells/models/spell")])
     const [catalogItems, catalogSpells] = await Promise.all([
         itemIds.length ? ItemModel.find({ _id: { $in: itemIds } }).lean<CatalogItem[]>() : Promise.resolve([] as CatalogItem[]),
@@ -138,7 +142,11 @@ export async function loadCombatSheets(sheetIds: readonly string[]): Promise<Map
                     const catalog = itemById.get(String(item.catalogItemId))!
                     // DND-41: o catálogo grava a propriedade como menção em `description` (o `name` costuma vir vazio).
                     const { properties, versatileDice } = weaponProperties(catalog.properties)
-                    return { id: String(item._id), name: plainText(item.name), quantity: item.quantity ?? 1, damageDice: catalog.damageDice ?? null, damageType: catalog.damageType ?? null, properties, versatileDice }
+                    // DND-49: a maestria do catálogo só vale para a arma que o personagem domina (`weaponMasteries`).
+                    const mastered = (sheet.weaponMasteries ?? []).find((entry) => String(entry.catalogItemId) === String(item.catalogItemId))
+                    const catalogMastery = itemMastery(catalog.mastery)?.key ?? null
+                    const mastery = mastered && catalogMastery && masteryKeyFromName(mastered.mastery) === catalogMastery ? catalogMastery : null
+                    return { id: String(item._id), name: plainText(item.name), quantity: item.quantity ?? 1, damageDice: catalog.damageDice ?? null, damageType: catalog.damageType ?? null, properties, versatileDice, mastery }
                 }),
             spells: own(spells).map((spell) => {
                 const catalog = spell.catalogSpellId ? spellById.get(String(spell.catalogSpellId)) : undefined
@@ -155,6 +163,7 @@ export async function loadCombatSheets(sheetIds: readonly string[]): Promise<Map
                     damageType: null,
                     description: plainText(catalog?.description ?? spell.notes ?? ""),
                     profile: null,
+                    verbal: (catalog?.component ?? spell.components ?? []).some((component) => /^(verbal|verboso|v)$/i.test(String(component).trim())),
                 }
             }),
             items: ownItems

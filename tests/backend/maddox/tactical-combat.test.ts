@@ -1245,54 +1245,95 @@ describe("DND-41 — ataque furtivo", () => {
         return { ...built, dagger: options.action.find((option) => option.id.startsWith("weapon:") && !option.id.endsWith(":thrown"))! }
     }
 
-    it("a marcação aparece só na arma elegível, entra na rolagem do dano e vale uma vez por turno", async () => {
+    const actionOf = async (id: string) => (await MaddoxCampaignMessageModel.findOne({ campaignId: id, kind: "combat-action" }).sort({ _id: -1 }).lean())!
+
+    it("DND-49: o furtivo só aparece na arma elegível e é perguntado depois do acerto; 'Somar' entra no dano e vale uma vez por turno", async () => {
         const { id, kael, dagger } = await rogueScene()
         expect(dagger.attack).toMatchObject({ bonus: 5, damage: "1d4+3", finesse: true, riders: [{ key: "sneak-attack", label: "Ataque furtivo (+2d6)", dice: "2d6" }] })
         const options = (await game.getGameState(id, kael.userId)).me.combat!.options!
         expect(options.action.find((option) => option.id === "unarmed")!.attack!.riders).toBeUndefined()
-        await expect(actions.submitCombatAction(id, { economy: "action", optionId: "unarmed", targets: ["npc:gob"], sneakAttack: true }, kael.userId)).rejects.toMatchObject({ code: "SNEAK_ATTACK_UNAVAILABLE" })
-        await actions.submitCombatAction(id, { economy: "action", optionId: dagger.id, targets: ["npc:gob"], sneakAttack: true }, kael.userId)
-        expect(combatPrepAi.sneak).toHaveBeenCalledTimes(1)
-        const message = (await MaddoxCampaignMessageModel.findOne({ campaignId: id, kind: "combat-action" }).lean())!
-        expect(message.combatAction!.steps[1]).toMatchObject({ kind: "damage", dice: "1d4+3+2d6", note: "ataque furtivo +2d6" })
-        expect(message.combatAction!.summary).toContain("Ataque furtivo (+2d6)")
+        await actions.submitCombatAction(id, { economy: "action", optionId: dagger.id, targets: ["npc:gob"] }, kael.userId)
+        let message = await actionOf(id)
+        // Antes do ataque nada é perguntado nem somado.
+        expect(message.combatAction!.steps.map((step) => step.kind)).toEqual(["attack", "damage"])
+        expect(message.combatAction!.steps[1]).toMatchObject({ dice: "1d4+3" })
         dice.players.set(kael.userId, [[15], [3, 4, 5]])
         await actions.rollCombatAction(id, String(message._id), kael.userId)
+        expect(combatPrepAi.sneak).toHaveBeenCalledTimes(1)
+        message = await actionOf(id)
+        expect(message.combatAction!.steps.map((step) => [step.kind, step.status])).toEqual([["attack", "done"], ["sneak-choice", "pending"], ["damage", "pending"]])
+        // O dano só rola depois da resposta.
+        await expect(actions.rollCombatAction(id, String(message._id), kael.userId)).rejects.toMatchObject({ code: "SNEAK_CHOICE_PENDING" })
+        await actions.chooseSneakAttack(id, String(message._id), true, kael.userId)
+        message = await actionOf(id)
+        expect(message.combatAction!.steps[2]).toMatchObject({ kind: "damage", dice: "1d4+3+2d6", note: "ataque furtivo +2d6" })
+        expect(message.combatAction!.summary).toContain("Ataque furtivo (+2d6)")
         expect((await stateOf(id, kael.actorKey)).economy.sneakAttackUsed).toBeFalsy()
         await actions.rollCombatAction(id, String(message._id), kael.userId)
         expect((await stateOf(id, kael.actorKey)).economy.sneakAttackUsed).toBe(true)
-        // Segunda vez no mesmo turno: recusada pelo servidor.
+        // Segundo acerto no mesmo turno: não pergunta de novo.
         await MaddoxCombatModel.updateOne({ campaignId: id }, { $set: { "tactical.characters.$[me].economy.action": true, "combatants.0.tactical.defeated": false, "combatants.0.tactical.stats.hp": 7 } }, { arrayFilters: [{ "me.actorKey": kael.actorKey }] })
-        await expect(actions.submitCombatAction(id, { economy: "action", optionId: dagger.id, targets: ["npc:gob"], sneakAttack: true }, kael.userId)).rejects.toMatchObject({ code: "SNEAK_ATTACK_USED" })
+        await actions.submitCombatAction(id, { economy: "action", optionId: dagger.id, targets: ["npc:gob"] }, kael.userId)
+        message = await actionOf(id)
+        dice.players.set(kael.userId, [[15]])
+        await actions.rollCombatAction(id, String(message._id), kael.userId)
+        expect((await actionOf(id)).combatAction!.steps.map((step) => step.kind)).toEqual(["attack", "damage"])
     })
 
-    it("o ataque que erra não gasta o ataque furtivo", async () => {
+    it("DND-49: 'Não somar' segue o dano sem os dados extras e não gasta o furtivo", async () => {
         const { id, kael, dagger } = await rogueScene()
-        await actions.submitCombatAction(id, { economy: "action", optionId: dagger.id, targets: ["npc:gob"], sneakAttack: true }, kael.userId)
-        const message = (await MaddoxCampaignMessageModel.findOne({ campaignId: id, kind: "combat-action" }).lean())!
+        await actions.submitCombatAction(id, { economy: "action", optionId: dagger.id, targets: ["npc:gob"] }, kael.userId)
+        const message = await actionOf(id)
+        dice.players.set(kael.userId, [[15], [3]])
+        await actions.rollCombatAction(id, String(message._id), kael.userId)
+        await actions.chooseSneakAttack(id, String(message._id), false, kael.userId)
+        const after = await actionOf(id)
+        expect(after.combatAction!.steps[1]).toMatchObject({ kind: "sneak-choice", status: "done", success: false })
+        expect(after.combatAction!.steps[2]).toMatchObject({ kind: "damage", dice: "1d4+3" })
+        await actions.rollCombatAction(id, String(message._id), kael.userId)
+        expect((await stateOf(id, kael.actorKey)).economy.sneakAttackUsed).toBeFalsy()
+        // Só o dono da ação responde.
+        await expect(actions.chooseSneakAttack(id, String(message._id), true, kael.userId)).rejects.toMatchObject({ code: "SNEAK_CHOICE_UNAVAILABLE" })
+    })
+
+    it("o ataque que erra não pergunta nem gasta o ataque furtivo", async () => {
+        const { id, kael, dagger } = await rogueScene()
+        await actions.submitCombatAction(id, { economy: "action", optionId: dagger.id, targets: ["npc:gob"] }, kael.userId)
+        const message = await actionOf(id)
         dice.players.set(kael.userId, [[2]])
         await actions.rollCombatAction(id, String(message._id), kael.userId)
+        expect((await actionOf(id)).combatAction!.steps.map((step) => [step.kind, step.status])).toEqual([["attack", "done"], ["damage", "skipped"]])
+        expect(combatPrepAi.sneak).not.toHaveBeenCalled()
         expect((await stateOf(id, kael.actorKey)).economy.sneakAttackUsed).toBeFalsy()
     })
 
-    it("com desvantagem é recusado sem IA; sem vantagem, o Maddox confere o aliado e pode recusar com o motivo (nada gasto)", async () => {
+    it("com desvantagem não pergunta (sem IA); sem vantagem, o Maddox confere o aliado e pode negar", async () => {
         const { id, kael, dagger } = await rogueScene()
         await MaddoxCombatModel.updateOne({ campaignId: id }, { $set: { "tactical.characters.$[me].conditions": [{ key: "poisoned", untilRound: null, source: "veneno" }] } }, { arrayFilters: [{ "me.actorKey": kael.actorKey }] })
-        await expect(actions.submitCombatAction(id, { economy: "action", optionId: dagger.id, targets: ["npc:gob"], sneakAttack: true }, kael.userId)).rejects.toMatchObject({ code: "SNEAK_ATTACK_DENIED" })
+        await actions.submitCombatAction(id, { economy: "action", optionId: dagger.id, targets: ["npc:gob"] }, kael.userId)
+        dice.players.set(kael.userId, [[18, 17]])
+        await actions.rollCombatAction(id, String((await actionOf(id))._id), kael.userId)
         expect(combatPrepAi.sneak).not.toHaveBeenCalled()
-        await MaddoxCombatModel.updateOne({ campaignId: id }, { $set: { "tactical.characters.$[me].conditions": [] } }, { arrayFilters: [{ "me.actorKey": kael.actorKey }] })
+        expect((await actionOf(id)).combatAction!.steps.map((step) => step.kind)).toEqual(["attack", "damage"])
+        await MaddoxCombatModel.updateOne({ campaignId: id }, { $set: { "tactical.characters.$[me].conditions": [], "tactical.characters.$[me].economy.action": true } }, { arrayFilters: [{ "me.actorKey": kael.actorKey }] })
+        await MaddoxCampaignMessageModel.updateMany({ campaignId: id, kind: "combat-action" }, { $set: { "combatAction.status": "resolved" } })
         combatPrepAi.sneak.mockResolvedValueOnce({ ok: false, reason: "Lyra está longe do goblin." })
-        await expect(actions.submitCombatAction(id, { economy: "action", optionId: dagger.id, targets: ["npc:gob"], sneakAttack: true }, kael.userId)).rejects.toMatchObject({ code: "SNEAK_ATTACK_DENIED", message: "Lyra está longe do goblin." })
+        await actions.submitCombatAction(id, { economy: "action", optionId: dagger.id, targets: ["npc:gob"] }, kael.userId)
+        dice.players.set(kael.userId, [[15]])
+        await actions.rollCombatAction(id, String((await actionOf(id))._id), kael.userId)
         expect(combatPrepAi.sneak.mock.calls[0]![0]).toMatchObject({ targetName: "Goblin", allies: ["Lyra"] })
-        expect((await stateOf(id, kael.actorKey)).economy.action).toBe(true)
-        expect(await MaddoxCampaignMessageModel.countDocuments({ campaignId: id, kind: "combat-action" })).toBe(0)
+        expect((await actionOf(id)).combatAction!.steps.map((step) => step.kind)).toEqual(["attack", "damage"])
     })
 
-    it("o alvo caído dá vantagem corpo a corpo: aceito sem consultar a IA", async () => {
+    it("o alvo caído dá vantagem corpo a corpo: pergunta sem consultar a IA, com o motivo gravado no passo", async () => {
         const { id, kael, dagger } = await rogueScene()
         await MaddoxCombatModel.updateOne({ campaignId: id }, { $set: { "combatants.0.tactical.conditions": [{ key: "prone", untilRound: null, source: "queda" }] } })
-        await actions.submitCombatAction(id, { economy: "action", optionId: dagger.id, targets: ["npc:gob"], sneakAttack: true }, kael.userId)
+        await actions.submitCombatAction(id, { economy: "action", optionId: dagger.id, targets: ["npc:gob"] }, kael.userId)
+        expect((await actionOf(id)).combatAction!.steps[0]).toMatchObject({ mode: "advantage", modeReasons: ["alvo caído"] })
+        dice.players.set(kael.userId, [[15, 3]])
+        await actions.rollCombatAction(id, String((await actionOf(id))._id), kael.userId)
         expect(combatPrepAi.sneak).not.toHaveBeenCalled()
+        expect((await actionOf(id)).combatAction!.steps.map((step) => step.kind)).toEqual(["attack", "sneak-choice", "damage"])
     })
 })
 

@@ -3,7 +3,6 @@
 import { useLayoutEffect, useMemo, useRef, useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { Check, Flag, HelpCircle, Loader2, MessageSquareWarning, MinusCircle, Sparkles, Swords, Wand2, X } from "lucide-react"
-import { Checkbox } from "@/core/ui/checkbox"
 import { Button } from "@/components/ui/opex/button"
 import { Textarea } from "@/components/ui/opex/textarea"
 import { OptionTabs } from "@/components/ui/opex/option-tabs"
@@ -213,7 +212,6 @@ export function CombatActionMenu({ economy: economySlot, options, combat, busy, 
     const [level, setLevel] = useState<number | null>(null)
     const [skill, setSkill] = useState<string | null>(null)
     const [freeText, setFreeText] = useState("")
-    const [sneak, setSneak] = useState(false)
     const [adjustText, setAdjustText] = useState("")
     const selected = options.find((option) => option.id === selectedId) ?? null
     const rider = selected?.attack?.riders?.find((item) => item.key === "sneak-attack") ?? null
@@ -238,7 +236,6 @@ export function CombatActionMenu({ economy: economySlot, options, combat, busy, 
         setTargets([])
         setLevel(option.spell?.levels[0] ?? null)
         setSkill(option.skills?.[0] ?? null)
-        setSneak(false)
         setAdjustText("")
     }
 
@@ -296,13 +293,10 @@ export function CombatActionMenu({ economy: economySlot, options, combat, busy, 
                         </p>
                     )}
                     {rider && (
-                        <div className={cn("flex items-center gap-2 text-xs", sneakUsed ? "text-white/40" : "text-white/85")} data-testid="combat-sneak-attack">
-                            <Checkbox id="combat-sneak-attack" checked={sneak} disabled={sneakUsed || busy} onCheckedChange={(value) => setSneak(value === true)} data-testid="combat-sneak-attack-input" />
-                            <label htmlFor="combat-sneak-attack" className={cn(!sneakUsed && "cursor-pointer")}>
-                                {rider.label}
-                            </label>
-                            {sneakUsed && <span className="text-white/40">· já usado neste turno</span>}
-                        </div>
+                        // DND-49: o furtivo é perguntado depois do acerto, antes do dano.
+                        <p className={cn("text-xs", sneakUsed ? "text-white/40" : "text-white/70")} data-testid="combat-sneak-attack">
+                            {rider.label}: {sneakUsed ? "já usado neste turno" : "se o ataque acertar e a regra permitir, você escolhe somar antes do dano"}
+                        </p>
                     )}
                     {needsTarget && (
                         <div className="space-y-1">
@@ -407,7 +401,6 @@ export function CombatActionMenu({ economy: economySlot, options, combat, busy, 
                                     ...(skill ? { skill } : {}),
                                     ...(freeText.trim() ? { freeText: freeText.trim() } : {}),
                                     ...(selected.id === "standard:ready" && freeText.trim() ? { readyTrigger: freeText.trim() } : {}),
-                                    ...(rider && sneak && !sneakUsed ? { sneakAttack: true } : {}),
                                 })
                             }
                             data-testid="combat-confirm"

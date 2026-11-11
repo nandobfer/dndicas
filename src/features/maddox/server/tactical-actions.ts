@@ -6,7 +6,7 @@ import type { DiceRollResponse } from "@/features/dice-roller/types"
 import type { SkillName } from "@/features/character-sheets/types/character-sheet.types"
 import { MADDOX_CAMPAIGN_AUDIT_ENTITY, MADDOX_COMBAT_OFFLINE_GRACE_MS, MADDOX_COMBAT_ROLL_CLAIM_STALE_MS, MADDOX_DECLARATION_VALIDATION_RIGORS, MADDOX_STANDARD_ACTION_DEFS, type MaddoxStandardAction } from "../constants"
 import { MADDOX_ABILITY_LABELS } from "../check-modifier"
-import { adjustDamage, attackMode, attackOutcome, autoCritical, criticalExpression, deathSave, exhaustionPenalty, formatDiceExpression, parseDiceExpression, saveMode } from "../combat-rules"
+import { adjustDamage, attackMode, attackOutcome, autoCritical, criticalExpression, deathSave, exhaustionPenalty, formatDiceExpression, hasCondition, parseDiceExpression, saveMode } from "../combat-rules"
 import { findCombatOption, weaponItemId, type CombatOption } from "../combat-options"
 import type { CombatActionStep, IMaddoxCombatAction, IMaddoxCombatRoll, TacticalCharacterState } from "../combat-types"
 import type { MaddoxCombatActionInput, MaddoxEndCombatTurnInput } from "../combat-schemas"
@@ -18,6 +18,7 @@ import { assertActive, assertPlayersTurn, characterOf, evaluateTurn, getGameStat
 import { d20Expression, findActiveTactical, findActor, keptD20Of, mutateTactical, rollExpression, scheduleAbsenceCheck, type CombatActor, type TacticalCombat } from "./tactical-combat"
 import { characterDamage, characterHealing, concentrationRollDoc, damageCombatant, type CharacterHp } from "./tactical-master"
 import { isOpexUserId } from "./opex-members"
+import { masteryLabel } from "../weapon-mastery"
 
 /**
  * A vez do personagem no combate tático (Maddox 7) — SOMENTE servidor; `userId` é o usuário EFETIVO. O jogador escolhe
@@ -140,8 +141,10 @@ export async function submitCombatAction(campaignId: string, input: MaddoxCombat
         throw new DomainError(409, "Esta opção não tem os dados para o servidor resolver; use \"Outra ação\" e descreva o efeito.", "OPTION_UNRESOLVABLE")
     }
 
-    // DND-41: ataque furtivo — elegível, uma vez por turno e com a condição conferida ANTES de qualquer gasto.
-    const sneakRider = input.sneakAttack ? await assertSneakAttack(campaign, actor, option, targets, view.sheet.option) : null
+    // DND-49: o ataque furtivo é perguntado DEPOIS do acerto (passo `sneak-choice`); aqui só se a opção pode somá-lo.
+    const sneakRider = option.attack?.riders?.find((item) => item.key === "sneak-attack") ?? null
+    // DND-49 — Maestria Trespassar: o 2º ataque é contra OUTRO inimigo.
+    if (option.id.startsWith("cleave:") && targets[0]?.key === actor.state.economy.cleave?.targetKey) throw new DomainError(409, "O ataque da Maestria Trespassar é contra outro inimigo, a até 1,5 m do primeiro alvo.", "CLEAVE_SAME_TARGET")
 
     // Passos e efeitos imediatos.
     const steps: CombatActionStep[] = []
@@ -149,9 +152,11 @@ export async function submitCombatAction(campaignId: string, input: MaddoxCombat
     let status: IMaddoxCombatAction["status"] = "pending"
     const standard = option.id.startsWith("standard:") ? (option.id.slice("standard:".length) as MaddoxStandardAction) : null
     if (option.resolution === "attack") {
-        steps.push(newStep({ kind: "attack", targetKey: targets[0]!.key, targetName: targets[0]!.name, dice: d20Expression(option.attack!.bonus + exhaustionPenalty(actor.state)) }))
+        // DND-49: prévia do modo (o rolador já mostra os dois d20 com o motivo); a rolagem recalcula e é a que vale.
+        const preview = attackMode({ attacker: actor.state, target: targets[0]!.state, ranged: Boolean(option.attack!.ranged), helped: Boolean(actor.state.flags.helped), targetKey: targets[0]!.key })
+        steps.push(newStep({ kind: "attack", targetKey: targets[0]!.key, targetName: targets[0]!.name, dice: d20Expression(option.attack!.bonus + exhaustionPenalty(actor.state)), mode: preview.mode, modeReasons: preview.reasons }))
         // O dano já fica no card: rolado só se o ataque acertar (o erro o marca como pulado).
-        if (option.attack!.damage && option.attack!.damage !== "0") steps.push(newStep({ kind: "damage", targetKey: targets[0]!.key, targetName: targets[0]!.name, dice: sneakRider ? `${option.attack!.damage}+${sneakRider.dice}` : option.attack!.damage, damageType: option.attack!.damageType, ...(sneakRider ? { note: `ataque furtivo +${sneakRider.dice}` } : {}) }))
+        if (option.attack!.damage && option.attack!.damage !== "0") steps.push(newStep({ kind: "damage", targetKey: targets[0]!.key, targetName: targets[0]!.name, dice: option.attack!.damage, damageType: option.attack!.damageType }))
     }
     else if (option.resolution === "auto") steps.push(newStep({ kind: "damage", targetKey: targets[0]?.key ?? null, targetName: targets[0]?.name ?? null, dice: option.attack!.damage, damageType: option.attack!.damageType }))
     else if (option.resolution === "heal") steps.push(newStep({ kind: "heal", targetKey: targets[0]!.key, targetName: targets[0]!.name, dice: option.heal!.dice }))
@@ -172,15 +177,25 @@ export async function submitCombatAction(campaignId: string, input: MaddoxCombat
 
     // Reserva a Ação/Ação bônus (troca condicional pela versão do combate) ANTES de gastar recursos da ficha: uma
     // confirmação concorrente cai em ACTION_ALREADY_USED sem perder espaço, carga ou item.
-    let snapshot: Pick<TacticalCharacterState, "economy" | "concentration" | "flags" | "ready"> | null = null
+    let snapshot: Pick<TacticalCharacterState, "economy" | "concentration" | "flags" | "ready" | "conditions"> | null = null
+    let revealed = false
     await mutateTactical(campaign._id, (current) => {
         const me = findActor(current, actor.key)
         if (!me || me.kind !== "character") throw new DomainError(409, "Não há combate tático em andamento.", "NO_COMBAT")
-        snapshot = structuredClone({ economy: me.state.economy, concentration: me.state.concentration, flags: me.state.flags, ready: me.state.ready })
+        snapshot = structuredClone({ economy: me.state.economy, concentration: me.state.concentration, flags: me.state.flags, ready: me.state.ready, conditions: me.state.conditions })
+        revealed = false
         const economy = me.state.economy
-        if (option.economy === "bonus") {
+        if (option.id.startsWith("offhand:") && option.economy === "action") {
+            // DND-49 — Maestria Ágil: o ataque extra da propriedade Leve entra na ação Atacar (sem gastar a Ação bônus).
+            if (!economy.lightAttack || economy.lightExtraUsed) throw new DomainError(409, "O ataque extra da propriedade Leve já foi feito neste turno.", "ACTION_ALREADY_USED")
+            economy.lightExtraUsed = true
+        } else if (option.id.startsWith("cleave:")) {
+            if (!economy.cleave || economy.cleaveUsed) throw new DomainError(409, "A Maestria Trespassar já foi usada neste turno.", "ACTION_ALREADY_USED")
+            economy.cleaveUsed = true
+        } else if (option.economy === "bonus") {
             if (!economy.bonus) throw new DomainError(409, "Você já usou a Ação bônus neste turno.", "ACTION_ALREADY_USED")
             economy.bonus = false
+            if (option.id.startsWith("offhand:")) economy.lightExtraUsed = true
         } else if (option.category === "weapons" && option.resolution === "attack") {
             if (economy.action) {
                 economy.action = false
@@ -197,6 +212,11 @@ export async function submitCombatAction(campaignId: string, input: MaddoxCombat
             economy.action = false
         }
         if (spellLevel) economy.slotSpellCast = true
+        // DND-49: conjurar magia com componente Verbal revela quem estava escondido (sai o Invisível do Esconder-se).
+        if (option.spell?.verbal && me.state.conditions.some(isHiddenCondition)) {
+            me.state.conditions = me.state.conditions.filter((condition) => !isHiddenCondition(condition))
+            revealed = true
+        }
         if (option.spell?.concentration) me.state.concentration = { spell: option.label, sinceRound: current.tactical.round }
         if (standard === "dodge") me.state.flags.dodging = true
         if (standard === "disengage") me.state.flags.disengaged = true
@@ -243,6 +263,8 @@ export async function submitCombatAction(campaignId: string, input: MaddoxCombat
     if (standard === "dodge" || standard === "disengage" || standard === "dash") notes.push(MADDOX_STANDARD_ACTION_DEFS[standard].detail)
     if (standard === "ready") notes.push(`Preparou: ${input.readyTrigger?.trim() || freeText || "gatilho descrito"}`)
     if (option.spell?.concentration) notes.push("concentração")
+    if (revealed) notes.push("saiu do esconderijo (componente Verbal)")
+    if (option.id.startsWith("cleave:")) notes.push("o jogador declara o alvo a até 1,5 m do primeiro")
 
     const doc: IMaddoxCombatAction = {
         combatId: String(combat._id),
@@ -263,7 +285,9 @@ export async function submitCombatAction(campaignId: string, input: MaddoxCombat
         waitRound: null,
         save: option.save ? { ability: option.save.ability, dc: option.save.dc, halfOnSave: option.save.halfOnSave } : null,
         ranged: Boolean(option.attack?.ranged),
-        sneakAttack: sneakRider ? { dice: sneakRider.dice } : null,
+        sneakAttack: null,
+        sneakRider: sneakRider ? { dice: sneakRider.dice } : null,
+        mastery: option.attack?.mastery && option.resolution === "attack" ? { key: option.attack.mastery, modifier: option.attack.modifier ?? 0, proficiency: view.sheet.option.proficiencyBonus } : null,
     }
     doc.summary = actionSummary(doc, notes)
     const message = await MaddoxCampaignMessageModel.create({
@@ -285,36 +309,30 @@ export async function submitCombatAction(campaignId: string, input: MaddoxCombat
     return getGameState(campaignId, userId)
 }
 
+/** Invisível vindo do Esconder-se (DND-49: sai depois de um ataque ou de uma magia com componente Verbal). */
+const isHiddenCondition = (condition: { key: string; source?: string }) => condition.key === "invisible" && condition.source === "Esconder"
+
 /**
- * DND-41: o ataque furtivo pedido vale? A opção precisa ter o dano adicional (arma de Acuidade ou à distância de quem tem
- * a característica), ainda não usado no turno e com a condição: vantagem (aceita sem IA), desvantagem (recusa) ou, sem
- * nenhuma das duas, um aliado a até 1,5 m do alvo (JEV com a chave ligada; senão, o narrador). Falha da conferência
- * aceita (o jogo não trava; fica no log). Recusa = 409 com o motivo, nada gasto.
+ * DND-49: ataque que acertou sem vantagem nem desvantagem — o furtivo vale com um aliado consciente a até 1,5 m do alvo
+ * (JEV com a chave ligada; senão, geração curta do narrador). Falha da conferência = vale (o jogo não trava; fica no log).
  */
-async function assertSneakAttack(campaign: CampaignDoc, actor: Extract<CombatActor, { kind: "character" }>, option: CombatOption, targets: CombatActor[], sheet: { level: number }): Promise<{ dice: string }> {
-    const rider = option.attack?.riders?.find((item) => item.key === "sneak-attack")
-    if (!rider) throw new DomainError(409, "Esta opção não permite o ataque furtivo (só arma de Acuidade ou à distância).", "SNEAK_ATTACK_UNAVAILABLE")
-    if (actor.state.economy.sneakAttackUsed) throw new DomainError(409, "Você já usou o ataque furtivo neste turno.", "SNEAK_ATTACK_USED")
-    const target = targets[0]
-    if (!target) return { dice: rider.dice }
-    const mode = attackMode({ attacker: actor.state, target: target.state, ranged: Boolean(option.attack?.ranged), helped: Boolean(actor.state.flags.helped) }).mode
-    if (mode === "disadvantage") throw new DomainError(409, "Com desvantagem no ataque não há ataque furtivo.", "SNEAK_ATTACK_DENIED")
-    if (mode === "advantage") return { dice: rider.dice }
+async function sneakAllyCondition(campaign: CampaignDoc, combat: TacticalCombat, actor: Extract<CombatActor, { kind: "character" }>, target: CombatActor): Promise<boolean> {
     try {
-        const combat = await findActiveTactical(campaign._id)
-        const allies = combat ? combat.tactical.characters.filter((state) => state.actorKey !== actor.key && !state.left && !state.dead && !state.hpZero).map((state) => state.name) : []
-        const allyCombatants = combat ? combat.combatants.filter((item) => item.side === "aliado" && item.tactical && !item.tactical.defeated).map((item) => item.name) : []
+        const allies = combat.tactical.characters.filter((state) => state.actorKey !== actor.key && !state.left && !state.dead && !state.hpZero).map((state) => state.name)
+        const allyCombatants = combat.combatants.filter((item) => item.side === "aliado" && item.tactical && !item.tactical.defeated).map((item) => item.name)
         const recent = await MaddoxCampaignMessageModel.find({ campaignId: campaign._id, kind: "declaration", combatTurn: true }).sort({ _id: -1 }).limit(6).select("content").lean<{ content: string }[]>()
         const situation = [campaign.state?.situation?.trim() ?? "", ...recent.reverse().map((item) => item.content)].filter(Boolean).join("\n\n")
         const { checkSneakAttackCondition } = await import("./combat-prep-ai")
         const verdict = await checkSneakAttackCondition({ campaign, characterName: actor.name, targetName: target.name, allies: [...allies, ...allyCombatants], situation })
-        if (!verdict.ok) throw new DomainError(409, verdict.reason, "SNEAK_ATTACK_DENIED")
+        return verdict.ok
     } catch (error) {
-        if (error instanceof DomainError) throw error
-        log.warn({ err: error instanceof Error ? error.message : String(error), campaignId: String(campaign._id), level: sheet.level }, "[maddox] conferência do ataque furtivo indisponível; o ataque furtivo foi aceito")
+        log.warn({ err: error instanceof Error ? error.message : String(error), campaignId: String(campaign._id) }, "[maddox] conferência do ataque furtivo indisponível; o ataque furtivo foi oferecido")
+        return true
     }
-    return { dice: rider.dice }
 }
+
+/** O ataque deste passo (o mais recente antes dele: entre o ataque e o dano pode haver a escolha do furtivo). */
+const attackBefore = (steps: readonly CombatActionStep[], index: number) => [...steps.slice(0, index)].reverse().find((item) => item.kind === "attack")
 
 /** Dados que o servidor rolou num card (salvaguarda de um adversário) e que ainda não estavam rolados antes. */
 function emitServerSteps(campaignId: string, messageId: string, before: readonly CombatActionStep[], after: readonly CombatActionStep[]) {
@@ -336,13 +354,15 @@ export function actionSummary(action: IMaddoxCombatAction, notes: readonly strin
             if (item.kind === "heal") return `${item.targetName ?? "alvo"} recuperou ${item.amount ?? 0} PV`
             if (item.kind === "save") return `${item.targetName}: salvaguarda ${item.success ? "sucesso" : "falha"}${item.total !== null ? ` (${item.total})` : ""}${item.amount ? `, ${item.amount} de dano` : ""}${item.note ? ` (${item.note})` : ""}`
             if (item.kind === "check") return `teste de ${item.skill ?? "perícia"}: ${item.total}${item.success === null ? "" : item.success ? " (sucesso)" : " (falha)"}`
+            if (item.kind === "sneak-choice") return item.success ? `somou o ataque furtivo (+${item.dice})` : "não somou o ataque furtivo"
             return ""
         })
         .filter(Boolean)
     const free = action.freeText ? `: "${action.freeText}"` : ""
     const spell = action.spellLevel ? ` (${action.spellLevel}º círculo)` : ""
     const sneak = action.sneakAttack ? ` + Ataque furtivo (+${action.sneakAttack.dice})` : ""
-    return `${action.actorName} — ${slot}: ${action.label}${sneak}${spell}${targets}${free}${parts.length ? ` → ${parts.join("; ")}` : ""}${notes.length ? ` [${notes.join("; ")}]` : ""}${action.status === "cancelled" ? " (cancelada)" : ""}`
+    const allNotes = [...notes, ...(action.masteryNotes ?? [])]
+    return `${action.actorName} — ${slot}: ${action.label}${sneak}${spell}${targets}${free}${parts.length ? ` → ${parts.join("; ")}` : ""}${allNotes.length ? ` [${allNotes.join("; ")}]` : ""}${action.status === "cancelled" ? " (cancelada)" : ""}`
 }
 
 /** O jogador rola o próximo passo pendente da ação (ataque, dano, cura, teste). */
@@ -358,6 +378,7 @@ export async function rollCombatAction(campaignId: string, actionId: string, use
     if (action.status !== "pending") throw new DomainError(409, "Esta ação já foi resolvida.", "ACTION_RESOLVED")
     const index = action.steps.findIndex((item) => item.status === "pending")
     if (index < 0) throw new DomainError(409, "Esta ação já foi resolvida.", "ACTION_RESOLVED")
+    if (action.steps[index]!.kind === "sneak-choice") throw new DomainError(409, "Escolha antes se soma o ataque furtivo ao dano.", "SNEAK_CHOICE_PENDING")
     const combat = await findActiveTactical(campaign._id)
     const actor = combat ? findActor(combat, action.actorKey) : null
     if (!combat || !actor || actor.kind !== "character") throw new DomainError(409, "O combate terminou.", "NO_COMBAT")
@@ -401,23 +422,44 @@ async function rollClaimedStep(
     // Rola fora da troca condicional: uma nova tentativa de gravação não rola de novo.
     let roll: DiceRollResponse
     let mode: CombatActionStep["mode"] = "normal"
+    let modeReasons: string[] = []
     let helpedUsed = false
+    let vexUsed = false
+    let sneakOffer = false
+    let toppleRoll: DiceRollResponse | null | undefined
     const target = current.targetKey ? findActor(combat, current.targetKey) : null
+    const mastery = action.mastery ?? null
+    const toppleDc = mastery ? 8 + mastery.modifier + mastery.proficiency : 0
     if (current.kind === "attack") {
         if (!target) throw new DomainError(409, "O alvo saiu do combate.", "INVALID_TARGET")
         const ranged = Boolean(action.ranged)
         const helped = Boolean(actor.state.flags.helped)
-        mode = attackMode({ attacker: actor.state, target: target.state, ranged, helped }).mode
+        const computed = attackMode({ attacker: actor.state, target: target.state, ranged, helped, targetKey: target.key })
+        mode = computed.mode
+        modeReasons = computed.reasons
+        vexUsed = computed.reasons.includes("Maestria Afligir")
         helpedUsed = helped
         roll = await rollExpression(current.dice, { mode, label: `${action.label} · ataque`, userId: message.userId })
+        const ac = target.kind === "combatant" ? target.state.stats.ac : 10
+        const hit = attackOutcome(keptD20Of(roll), roll.total, ac, autoCritical(target.state, ranged)).hit
+        // DND-49: furtivo perguntado depois do acerto — uma vez por turno, nunca com desvantagem; com vantagem vale direto,
+        // sem ela, com um aliado a até 1,5 m do alvo.
+        if (hit && action.sneakRider && !actor.state.economy.sneakAttackUsed && !computed.disadvantage && action.steps[index + 1]?.kind === "damage") {
+            sneakOffer = computed.advantage || (await sneakAllyCondition(campaign, combat, actor, target))
+        }
+        // DND-49 — Maestria Derrubar: o alvo atingido faz salvaguarda de Constituição (o servidor rola UMA vez, aqui).
+        if (hit && mastery?.key === "topple" && target.kind === "combatant" && !hasCondition(target.state, "prone")) {
+            const forced = saveMode(target.state, "constitution")
+            toppleRoll = forced === "fail" ? null : await rollExpression(d20Expression(target.state.stats.saves.constitution ?? 0), { mode: forced, label: `${target.name} · salvaguarda (Maestria Derrubar)` })
+        }
     } else if (current.kind === "check") {
         const skill = (current.skill ?? "Furtividade") as SkillName
         const modifier = view ? sheetSkill(view.sheet, skill).value + exhaustionPenalty(actor.state) : 0
         roll = await rollExpression(d20Expression(modifier), { label: `Teste de ${skill}`, userId: message.userId })
     } else {
-        const previous = action.steps[index - 1]
+        const previous = attackBefore(action.steps, index)
         const expression = parseDiceExpression(current.dice)
-        const critical = Boolean(previous?.kind === "attack" && previous.critical)
+        const critical = Boolean(previous?.critical)
         roll = await rollExpression(expression ? formatDiceExpression(critical ? criticalExpression(expression) : expression) : current.dice, { label: `${action.label} · ${current.kind === "heal" ? "cura" : "dano"}`, userId: message.userId })
     }
 
@@ -437,11 +479,13 @@ async function rollClaimedStep(
     let steps: CombatActionStep[] = []
     let hpWrites: { state: TacticalCharacterState; hp: CharacterHp }[] = []
     let extraRolls: Record<string, unknown>[] = []
+    let masteryNotes: string[] = []
 
     await mutateTactical(campaign._id, async (live) => {
         steps = action.steps.map((item) => ({ ...item }))
         hpWrites = []
         extraRolls = []
+        masteryNotes = [...(action.masteryNotes ?? [])]
         const done = steps[index]!
         done.status = "done"
         done.roll = roll
@@ -451,6 +495,12 @@ async function rollClaimedStep(
         if (!me || me.kind !== "character") return
         if (helpedUsed) me.state.flags.helped = null
         const liveTarget = done.targetKey ? findActor(live, done.targetKey) : null
+        if (done.kind === "attack") {
+            done.modeReasons = modeReasons
+            // DND-49: o ataque revela quem estava escondido (a vantagem já valeu para este ataque) e gasta o Afligir usado.
+            me.state.conditions = me.state.conditions.filter((condition) => !isHiddenCondition(condition))
+            if (vexUsed) me.state.flags.vex = null
+        }
         if (done.kind === "attack" && liveTarget) {
             const ac = liveTarget.kind === "combatant" ? liveTarget.state.stats.ac : 10
             const ranged = Boolean(action.ranged)
@@ -459,15 +509,28 @@ async function rollClaimedStep(
             done.critical = outcome.critical
             const next = steps[index + 1]
             if (next && next.kind === "damage") {
-                if (!outcome.hit) next.status = "skipped"
-                else if (!parseDiceExpression(next.dice)?.terms.length) {
+                if (!outcome.hit) {
+                    // DND-49 — Maestria Garantido: no erro, dano igual ao modificador usado (do mesmo tipo); com ≤ 0, nada.
+                    if (mastery?.key === "graze" && mastery.modifier > 0) {
+                        next.status = "done"
+                        next.roller = "server"
+                        next.total = mastery.modifier
+                        next.dice = String(mastery.modifier)
+                        next.note = masteryLabel("graze")
+                        applyDamageTo(live, liveTarget, next, mastery.modifier, false, hpWrites, extraRolls)
+                    } else next.status = "skipped"
+                } else if (!parseDiceExpression(next.dice)?.terms.length) {
                     // Sem dados no dano (ataque desarmado): o valor fixo entra direto.
                     const amount = Number.parseInt(next.dice, 10) || 0
                     next.status = "done"
                     next.total = amount
                     applyDamageTo(live, liveTarget, next, amount, outcome.critical, hpWrites, extraRolls)
+                } else if (sneakOffer && action.sneakRider) {
+                    // DND-49: o jogador decide antes do dano se soma o ataque furtivo.
+                    steps.splice(index + 1, 0, newStep({ kind: "sneak-choice", targetKey: liveTarget.key, targetName: liveTarget.name, dice: action.sneakRider.dice, note: `Somar ataque furtivo (+${action.sneakRider.dice})?` }))
                 }
             }
+            if (outcome.hit && mastery && liveTarget.kind === "combatant") applyHitMastery(mastery, { me, target: liveTarget, ranged, weaponId: weaponItemId(action.optionId), toppleRoll, toppleDc, steps, notes: masteryNotes })
         } else if (done.kind === "damage") {
             if (action.category === "spells" && action.steps.some((item) => item.kind === "damage") && action.targets.length && !action.steps.some((item) => item.kind === "attack")) {
                 // Magia de salvaguarda (ou acerto automático): cada alvo.
@@ -490,9 +553,11 @@ async function rollClaimedStep(
                 }
                 done.amount = roll.total
             } else if (liveTarget) {
-                applyDamageTo(live, liveTarget, done, roll.total, Boolean(steps[index - 1]?.critical), hpWrites, extraRolls)
+                applyDamageTo(live, liveTarget, done, roll.total, Boolean(attackBefore(steps, index)?.critical), hpWrites, extraRolls)
                 // DND-41: o ataque furtivo conta como usado quando o dano com ele é rolado (o ataque que erra não gasta).
                 if (action.sneakAttack) me.state.economy.sneakAttackUsed = true
+                // DND-49 — Afligir e Lentidão: valem quando o acerto causa dano.
+                if ((done.amount ?? 0) > 0 && mastery && liveTarget.kind === "combatant") applyDamageMastery(mastery, { me, target: liveTarget, round: live.tactical.round, notes: masteryNotes })
             }
         } else if (done.kind === "heal" && liveTarget && liveTarget.kind === "character") {
             const hp = await sheetHp(liveTarget.state)
@@ -509,7 +574,7 @@ async function rollClaimedStep(
     })
 
     const resolved = !steps.some((item) => item.status === "pending")
-    const nextAction: IMaddoxCombatAction = { ...action, steps, status: resolved ? "resolved" : "pending" }
+    const nextAction: IMaddoxCombatAction = { ...action, steps, status: resolved ? "resolved" : "pending", masteryNotes }
     nextAction.summary = actionSummary(nextAction)
     await MaddoxCampaignMessageModel.updateOne({ _id: message._id, "combatAction.rollingAt": claimedAt }, { $set: { combatAction: { ...nextAction, cancellable: false, rollingStep: null, rollingAt: null } } })
     for (const write of hpWrites) await writeHp(write.state, write.hp)
@@ -523,6 +588,85 @@ async function rollClaimedStep(
         await advanceAfterChecks(campaign._id, message.turnNumber, action.waitRound)
     }
     return { roll, state: await getGameState(campaignId, userId) }
+}
+
+type MasteryState = NonNullable<IMaddoxCombatAction["mastery"]>
+type CharacterActor = Extract<CombatActor, { kind: "character" }>
+type CombatantActor = Extract<CombatActor, { kind: "combatant" }>
+
+/**
+ * DND-49 — efeitos de maestria no acerto (regras das entidades "Maestria: …" do catálogo): Drenar (desvantagem no próximo
+ * ataque do alvo), Derrubar (salvaguarda de Constituição; falha = Caído), Empurrar (registrado; o Maddox narra) e
+ * Trespassar (libera o 2º ataque corpo a corpo contra outro inimigo, uma vez por turno).
+ */
+function applyHitMastery(mastery: MasteryState, input: { me: CharacterActor; target: CombatantActor; ranged: boolean; weaponId: string | null; toppleRoll: DiceRollResponse | null | undefined; toppleDc: number; steps: CombatActionStep[]; notes: string[] }) {
+    const { me, target, notes } = input
+    if (mastery.key === "sap") {
+        target.state.flags.sapped = { byKey: me.key, byName: me.name }
+        notes.push(`${masteryLabel("sap")}: ${target.name} tem desvantagem na próxima jogada de ataque`)
+    } else if (mastery.key === "topple") {
+        if (hasCondition(target.state, "prone")) return
+        if (input.toppleRoll === undefined) return
+        const success = input.toppleRoll ? input.toppleRoll.total >= input.toppleDc : false
+        input.steps.push(newStep({ kind: "save", targetKey: target.key, targetName: target.name, status: "done", roller: "server", roll: input.toppleRoll, total: input.toppleRoll?.total ?? null, success, note: `${masteryLabel("topple")} · Constituição CD ${input.toppleDc}${input.toppleRoll ? "" : " · falha automática"}` }))
+        if (!success) {
+            target.state.conditions = [...target.state.conditions.filter((condition) => condition.key !== "prone"), { key: "prone", untilRound: null, source: masteryLabel("topple") }]
+            notes.push(`${masteryLabel("topple")}: ${target.name} ficou Caído`)
+        } else notes.push(`${masteryLabel("topple")}: ${target.name} resistiu`)
+    } else if (mastery.key === "push") {
+        notes.push(`${masteryLabel("push")}: ${target.name} pode ser empurrado até 3 m (se for Grande ou menor)`)
+    } else if (mastery.key === "cleave" && !input.ranged && input.weaponId && !me.state.economy.cleaveUsed) {
+        me.state.economy.cleave = { weaponId: input.weaponId, targetKey: target.key }
+    }
+}
+
+/** DND-49 — efeitos de maestria quando o acerto causa dano: Afligir (vantagem no próximo ataque contra o alvo) e Lentidão. */
+function applyDamageMastery(mastery: MasteryState, input: { me: CharacterActor; target: CombatantActor; round: number; notes: string[] }) {
+    const { me, target, notes } = input
+    if (mastery.key === "vex") {
+        me.state.flags.vex = { targetKey: target.key, round: input.round }
+        notes.push(`${masteryLabel("vex")}: vantagem no próximo ataque contra ${target.name}`)
+    } else if (mastery.key === "slow" && !target.state.flags.slowed) {
+        target.state.flags.slowed = { byKey: me.key, byName: me.name }
+        notes.push(`${masteryLabel("slow")}: ${target.name} perde 3 m de deslocamento até o próximo turno de ${me.name}`)
+    }
+}
+
+/**
+ * DND-49: resposta do jogador ao "Somar ataque furtivo?" depois do acerto. Somar = os dados entram no passo de dano (o
+ * furtivo conta como usado quando esse dano é rolado); não somar = o dano segue sem eles. Só o dono da ação responde.
+ */
+export async function chooseSneakAttack(campaignId: string, actionId: string, add: boolean, userId: string): Promise<MaddoxGameStateDto> {
+    const { campaign, member } = await loadAsMember(campaignId, userId)
+    assertActive(campaign)
+    if (!Types.ObjectId.isValid(actionId)) throw new DomainError(404, "Ação não encontrada", "NOT_FOUND")
+    const message = await MaddoxCampaignMessageModel.findOne({ _id: new Types.ObjectId(actionId), campaignId: campaign._id, kind: "combat-action" }).lean<MessageDoc>()
+    const action = message?.combatAction
+    if (!message || !action) throw new DomainError(404, "Ação não encontrada", "NOT_FOUND")
+    if (String(message.memberId) !== String(member._id)) throw new DomainError(403, "Esta ação é de outro jogador.", "NOT_ACTION_OWNER")
+    await assertMemberCanPlay(campaignId, userId)
+    const index = action.status === "pending" ? action.steps.findIndex((item) => item.status === "pending") : -1
+    const choice = index >= 0 ? action.steps[index]! : null
+    if (!choice || choice.kind !== "sneak-choice") throw new DomainError(409, "Não há ataque furtivo para decidir nesta ação.", "SNEAK_CHOICE_UNAVAILABLE")
+    const combat = await findActiveTactical(campaign._id)
+    const actor = combat ? findActor(combat, action.actorKey) : null
+    if (!combat || !actor || actor.kind !== "character") throw new DomainError(409, "O combate terminou.", "NO_COMBAT")
+    const usable = add && !actor.state.economy.sneakAttackUsed
+    const steps = action.steps.map((item, at) => {
+        if (at === index) return { ...item, status: "done" as const, success: usable, note: usable ? `ataque furtivo +${item.dice}` : "sem ataque furtivo" }
+        if (at === index + 1 && item.kind === "damage" && usable) return { ...item, dice: `${item.dice}+${choice.dice}`, note: [item.note, `ataque furtivo +${choice.dice}`].filter(Boolean).join("; ") }
+        return item
+    })
+    const next: IMaddoxCombatAction = { ...action, steps, sneakAttack: usable ? { dice: choice.dice } : null }
+    next.summary = actionSummary(next)
+    const updated = await MaddoxCampaignMessageModel.updateOne(
+        { _id: message._id, "combatAction.status": "pending", [`combatAction.steps.${index}.status`]: "pending", "combatAction.rollingStep": null },
+        { $set: { "combatAction.steps": steps, "combatAction.sneakAttack": next.sneakAttack, "combatAction.summary": next.summary } },
+    )
+    if (updated.modifiedCount === 0) throw new DomainError(409, "Esta escolha já foi feita.", "SNEAK_CHOICE_UNAVAILABLE")
+    log.info({ campaignId, actor: action.actorName, add: usable }, "[maddox] escolha do ataque furtivo")
+    await publishGameChanged(campaign._id)
+    return getGameState(campaignId, userId)
 }
 
 /** Aplica dano a um adversário (resistências) ou a um personagem (ficha), anotando o passo. */
@@ -559,7 +703,10 @@ export async function cancelCombatAction(campaignId: string, actionId: string, u
         const me = findActor(live, actor.key)
         if (!me) return
         const economy = me.state.economy
-        if (action.economy === "bonus") economy.bonus = true
+        if (action.optionId.startsWith("offhand:")) economy.lightExtraUsed = false
+        if (action.optionId.startsWith("cleave:")) economy.cleaveUsed = false
+        else if (action.optionId.startsWith("offhand:") && action.economy === "action") return
+        else if (action.economy === "bonus") economy.bonus = true
         else if (action.category === "weapons") {
             if (rolledAttacks) economy.attacksLeft += 1
             else Object.assign(economy, { action: true, attackAction: false, attacksLeft: 0, lightAttack: false, lightWeaponId: null })

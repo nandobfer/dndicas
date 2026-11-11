@@ -63,6 +63,9 @@ export interface CombatHandlers {
     onRollAction: (actionId: string) => Promise<DiceRollResponse>
     onRollCombat: (rollId: string) => Promise<DiceRollResponse>
     onCancelAction: (actionId: string) => void
+    /** DND-49: "Somar ataque furtivo" / "Não somar" depois do acerto. */
+    onSneakChoice?: (actionId: string, add: boolean) => void
+    sneakChoosing?: boolean
     onDecideReaction: (reactionId: string, choice: string) => void
 }
 
@@ -175,7 +178,7 @@ export function GameMessageList({ messages, myMemberId, maddoxAvatarUrl, color, 
                                         )
                                     ) : null
                                 ) : message.kind === "combat-action" && message.combatAction ? (
-                                    <CombatActionCard message={message} mine={actsAs(message)} replay={replays.get(message.id) ?? null} stepReplays={stepReplaysOf(replays, message.id, message.combatAction.steps.length)} onRoll={combat.onRollAction} onCancel={combat.onCancelAction} />
+                                    <CombatActionCard message={message} mine={actsAs(message)} replay={replays.get(message.id) ?? null} stepReplays={stepReplaysOf(replays, message.id, message.combatAction.steps.length)} onRoll={combat.onRollAction} onCancel={combat.onCancelAction} onSneakChoice={combat.onSneakChoice} sneakChoosing={combat.sneakChoosing} />
                                 ) : message.kind === "combat-roll" && message.combatRoll ? (
                                     <CombatRollCard message={message} mine={actsAs(message)} replay={replays.get(message.id) ?? null} onRoll={combat.onRollCombat} />
                                 ) : message.kind === "combat-reaction" && message.combatReaction ? (
