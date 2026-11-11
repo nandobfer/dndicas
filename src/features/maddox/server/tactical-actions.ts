@@ -551,7 +551,7 @@ async function rollClaimedStep(
                         if (amount) applyDamageTo(live, each, saveStep, amount, false, hpWrites, extraRolls)
                         steps.push(saveStep)
                     } else {
-                        const hitStep = newStep({ kind: "damage", targetKey: each.key, targetName: each.name, status: "done", roller: "server", total: roll.total, damageType: done.damageType })
+                        const hitStep = newStep({ kind: "damage", targetKey: each.key, targetName: each.name, status: "done", roller: "server", roll, total: roll.total, damageType: done.damageType })
                         applyDamageTo(live, each, hitStep, roll.total, false, hpWrites, extraRolls)
                         steps.push(hitStep)
                     }

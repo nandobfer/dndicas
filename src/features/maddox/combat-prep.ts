@@ -51,6 +51,8 @@ function insertOption(list: CombatOption[], option: CombatOption) {
 /** Parcela do tooltip da rolagem quando a preparação muda o bônus ou o dano (DND-47). */
 export const PREP_ADJUSTMENT_LABEL = "Ajuste da preparação do Maddox"
 
+const damageModifier = (damage: string | null | undefined) => parseDiceExpression(damage)?.modifier ?? 0
+
 function patchOption(option: CombatOption, patch: CombatOptionPatch, reason: string): CombatOption {
     const next: CombatOption = { ...option, adjusted: { reason } }
     if (patch.label?.trim()) next.label = patch.label.trim()
@@ -59,8 +61,9 @@ function patchOption(option: CombatOption, patch: CombatOptionPatch, reason: str
     if (patch.attack) {
         next.attack = { ...option.attack, ...patch.attack }
         // DND-47: as parcelas da lista base continuam; o que a preparação mudou no número vira a parcela do ajuste.
-        next.attack.bonusParts = alignModifierParts(option.attack?.bonusParts ?? [], next.attack.bonus, PREP_ADJUSTMENT_LABEL)
-        next.attack.damageParts = alignModifierParts(option.attack?.damageParts ?? [], parseDiceExpression(next.attack.damage)?.modifier ?? 0, PREP_ADJUSTMENT_LABEL)
+        // O modificador que a opção base já tinha (sem parcela nomeada) fica com o rótulo genérico; só a diferença é do ajuste.
+        next.attack.bonusParts = alignModifierParts(alignModifierParts(option.attack?.bonusParts, option.attack?.bonus ?? 0), next.attack.bonus, PREP_ADJUSTMENT_LABEL)
+        next.attack.damageParts = alignModifierParts(alignModifierParts(option.attack?.damageParts, damageModifier(option.attack?.damage)), damageModifier(next.attack.damage), PREP_ADJUSTMENT_LABEL)
     }
     if (patch.save) next.save = { ...patch.save }
     if (patch.heal) next.heal = { ...patch.heal }

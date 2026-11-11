@@ -471,6 +471,23 @@ describe("Maddox 7 — revisão: recursos, concorrência e efeitos", () => {
         expect(await MaddoxCampaignMessageModel.countDocuments({ campaignId: id, kind: "combat-action" })).toBe(0)
     })
 
+    it("DND-47: magia de acerto automático grava a rolagem em cada passo de dano por alvo (tooltip do total)", async () => {
+        const { id, kael } = await scene()
+        hooks.patchOptions = (options) => {
+            ;(options as unknown as { action: unknown[] }).action.unshift({ id: "spell:dardos", category: "spells", economy: "action", label: "Dardos", detail: "", target: "enemy", multiTarget: true, resolution: "auto", attack: { bonus: 0, damage: "3d4+3", damageType: "força", ranged: true, light: false }, spell: { circle: 0, levels: [], concentration: false } })
+        }
+        await actions.submitCombatAction(id, { economy: "action", optionId: "spell:dardos", targets: ["npc:gob"] }, kael.userId)
+        const card = (await MaddoxCampaignMessageModel.findOne({ campaignId: id, kind: "combat-action" }).lean())!
+        dice.players.set(kael.userId, [[1, 1, 1]])
+        await actions.rollCombatAction(id, String(card._id), kael.userId)
+        const steps = (await MaddoxCampaignMessageModel.findById(card._id).lean())!.combatAction!.steps
+        // O primeiro passo é o dano rolado; os seguintes são os passos por alvo, criados pelo servidor.
+        const perTarget = steps.slice(1).filter((step) => step.kind === "damage" && step.targetKey === "npc:gob")
+        expect(perTarget).toHaveLength(1)
+        expect(perTarget[0]!.total).toBe(6)
+        expect(perTarget[0]!.roll).toMatchObject({ total: 6, modifier: 3 })
+    })
+
     it("opção sem os dados para resolver: 409 OPTION_UNRESOLVABLE antes de reservar ou gastar", async () => {
         const { id, kael } = await scene({ kaelHp: 10 })
         await giveTrait(kael.sheetId, "Retomar o Fôlego", "Você pode usar uma Ação Bônus para recuperar Pontos de Vida iguais a 1d10 mais seu nível de Guerreiro.", 1)
