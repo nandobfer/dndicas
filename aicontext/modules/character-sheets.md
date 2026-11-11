@@ -29,6 +29,11 @@ Cada linha de magia exibe uma bolinha compacta `GlassCheckbox` sem cabeçalho pa
 ### Sincronização de PV nível 1
 Quando a ficha está no nível 1 e possui uma classe mencionada, a vida máxima é sincronizada com o dado de vida máximo da classe mais o modificador de Constituição. Níveis acima de 1 permanecem manuais.
 
+### Maestrias de arma (`weaponMasteries`, DND-49)
+A ficha guarda `weaponMasteries: [{ catalogItemId, mastery }]` (chaves `nick | vex | sap | topple | graze | push | slow | cleave`): as
+armas do catálogo cuja maestria o personagem usa, no limite da classe. Quem grava é o Agente Maddox (consolidação da entrevista e
+preparação do combate, com fonte no catálogo); não há edição no editor da ficha. Detalhes em `aicontext/modules/maddox.md` (seção DND-49).
+
 ### Fluxo de subir nível no cabeçalho
 A ficha mostra a tabela de progressão da classe abaixo do escudo de Classe de Armadura, preservando o mesmo popover com `ClassProgressionTable`. Em modo editável, abaixo de XP aparece o botão `Subir de nível`, destacado com a cor `colors.rarity.uncommon`; no nível 20 ele fica indisponível.
 

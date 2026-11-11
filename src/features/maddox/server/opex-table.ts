@@ -269,7 +269,7 @@ async function resolvePendingAction(campaignId: Types.ObjectId, memberId: Types.
     for (let step = 0; step < 10; step++) {
         const pending = await pendingActionOf(campaignId, memberId)
         if (!pending) return
-        const next = pending.combatAction?.steps.find((item) => item.status === "pending")
+        const next = pending.combatAction?.steps?.find((item) => item.status === "pending")
         if (next?.kind === "sneak-choice") await chooseSneakAttack(String(campaignId), String(pending._id), true, userId)
         else await rollCombatAction(String(campaignId), String(pending._id), userId)
     }

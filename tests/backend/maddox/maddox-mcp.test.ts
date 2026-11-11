@@ -11,7 +11,8 @@ vi.mock("@/features/maddox/server/interview-tools", async (importOriginal) => ({
 const runCatalogTool = vi.fn(async (_tool: { name: string }, input: unknown) => ({ itens: [], input }))
 vi.mock("@/features/maddox/server/catalog-tools", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/features/maddox/server/catalog-tools")>()), runCatalogTool }))
 
-const { createMaddoxTurnToken, verifyMaddoxTurnToken, createMaddoxInterviewToken, verifyMaddoxInterviewToken } = await import("@/features/maddox/server/master-turn-token")
+const { createMaddoxTurnToken, verifyMaddoxTurnToken, createMaddoxInterviewToken, verifyMaddoxInterviewToken, createMaddoxCatalogToken } = await import("@/features/maddox/server/master-turn-token")
+const { createCatalogReadLog, openCatalogRun, closeCatalogRun } = await import("@/features/maddox/server/catalog-reads")
 const { enqueueMaddoxJob, waitForCampaignIdle } = await import("@/features/maddox/server/game-live")
 const route = await import("@/app/api/maddox/mcp/route")
 const publicRoute = await import("@/app/api/mcp/route")
@@ -254,5 +255,33 @@ describe("consulta ao catálogo no MCP do Maddox", () => {
         expect(asInterview.result!.isError).toBe(true)
         expect(runMaddoxTool).not.toHaveBeenCalled()
         expect(runInterviewTool).not.toHaveBeenCalled()
+    })
+
+    it("DND-49: o token da preparação do combate só abre o catálogo, registra a entidade lida e vale enquanto o job e a execução estão abertos", async () => {
+        runCatalogTool.mockImplementationOnce(async () => ({ tipo: "Item", id: "adaga", entidade: { name: "Adaga", damageType: "perfurante", description: "Arma simples de corpo a corpo." } }) as never)
+        await withActiveJob(async (jobId) => {
+            const reads = createCatalogReadLog()
+            openCatalogRun("run-1", reads)
+            const turno = createMaddoxCatalogToken({ campaignId: CAMPAIGN, jobId, runId: "run-1" })
+            const read = await rpc(route.POST, "tools/call", { name: "get_catalog_entity", arguments: { turno, tipo: "Item", id: "adaga" } })
+            expect(read.result!.isError).toBeFalsy()
+            expect(reads.refs).toEqual(["Item:adaga"])
+            expect([...reads.reads.values()][0]).toContain("arma simples de corpo a corpo")
+            // Ferramentas que gravam não aceitam o token de catálogo.
+            const write = await rpc(route.POST, "tools/call", { name: "save_npc", arguments: { turno, name: "X" } })
+            expect(write.result!.isError).toBe(true)
+            expect(runMaddoxTool).not.toHaveBeenCalled()
+            // Execução fechada: recusado sem consultar.
+            closeCatalogRun("run-1")
+            runCatalogTool.mockClear()
+            const closed = await rpc(route.POST, "tools/call", { name: "search_catalog", arguments: { turno, tipos: ["Item"] } })
+            expect(closed.result!.isError).toBe(true)
+            expect(runCatalogTool).not.toHaveBeenCalled()
+        })
+        const ended = createMaddoxCatalogToken({ campaignId: CAMPAIGN, jobId: "job-que-acabou", runId: "run-2" })
+        openCatalogRun("run-2", createCatalogReadLog())
+        const late = await rpc(route.POST, "tools/call", { name: "search_catalog", arguments: { turno: ended, tipos: ["Item"] } })
+        expect(late.result!.isError).toBe(true)
+        closeCatalogRun("run-2")
     })
 })

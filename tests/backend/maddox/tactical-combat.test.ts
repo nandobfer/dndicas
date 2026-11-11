@@ -1481,6 +1481,157 @@ describe("DND-49 — maestrias de arma e Esconder-se", () => {
     })
 })
 
+describe("DND-49 — PV fora do combate (ferramenta do narrador)", () => {
+    const tool = async () => (await import("@/features/maddox/server/master-tools")).findMaddoxTool("update_character_hit_points")!
+    const run = async (id: string, input: Record<string, unknown>) => (await import("@/features/maddox/server/master-tools")).runMaddoxTool(await tool(), { campaignId: new mongoose.Types.ObjectId(id), turnNumber: 2 }, input)
+    const sheetOf = async (sheetId: string) => (await CharacterSheet.findById(sheetId).lean<{ hpCurrent: number; deathSavesSuccess: number; deathSavesFailure: number }>())!
+
+    it("cura na ficha (limitada ao máximo), zera os testes contra a morte, audita e põe 'PV de X: 0 → N (motivo)' na mesa", async () => {
+        const { id, kael } = await scene({ kaelHp: 0 })
+        await MaddoxCombatModel.deleteMany({ campaignId: id })
+        await CharacterSheet.collection.updateOne({ _id: new mongoose.Types.ObjectId(kael.sheetId) }, { $set: { deathSavesFailure: 2 } })
+        const result = await run(id, { personagem: "kael", operacao: "curar", valor: 50, motivo: "Lyra fez os primeiros socorros e deu a poção" })
+        expect(result).toMatchObject({ saved: true, personagem: "Kael", pv: "20/20", antes: 0 })
+        expect(await sheetOf(kael.sheetId)).toMatchObject({ hpCurrent: 20, deathSavesFailure: 0 })
+        const line = (await MaddoxCampaignMessageModel.findOne({ campaignId: id, kind: "hit-points" }).lean())!
+        expect(line.content).toBe("PV de Kael: 0 → 20 (Lyra fez os primeiros socorros e deu a poção)")
+        expect(vi.mocked(recordAudit)).toHaveBeenCalledWith(expect.objectContaining({ entidade: "FichaPersonagem", entidadeId: kael.sheetId, depois: expect.objectContaining({ origin: "narrator-hit-points", operation: "curar", hpCurrent: 20 }) }))
+        const view = await game.getGameState(id, kael.userId)
+        expect(view.messages.find((message) => message.kind === "hit-points")!.content).toBe(line.content)
+    })
+
+    it("estabilizar e acordar com 1 PV; descanso longo volta ao máximo", async () => {
+        const { id, kael } = await scene({ kaelHp: 0 })
+        await MaddoxCombatModel.deleteMany({ campaignId: id })
+        await run(id, { personagem: "Kael", operacao: "estabilizar", motivo: "Atadura" })
+        expect(await sheetOf(kael.sheetId)).toMatchObject({ hpCurrent: 0, deathSavesSuccess: 3 })
+        await run(id, { personagem: "Kael", operacao: "acordar", motivo: "Acordou depois de uma hora" })
+        expect((await sheetOf(kael.sheetId)).hpCurrent).toBe(1)
+        await run(id, { personagem: "Kael", operacao: "descanso-longo", motivo: "Noite na estalagem" })
+        expect((await sheetOf(kael.sheetId)).hpCurrent).toBe(20)
+    })
+
+    it("recusada no combate tático ativo (usar apply_effect), sem motivo, em campanha narrativa e para personagem morto", async () => {
+        const { id, kael } = await scene({ kaelHp: 0 })
+        await expect(run(id, { personagem: "Kael", operacao: "curar", valor: 3, motivo: "x" })).rejects.toThrow("combate tático em andamento")
+        await MaddoxCombatModel.deleteMany({ campaignId: id })
+        await expect(run(id, { personagem: "Kael", operacao: "curar", valor: 3, motivo: "" })).rejects.toThrow("Entrada inválida")
+        await MaddoxCharacterModel.updateOne({ _id: kael.characterId }, { $set: { status: "dead" } })
+        await expect(run(id, { personagem: "Kael", operacao: "curar", valor: 3, motivo: "milagre" })).rejects.toThrow("está morto")
+        await MaddoxCampaignModel.updateOne({ _id: id }, { $set: { rigor: "narrativo" } })
+        await expect(run(id, { personagem: "Kael", operacao: "curar", valor: 3, motivo: "x" })).rejects.toThrow("campanha é narrativa")
+        expect((await sheetOf(kael.sheetId)).hpCurrent).toBe(0)
+        expect(await MaddoxCampaignMessageModel.countDocuments({ campaignId: id, kind: "hit-points" })).toBe(0)
+    })
+})
+
+describe("DND-49 — checagem de quem está a 0 PV ao abrir o combate (decisão do dono D3: no job da preparação)", () => {
+    const downAt = (hp: number) => async ({ id: campaignId }: { id: string }) => {
+        const character = (await MaddoxCharacterModel.findOne({ campaignId, name: "Kael" }).lean())!
+        await CharacterSheet.collection.updateOne({ _id: character.sheetId! }, { $set: { hpCurrent: hp } })
+        await MaddoxCharacterModel.updateOne({ _id: character._id }, { $set: { currentState: "Acordou na caverna e cortou a corda." } })
+    }
+
+    it("a história mostra o personagem ativo: o Maddox aplica a recuperação pela regra antes da iniciativa, com a linha na mesa", async () => {
+        combatPrepAi.downed.mockResolvedValue({ decisao: "aplicar", operacao: "curar", valor: 1, motivo: "Acordou na caverna e cortou a corda" })
+        const { id, kael } = await initiativeScene(null, { beforeCombat: downAt(0) })
+        expect(combatPrepAi.downed).toHaveBeenCalledTimes(1)
+        expect(combatPrepAi.downed.mock.calls[0]![0]).toMatchObject({ characterName: "Kael", currentState: "Acordou na caverna e cortou a corda." })
+        expect((await CharacterSheet.findById(kael.sheetId).lean<{ hpCurrent: number }>())!.hpCurrent).toBe(1)
+        expect((await MaddoxCampaignMessageModel.findOne({ campaignId: id, kind: "hit-points" }).lean())!.content).toBe("PV de Kael: 0 → 1 (Acordou na caverna e cortou a corda)")
+        expect((await MaddoxCombatModel.findOne({ campaignId: id }).lean())!.tactical!.characters.find((state) => state.name === "Kael")!.hpZero).toBe(false)
+    })
+
+    it("o Maddox confirma que segue caído: nada muda na ficha e a mesa vê o motivo", async () => {
+        const { id, kael } = await initiativeScene(null, { beforeCombat: downAt(0) })
+        expect((await CharacterSheet.findById(kael.sheetId).lean<{ hpCurrent: number }>())!.hpCurrent).toBe(0)
+        expect((await MaddoxCampaignMessageModel.findOne({ campaignId: id, kind: "hit-points" }).lean())!.content).toBe("Kael segue caído com 0 PV (Segue caído.)")
+    })
+
+    it("ninguém a 0 PV: não chama a IA; falha da checagem: o combate abre sem mudança e a preparação fica pronta", async () => {
+        await initiativeScene()
+        expect(combatPrepAi.downed).not.toHaveBeenCalled()
+        await Promise.all(Object.values(mongoose.connection.collections).map((collection) => collection.deleteMany({})))
+        combatPrepAi.downed.mockRejectedValue(new Error("fora do ar"))
+        const { id, kael } = await initiativeScene(null, { beforeCombat: downAt(0) })
+        expect((await CharacterSheet.findById(kael.sheetId).lean<{ hpCurrent: number }>())!.hpCurrent).toBe(0)
+        expect(await MaddoxCampaignMessageModel.countDocuments({ campaignId: id, kind: "hit-points" })).toBe(0)
+        expect((await MaddoxCombatPrepModel.find({ campaignId: id }).lean()).map((prep) => prep.status)).toEqual(["ready", "ready"])
+    })
+})
+
+describe("DND-49 — maestrias na consolidação da entrevista", () => {
+    it("classe com 'Maestria em Arma' até o nível: as armas do equipamento com maestria no catálogo, no limite do texto da característica", async () => {
+        const { Trait } = await import("@/features/traits/database/trait")
+        const { initialWeaponMasteries } = await import("@/features/maddox/server/sheet-builder")
+        const traitId = new mongoose.Types.ObjectId()
+        await Trait.collection.insertOne({ _id: traitId, name: "Maestria em Arma (Ladino)", status: "active", description: "<p>Use as propriedades de maestria de <b>dois</b> tipos de armas com as quais você tem Proficiência.</p>" })
+        const mention = (cid: mongoose.Types.ObjectId, label: string) => `<span data-type="mention" data-id="${cid}" data-entity-type="Habilidade" class="mention">${label}</span>`
+        const cls = { _id: new mongoose.Types.ObjectId(), name: "Ladino", traits: [{ level: 1, description: mention(traitId, "Maestria em Arma (Ladino)") }] }
+        const weapon = (name: string, mastery: string | null) => ({ _id: new mongoose.Types.ObjectId(), name, type: "arma", ...(mastery ? { mastery: `<span data-type="mention" data-id="r" data-entity-type="Regra" class="mention">Maestria: ${mastery}</span>` } : {}) })
+        const adaga = weapon("Adaga", "Ágil / Nick")
+        const items = [adaga, adaga, weapon("Clava", null), weapon("Arco Curto", "Afligir / Vex"), weapon("Rapieira", "Afligir / Vex")]
+        const chosen = await initialWeaponMasteries({ cls: cls as never, subclass: null } as never, 1, items as never)
+        expect(chosen.map((entry) => [String(entry.catalogItemId), entry.mastery])).toEqual([
+            [String(adaga._id), "nick"],
+            [String(items[3]!._id), "vex"],
+        ])
+        // Classe sem a característica: nada é inventado.
+        expect(await initialWeaponMasteries({ cls: { ...cls, traits: [] } as never, subclass: null } as never, 1, items as never)).toEqual([])
+    })
+})
+
+describe("DND-49 — Referências do catálogo e catálogo lido na preparação", () => {
+    it("a ficha lista tipo + id + nome do que cita (sem o texto das regras); o que não está no catálogo, ou está inativo, sai como sem correspondência", async () => {
+        const { id, kael } = await scene()
+        const { CharacterClass } = await import("@/features/classes/models/character-class")
+        const ladino = new mongoose.Types.ObjectId()
+        const inativa = new mongoose.Types.ObjectId()
+        await CharacterClass.collection.insertMany([
+            { _id: ladino, name: "Ladino", status: "active", description: "Regra secreta do Ladino que não pode ir ao prompt." },
+            { _id: inativa, name: "Classe Velha", status: "inactive" },
+        ])
+        const span = (cid: mongoose.Types.ObjectId, label: string, type = "Classe") => `<span data-type="mention" data-id="${cid}" data-entity-type="${type}" class="mention">${label}</span>`
+        await CharacterSheet.collection.updateOne({ _id: new mongoose.Types.ObjectId(kael.sheetId) }, { $set: { class: `<p>${span(ladino, "Ladino")}</p>`, featuresNotes: `<p>${span(inativa, "Classe Velha")} ${span(new mongoose.Types.ObjectId(), "Talento Sumido", "Talento")}</p>` } })
+        await CharacterItem.collection.insertOne({ sheetId: new mongoose.Types.ObjectId(kael.sheetId), catalogItemId: null, name: "<p>Faca de Osso</p>", quantity: 1, equipped: false, notes: "" })
+        const state = await stateOf(id, kael.actorKey)
+        const context = (await combatPrep.loadPrepSheet(state, new mongoose.Types.ObjectId(id)))!
+        const section = context.sheetText.split("## Referências do catálogo")[1]!.split("\n## ")[0]!
+        expect(section).toContain(`- Classe:${ladino} — Ladino`)
+        expect(section).toContain('- Classe "Classe Velha" — sem correspondência no catálogo')
+        expect(section).toContain('- Talento "Talento Sumido" — sem correspondência no catálogo')
+        expect(section).toContain('- Item "Faca de Osso" — sem correspondência no catálogo')
+        expect(section).toMatch(/- Item:[a-f0-9]{24} — Espada/)
+        expect(context.sheetText).not.toContain("Regra secreta do Ladino")
+    })
+
+    it("a preparação grava as refs lidas e quantas alterações foram descartadas sem fonte; o card mostra a recusada", async () => {
+        combatPrepAi.review.mockImplementation(async (input) => {
+            if (input.characterName !== "Kael") return { sheetChanges: [] }
+            readCatalog(input, "Item", "espada", { name: "Espada", description: "Dano 1d8 cortante." })
+            return { sheetChanges: [{ type: "ability", attribute: "strength", value: 18, reason: "Inventado." }] }
+        })
+        const { id } = await initiativeScene()
+        const prep = (await MaddoxCombatPrepModel.findOne({ campaignId: id, characterName: "Kael" }).lean())!
+        expect(prep).toMatchObject({ status: "ready", catalogRefs: ["Item:espada"], droppedWithoutSource: 1 })
+        expect(prep.changes).toEqual([expect.objectContaining({ label: "Força", applied: false, refused: "Não confirmada no catálogo do DnDicas: sem a fonte do catálogo." })])
+    })
+
+    it("pedido de ajuste citando regra que não existe no catálogo é recusado com o motivo; a opção continua igual", async () => {
+        const { id, kael, combatId } = await scene()
+        await readyPrep(id, combatId, kael)
+        combatPrepAi.adjust.mockImplementation(async () => ({ decision: "accept", reason: "Você tem razão.", modify: [{ optionId: "unarmed", attack: { bonus: 9, damage: "2d10" }, reason: "Regra de outra edição." }], sheetChanges: [{ type: "ability", attribute: "strength", value: 20, reason: "x" }] }))
+        await adjustments.requestCombatAdjustment(id, { economy: "action", optionId: "unarmed", text: "meu soco dá 2d10" }, kael.userId)
+        await combatPrep.waitForCombatPreps()
+        const last = (await game.getGameState(id, kael.userId)).me.combat!.adjustments!.at(-1)!
+        expect(last).toMatchObject({ status: "refused" })
+        expect(last.reason).toContain("Não confirmada no catálogo do DnDicas")
+        const prep = (await MaddoxCombatPrepModel.findOne({ combatId }).lean())!
+        expect(prep.adjustments.at(-1)).toMatchObject({ droppedWithoutSource: 1 })
+        expect((await CharacterSheet.findById(kael.sheetId).lean<{ strength: number }>())!.strength).toBe(14)
+    })
+})
+
 describe("DND-41 — revisão (rodada 1 do revisor)", () => {
     it("Personagem Opex é preparado e o card dele vai ao dono da campanha; ele não pede ajuste", async () => {
         let kaelId = ""
