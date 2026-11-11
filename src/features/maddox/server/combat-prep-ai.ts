@@ -5,6 +5,7 @@ import {
     MADDOX_COMBAT_ADJUST_CONSUMPTION_ORIGIN,
     MADDOX_COMBAT_ADJUST_MAX_STEPS,
     MADDOX_COMBAT_ADJUST_TIMEOUT_MS,
+    MADDOX_COMBAT_DOWNED_CHECK_TIMEOUT_MS,
     MADDOX_COMBAT_PREP_CONSUMPTION_ORIGIN,
     MADDOX_COMBAT_PREP_MAX_STEPS,
     MADDOX_COMBAT_PREP_TIMEOUT_MS,
@@ -281,6 +282,33 @@ export async function reviewAdjustment(input: ReviewAdjustmentInput): Promise<un
     const text = await withTimeout(MADDOX_COMBAT_ADJUST_TIMEOUT_MS, "o pedido de ajuste", (signal) =>
         catalogGeneration({ campaign: input.campaign, instructions, prompt, title: `Maddox · ajuste no combate · ${input.campaign.name}`, origin: MADDOX_COMBAT_ADJUST_CONSUMPTION_ORIGIN, signal, reads: input.reads, jobId: input.jobId, maxSteps: MADDOX_COMBAT_ADJUST_MAX_STEPS }),
     )
+    return parseJsonObject(text)
+}
+
+export interface DownedCharacterInput {
+    campaign: PrepCampaign
+    characterName: string
+    /** Condição atual do personagem na história (`currentState`). */
+    currentState: string
+    /** Narração e declarações recentes. */
+    recent: string
+}
+
+/**
+ * Checagem ao abrir o combate tático (DND-49, decisão do dono D3: no job da preparação do próprio personagem, antes da
+ * iniciativa fechar): o personagem está a 0 PV na ficha; pela história recente, ele se recuperou? Devolve o JSON
+ * `{ decisao: "manter" | "aplicar", operacao?, dados?, valor?, motivo }` (validado por quem chama).
+ */
+export async function reviewDownedCharacter(input: DownedCharacterInput): Promise<unknown> {
+    const { parseJsonObject, rigorBlock } = await import("./interview-prompt")
+    const instructions = [
+        "Você é Maddox, o mestre da campanha. Um combate tático vai começar e um personagem jogador está com 0 PV na ficha. Pela condição dele na história e pelo que aconteceu recentemente, decida pelas regras do D&D se ele já se recuperou antes desta luta (foi curado, estabilizado e acordou, descansou) ou se segue caído.",
+        rigorBlock(input.campaign.rigor),
+        "Só aplique uma recuperação que a história mostre e que a regra permita; na dúvida, mantenha caído.",
+        'Responda SOMENTE com um objeto JSON: {"decisao":"manter"|"aplicar","operacao":"curar|definir|estabilizar|acordar|descanso-curto|descanso-longo" (quando aplicar),"dados":"2d4+2" (curar com dados, opcional),"valor":n (curar fixo ou definir, opcional),"dadosDeVida":n (descanso curto),"motivo":"o que na história justifica, curto (os jogadores leem)"}.',
+    ].join("\n\n")
+    const prompt = [`Personagem: ${input.characterName}`, `## Condição atual na história\n${input.currentState.trim() || "(sem registro)"}`, `## Acontecimentos recentes\n${input.recent.trim() || "(nenhum)"}`].join("\n\n")
+    const text = await withTimeout(MADDOX_COMBAT_DOWNED_CHECK_TIMEOUT_MS, "a checagem de quem está a 0 PV", (signal) => narratorText(input.campaign, instructions, prompt, `Maddox · PV antes do combate · ${input.campaign.name}`, MADDOX_COMBAT_PREP_CONSUMPTION_ORIGIN, signal))
     return parseJsonObject(text)
 }
 

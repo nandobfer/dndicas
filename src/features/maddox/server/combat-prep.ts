@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto"
 import { Types } from "mongoose"
+import { z } from "zod"
 import { AcaoAuditoria, recordAudit } from "@/lib/db"
 import { DomainError } from "@/lib/api/route"
 import { loggerFor } from "@/lib/logger"
@@ -12,6 +13,7 @@ import { emptyOverlay, type CombatOptionPatch, type CombatPrepChange, type Comba
 import { MADDOX_CAMPAIGN_AUDIT_ENTITY, MADDOX_COMBAT_PREP_CONFLICT_RETRIES, MADDOX_COMBAT_PREP_STALE_MS, MADDOX_COMBAT_PREP_TRAIT_TEXT_MAX } from "../constants"
 import { MaddoxCampaignMessageModel, MaddoxCampaignModel, MaddoxCombatPrepModel, type IMaddoxCampaign, type IMaddoxCombatPrep } from "../models"
 import { masteryKeyFromName, masteryLabel, masteryLimit, type MaddoxMasteryKey } from "../weapon-mastery"
+import { MADDOX_HIT_POINT_OPERATIONS } from "../hit-points-ops"
 import { catalogReadText, checkCatalogSource, createCatalogReadLog, type CatalogReadLog, type CatalogSource } from "./catalog-reads"
 import { catalogReferencesText, itemMastery, mentionCandidates, resolveCatalogReferences, type CatalogReference, type CatalogReferenceCandidate } from "./catalog-references"
 import { describeSheetChange } from "./combat-sheet-writes"
@@ -579,6 +581,8 @@ async function runCombatPrep(campaignId: Types.ObjectId, prepId: Types.ObjectId,
         const { settings } = await loadMaddoxSettings()
         const status = await maddoxAvailability(settings, campaign.rigor)
         if (!status.available) throw new Error(status.reason ?? 'O "Agente Maddox" não está configurado.')
+        // DND-49 (decisão do dono D3): quem está a 0 PV é conferido pela história antes da revisão da ficha, no mesmo job.
+        await checkDownedCharacter(campaign, claimed, active.state)
         for (let attempt = 0; ; attempt += 1) {
             const context = await loadPrepSheet(active.state, campaignId)
             if (!context) throw new Error("A ficha do personagem não foi encontrada.")
@@ -617,6 +621,53 @@ async function runCombatPrep(campaignId: Types.ObjectId, prepId: Types.ObjectId,
         await MaddoxCombatPrepModel.updateOne({ _id: prepId, status: "running" }, { $set: { status: "failed", error: errorText(error), finishedAt: new Date(), jobId: null } })
     }
     await afterPrepSettled(campaignId, claimed)
+}
+
+const downedDecisionSchema = z.object({
+    decisao: z.enum(["manter", "aplicar"]),
+    operacao: z.enum(MADDOX_HIT_POINT_OPERATIONS).optional(),
+    dados: z.string().trim().max(40).optional(),
+    valor: z.number().int().min(0).max(999).optional(),
+    dadosDeVida: z.number().int().min(1).max(30).optional(),
+    motivo: z.string().trim().min(1).max(600),
+})
+
+/**
+ * DND-49 (E3): ao abrir o combate tático, o personagem que está a 0 PV na ficha (e não está morto) é conferido pelo
+ * Maddox contra a condição na história e a narração recente: ou ele aplica a recuperação pela regra (mesmo serviço da
+ * ferramenta de PV, com o motivo e a linha na mesa), ou confirma que segue caído. Sem ninguém a 0 PV, não há IA. Falha ou
+ * fim do prazo: o combate segue sem mudança (só log). Uma vez por preparação.
+ */
+async function checkDownedCharacter(campaign: IMaddoxCampaign, prep: PrepDoc, state: TacticalCharacterState): Promise<void> {
+    if (state.dead || !state.sheetId || prep.downedCheckedAt) return
+    try {
+        const { CharacterSheet } = await import("@/features/character-sheets/models/character-sheet")
+        const sheet = await CharacterSheet.findById(state.sheetId).select("hpCurrent hpMax").lean<{ hpCurrent?: number | null; hpMax?: number | null }>()
+        if (!sheet?.hpMax || (sheet.hpCurrent ?? sheet.hpMax) > 0) return
+        const { MaddoxCharacterModel } = await import("../models")
+        const character = await MaddoxCharacterModel.findById(prep.characterId).select("name currentState status").lean<{ _id: Types.ObjectId; name: string; currentState?: string; status: string }>()
+        if (!character || character.status === "dead") return
+        const claimed = await MaddoxCombatPrepModel.updateOne({ _id: prep._id, downedCheckedAt: null }, { $set: { downedCheckedAt: new Date() } })
+        if (claimed.modifiedCount === 0) return
+        const recent = (await MaddoxCampaignMessageModel.find({ campaignId: campaign._id, kind: { $in: ["narration", "declaration", "hit-points"] } }).sort({ _id: -1 }).limit(8).select("kind characterName content").lean<{ kind: string; characterName?: string | null; content: string }[]>())
+            .reverse()
+            .map((message) => (message.kind === "narration" ? `Maddox: ${message.content}` : `${message.characterName ?? "Personagem"}: ${message.content}`))
+            .join("\n\n")
+        const { reviewDownedCharacter } = await import("./combat-prep-ai")
+        const decision = downedDecisionSchema.parse(await reviewDownedCharacter({ campaign, characterName: character.name, currentState: character.currentState ?? "", recent }))
+        const { changeCharacterHitPoints, postStillDown } = await import("./hit-points")
+        if (decision.decisao === "aplicar" && decision.operacao) {
+            const result = await changeCharacterHitPoints({ campaignId: campaign._id, characterName: character.name, operation: decision.operacao, dice: decision.dados ?? null, value: decision.valor ?? null, hitDice: decision.dadosDeVida ?? null, reason: decision.motivo, turnNumber: prep.turnNumber, origin: "combat-open" })
+            log.info({ campaignId: String(campaign._id), character: character.name, before: result.before, after: result.after }, "[maddox] PV corrigidos pela história antes da iniciativa")
+        } else {
+            await postStillDown(campaign._id, prep.turnNumber, { id: character._id, name: character.name }, decision.motivo)
+            log.info({ campaignId: String(campaign._id), character: character.name }, "[maddox] personagem segue caído ao abrir o combate")
+        }
+        const { publishGameChanged } = await import("./game")
+        await publishGameChanged(campaign._id)
+    } catch (error) {
+        log.warn({ err: errorText(error), campaignId: String(campaign._id), character: prep.characterName }, "[maddox] checagem de quem está a 0 PV falhou; o combate segue sem mudança")
+    }
 }
 
 /** Card privado "Sua mesa está pronta" para o dono do personagem. */

@@ -35,6 +35,8 @@ export interface IMaddoxCombatPrep {
     catalogRefs: string[]
     /** DND-49: alterações de regra descartadas por falta de fonte confirmada no catálogo. */
     droppedWithoutSource: number
+    /** DND-49: checagem de quem está a 0 PV ao abrir o combate já feita (uma vez por preparação). */
+    downedCheckedAt: Date | null
     /** Mensagem privada "Sua mesa está pronta". */
     messageId: Types.ObjectId | null
     createdAt: Date
@@ -65,6 +67,7 @@ const PrepSchema = new Schema<IMaddoxCombatPrep>(
         adjustments: { type: Schema.Types.Mixed, default: () => [] },
         catalogRefs: { type: [String], default: () => [] },
         droppedWithoutSource: { type: Number, default: 0 },
+        downedCheckedAt: { type: Date, default: null },
         messageId: { type: Schema.Types.ObjectId, default: null },
     },
     { collection: "maddox_combat_preps", timestamps: true, versionKey: false, minimize: false },

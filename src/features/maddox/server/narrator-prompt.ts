@@ -1,5 +1,5 @@
 import { memoriesSection } from "@/features/ai/memories-prompt"
-import { MADDOX_ACTION_OPTIONS_MAX, MADDOX_CATALOG_TOOL_NAMES, MADDOX_COMBAT_DIFFICULTY_DEFAULT, MADDOX_COMBAT_DIFFICULTY_LEVEL_DEFS, MADDOX_DEFAULT_DENSITY, MADDOX_DENSITY_LEVEL_DEFS, MADDOX_CHECK_RIGORS, MADDOX_CHECK_ROUNDS_MAX, MADDOX_COMBAT_LONG_TURNS, MADDOX_COMBAT_RIGORS, MADDOX_DECLARATION_VALIDATION_RIGORS, MADDOX_PROFILE_SECTIONS, MADDOX_TACTICAL_COMBAT_RIGORS, MADDOX_TOOL_TEXT_GUIDE, MADDOX_WORLD_CATALOG_RIGORS, type MaddoxCampaignMemoryKind, type MaddoxCombatDifficultyLevel, type MaddoxDensityLevel, type MaddoxGameMessageKind, type MaddoxQuestStatus, type MaddoxRigorLevel, type MaddoxVisibility } from "../constants"
+import { MADDOX_ACTION_OPTIONS_MAX, MADDOX_CATALOG_TOOL_NAMES, MADDOX_COMBAT_DIFFICULTY_DEFAULT, MADDOX_COMBAT_DIFFICULTY_LEVEL_DEFS, MADDOX_DEFAULT_DENSITY, MADDOX_DENSITY_LEVEL_DEFS, MADDOX_CHECK_RIGORS, MADDOX_CHECK_ROUNDS_MAX, MADDOX_COMBAT_LONG_TURNS, MADDOX_COMBAT_RIGORS, MADDOX_DECLARATION_VALIDATION_RIGORS, MADDOX_PROFILE_SECTIONS, MADDOX_SHEET_RIGORS, MADDOX_TACTICAL_COMBAT_RIGORS, MADDOX_TOOL_TEXT_GUIDE, MADDOX_WORLD_CATALOG_RIGORS, type MaddoxCampaignMemoryKind, type MaddoxCombatDifficultyLevel, type MaddoxDensityLevel, type MaddoxGameMessageKind, type MaddoxQuestStatus, type MaddoxRigorLevel, type MaddoxVisibility } from "../constants"
 import { CATALOG_CITATION_RULE, rigorBlock } from "./interview-prompt"
 import { checkSucceeded } from "../check-modifier"
 import { worldCatalogLines, type WorldCatalog } from "../world-catalog"
@@ -126,6 +126,16 @@ export function tacticalCombatRule(rigor: MaddoxRigorLevel): string {
         "- Quando todos os inimigos caírem, fugirem ou se renderem (ou o grupo cair), chame `end_combat` na mesma narração: resultado, resumo, desfecho de cada adversário, recompensas e a cena final.",
     ].join("\n")
 }
+
+/**
+ * PV dos personagens fora do combate tático (DND-49), nos graus com ficha: a ficha é a fonte; a recuperação narrada
+ * passa pela ferramenta, senão o personagem entra no próximo combate ainda a 0 PV.
+ */
+export const MADDOX_HIT_POINTS_RULE = [
+    "## PV dos personagens",
+    "- Os PV ficam na ficha. Antes de narrar um personagem a 0 PV acordando, agindo ou se recuperando (cura, descanso, estabilização, primeiros socorros), chame `update_character_hit_points` com a operação pela regra e o motivo; sem isso, ele continua a 0 PV na ficha e entra no próximo combate caído.",
+    "- Descanso curto gasta dados de vida (`descanso-curto` com `dadosDeVida`); descanso longo recupera todos os PV e zera os testes contra a morte. Dentro do combate tático, os PV mudam pelas ações e pelo `apply_effect`.",
+].join("\n")
 
 /** Graus que julgam a validade da ação livre na narração (os demais validam ao declarar). */
 export function judgesFreeActionsInNarration(rigor: MaddoxRigorLevel): boolean {
@@ -320,7 +330,7 @@ function toolsBlock(mode: NarratorToolMode): string | null {
     if (mode.kind === "ai-sdk") return null
     return [
         "## Ferramentas desta narração",
-        `- As ferramentas de anotações da campanha estão no servidor MCP \`${mode.server}\` (get_campaign_state, update_campaign_state, list_npcs, get_npc, save_npc, search_memories, save_memory, update_character_state, resolve_reminder${mode.checks ? ", request_check" : ""}${mode.combat ? ", get_combat, start_combat, update_combat, end_combat" : ""}${mode.tactical ? ", monster_action, apply_effect, request_damage_roll, offer_reaction" : ""}${mode.sceneImages ? ", request_scene_image" : ""}${mode.actionOptions ? ", suggest_actions" : ""}, promover_npc_opex, desfazer_npc_opex, gravar_memoria_npc_opex${mode.opexNpcs ? ", consultar_npc_opex" : ""}, ${MADDOX_CATALOG_TOOL_NAMES.search}, ${MADDOX_CATALOG_TOOL_NAMES.get}).`,
+        `- As ferramentas de anotações da campanha estão no servidor MCP \`${mode.server}\` (get_campaign_state, update_campaign_state, list_npcs, get_npc, save_npc, search_memories, save_memory, update_character_state, update_character_hit_points, resolve_reminder${mode.checks ? ", request_check" : ""}${mode.combat ? ", get_combat, start_combat, update_combat, end_combat" : ""}${mode.tactical ? ", monster_action, apply_effect, request_damage_roll, offer_reaction" : ""}${mode.sceneImages ? ", request_scene_image" : ""}${mode.actionOptions ? ", suggest_actions" : ""}, promover_npc_opex, desfazer_npc_opex, gravar_memoria_npc_opex${mode.opexNpcs ? ", consultar_npc_opex" : ""}, ${MADDOX_CATALOG_TOOL_NAMES.search}, ${MADDOX_CATALOG_TOOL_NAMES.get}).`,
         `- Em TODA chamada a essas ferramentas, envie o campo \`turno\` exatamente com este valor: \`${mode.turnToken}\`.`,
         "- Não use outras ferramentas (arquivos, terminal, web): a campanha vive só nessas anotações.",
     ].join("\n")
@@ -333,6 +343,7 @@ export function buildNarratorInstructions(context: NarratorPromptContext, mode: 
     parts.push(MADDOX_NARRATOR_RULES, usesChecks(context.rigor) ? checksRule(context.rigor) : MADDOX_NARRATIVE_MODE_RULE, rigorBlock(context.rigor))
     if (usesCombat(context.rigor)) parts.push(combatRule(context.rigor))
     if (usesTacticalCombat(context.rigor)) parts.push(tacticalCombatRule(context.rigor))
+    if (MADDOX_SHEET_RIGORS.includes(context.rigor)) parts.push(MADDOX_HIT_POINTS_RULE)
     if (judgesFreeActionsInNarration(context.rigor)) parts.push(MADDOX_FREE_ACTION_RULE)
     parts.push(MADDOX_NARRATOR_FORMAT, MADDOX_PERSISTENCE_RULE, narratorCatalogRule(context.rigor, context.worldCatalog ?? null))
     const images = sceneImagesRule(context.sceneImages)
@@ -644,6 +655,8 @@ export function narratorTranscript(messages: readonly NarratorTranscriptMessage[
                         ? `[Turno ${message.turnNumber} — ${content}]`
                       : message.kind === "combat-action" || message.kind === "combat-roll" || message.kind === "combat-reaction"
                         ? `[Turno ${message.turnNumber} — combate] ${content}`
+                      : message.kind === "hit-points"
+                        ? `[Turno ${message.turnNumber} — ficha] ${content}`
                       : message.kind === "pass"
                         ? `[Turno ${message.turnNumber} — ${who} não fez nada]`
                         : `[Turno ${message.turnNumber} — ${who} declara] ${content}`

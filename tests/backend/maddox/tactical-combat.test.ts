@@ -1337,6 +1337,150 @@ describe("DND-41 — ataque furtivo", () => {
     })
 })
 
+describe("DND-49 — maestrias de arma e Esconder-se", () => {
+    const MASTERY_NAMES = { nick: "Ágil / Nick", vex: "Afligir / Vex", sap: "Drenar / Sap", topple: "Derrubar / Topple", graze: "Garantido / Graze", push: "Empurrar / Push", slow: "Lentidão / Slow", cleave: "Trespassar / Cleave" } as const
+    const actionOf = async (id: string) => (await MaddoxCampaignMessageModel.findOne({ campaignId: id, kind: "combat-action" }).sort({ _id: -1 }).lean())!
+    const resetAction = (id: string, actorKey: string) => MaddoxCombatModel.updateOne({ campaignId: id }, { $set: { "tactical.characters.$[me].economy": { ...freshEconomy() } } }, { arrayFilters: [{ "me.actorKey": actorKey }] })
+
+    /** Kael com Adagas (Acuidade, Leve) cuja maestria do catálogo é `key`, registrada em `weaponMasteries` (ou não). */
+    async function masteryScene(key: keyof typeof MASTERY_NAMES, options: { quantity?: number; mastered?: boolean; dexterity?: number } = {}) {
+        await ItemModel.collection.insertOne({ name: "Adaga", type: "arma", status: "active", damageDice: { quantidade: 1, tipo: "d4" }, damageType: "perfurante", properties: [mention("Acuidade / Finesse"), mention("Leve")], mastery: `<span data-type="mention" data-id="r-${key}" data-entity-type="Regra" class="mention">Maestria: ${MASTERY_NAMES[key]}</span>` })
+        const built = await scene()
+        const dagger = await ItemModel.collection.findOne({ name: "Adaga" })
+        await CharacterItem.collection.updateOne({ sheetId: new mongoose.Types.ObjectId(built.kael.sheetId) }, { $set: { catalogItemId: dagger!._id, name: "<p>Adaga</p>", quantity: options.quantity ?? 2 } })
+        await CharacterSheet.collection.updateOne({ _id: new mongoose.Types.ObjectId(built.kael.sheetId) }, { $set: { dexterity: options.dexterity ?? 17, strength: 10, weaponMasteries: options.mastered === false ? [] : [{ catalogItemId: dagger!._id, mastery: key }] } })
+        await readyPrep(built.id, built.combatId, built.kael)
+        const optionsNow = (await game.getGameState(built.id, built.kael.userId)).me.combat!.options!
+        return { ...built, dagger: optionsNow.action.find((option) => option.id.startsWith("weapon:") && !option.id.endsWith(":thrown"))! }
+    }
+
+    const attack = async (id: string, userId: string, optionId: string, rolls: number[][], economy: "action" | "bonus" = "action") => {
+        await actions.submitCombatAction(id, { economy, optionId, targets: ["npc:gob"] }, userId)
+        dice.players.set(userId, rolls)
+        const message = await actionOf(id)
+        await actions.rollCombatAction(id, String(message._id), userId)
+        if ((await actionOf(id)).combatAction!.steps.some((step) => step.status === "pending")) await actions.rollCombatAction(id, String(message._id), userId)
+        return actionOf(id)
+    }
+
+    it("Ágil (Nick) com 2 adagas: depois do 1º ataque (mesmo errando), o ataque Leve entra na mesma Ação, sem gastar a Ação bônus, uma vez por turno", async () => {
+        const { id, kael, dagger } = await masteryScene("nick")
+        expect(dagger.attack).toMatchObject({ mastery: "nick", modifier: 3 })
+        await attack(id, kael.userId, dagger.id, [[2]])
+        let state = (await game.getGameState(id, kael.userId)).me.combat!
+        const nick = state.options!.action.find((option) => option.id.startsWith("offhand:"))!
+        expect(nick).toMatchObject({ economy: "action", label: "Adaga (outra mão · Maestria Ágil)" })
+        expect(state.options!.bonus.some((option) => option.id.startsWith("offhand:"))).toBe(false)
+        await actions.submitCombatAction(id, { economy: "action", optionId: nick.id, targets: ["npc:gob"] }, kael.userId)
+        expect((await stateOf(id, kael.actorKey)).economy).toMatchObject({ bonus: true, lightExtraUsed: true })
+        dice.players.set(kael.userId, [[2]])
+        await actions.rollCombatAction(id, String((await actionOf(id))._id), kael.userId)
+        state = (await game.getGameState(id, kael.userId)).me.combat!
+        expect([...state.options!.action, ...state.options!.bonus].some((option) => option.id.startsWith("offhand:"))).toBe(false)
+    })
+
+    it("uma só adaga (quantidade 1): sem Nick e sem ataque Leve extra; sem a maestria registrada, o ataque extra fica na Ação bônus", async () => {
+        const single = await masteryScene("nick", { quantity: 1 })
+        await attack(single.id, single.kael.userId, single.dagger.id, [[2]])
+        const options = (await game.getGameState(single.id, single.kael.userId)).me.combat!.options!
+        expect([...options.action, ...options.bonus].some((option) => option.id.startsWith("offhand:"))).toBe(false)
+    })
+
+    it("sem a maestria na ficha, a arma não tem maestria e o ataque extra da arma Leve gasta a Ação bônus", async () => {
+        const { id, kael, dagger } = await masteryScene("nick", { mastered: false })
+        expect(dagger.attack!.mastery).toBeNull()
+        await attack(id, kael.userId, dagger.id, [[2]])
+        const options = (await game.getGameState(id, kael.userId)).me.combat!.options!
+        expect(options.action.some((option) => option.id.startsWith("offhand:"))).toBe(false)
+        expect(options.bonus.find((option) => option.id.startsWith("offhand:"))!.label).toBe("Adaga (outra mão)")
+    })
+
+    it("Afligir (Vex): acerto com dano dá vantagem no próximo ataque contra o mesmo alvo, com o motivo; o uso gasta a vantagem", async () => {
+        const { id, kael, dagger } = await masteryScene("vex")
+        await attack(id, kael.userId, dagger.id, [[15], [1]])
+        expect((await stateOf(id, kael.actorKey)).flags.vex).toMatchObject({ targetKey: "npc:gob" })
+        await resetAction(id, kael.actorKey)
+        await actions.submitCombatAction(id, { economy: "action", optionId: dagger.id, targets: ["npc:gob"] }, kael.userId)
+        expect((await actionOf(id)).combatAction!.steps[0]).toMatchObject({ mode: "advantage", modeReasons: ["Maestria Afligir"] })
+        dice.players.set(kael.userId, [[2, 1]])
+        await actions.rollCombatAction(id, String((await actionOf(id))._id), kael.userId)
+        expect((await stateOf(id, kael.actorKey)).flags.vex ?? null).toBeNull()
+    })
+
+    it("Drenar (Sap): o acerto marca o alvo, que tem desvantagem na próxima jogada de ataque", async () => {
+        const { id, kael, dagger } = await masteryScene("sap")
+        const done = await attack(id, kael.userId, dagger.id, [[15], [1]])
+        expect((await goblinOf(id)).flags.sapped).toMatchObject({ byKey: kael.actorKey, byName: "Kael" })
+        expect(done.combatAction!.summary).toContain("Maestria Drenar")
+    })
+
+    it("Derrubar (Topple): salvaguarda de Constituição com CD 8 + modificador + proficiência; falha = Caído; contra quem já está Caído, nada", async () => {
+        const { id, kael, dagger } = await masteryScene("topple")
+        dice.server.push([3])
+        const done = await attack(id, kael.userId, dagger.id, [[15], [1]])
+        expect(done.combatAction!.steps.find((step) => step.kind === "save")).toMatchObject({ roller: "server", success: false, note: "Maestria Derrubar · Constituição CD 13" })
+        expect((await goblinOf(id)).conditions.map((condition) => condition.key)).toContain("prone")
+        await resetAction(id, kael.actorKey)
+        const again = await attack(id, kael.userId, dagger.id, [[15, 2], [1]])
+        expect(again.combatAction!.steps.some((step) => step.kind === "save")).toBe(false)
+    })
+
+    it("Garantido (Graze): no erro, dano igual ao modificador usado; com modificador ≤ 0, nada", async () => {
+        const { id, kael, dagger } = await masteryScene("graze")
+        const done = await attack(id, kael.userId, dagger.id, [[2]])
+        expect(done.combatAction!.steps[1]).toMatchObject({ kind: "damage", status: "done", total: 3, amount: 3, note: expect.stringContaining("Maestria Garantido") })
+        expect((await goblinOf(id)).stats.hp).toBe(4)
+    })
+
+    it("Garantido com modificador 0: o erro não causa dano", async () => {
+        const { id, kael, dagger } = await masteryScene("graze", { dexterity: 10 })
+        const done = await attack(id, kael.userId, dagger.id, [[2]])
+        expect(done.combatAction!.steps[1]).toMatchObject({ kind: "damage", status: "skipped" })
+    })
+
+    it("Empurrar fica registrado no resumo para o Maddox narrar", async () => {
+        const push = await masteryScene("push")
+        expect((await attack(push.id, push.kael.userId, push.dagger.id, [[15], [1]])).combatAction!.summary).toContain("Maestria Empurrar: Goblin pode ser empurrado até 3 m")
+    })
+
+    it("Lentidão fica registrada no alvo e no resumo (não acumula)", async () => {
+        const slow = await masteryScene("slow")
+        expect((await attack(slow.id, slow.kael.userId, slow.dagger.id, [[15], [1]])).combatAction!.summary).toContain("Maestria Lentidão")
+        expect((await goblinOf(slow.id)).flags.slowed).toMatchObject({ byKey: slow.kael.actorKey })
+        await resetAction(slow.id, slow.kael.actorKey)
+        expect((await attack(slow.id, slow.kael.userId, slow.dagger.id, [[15], [1]])).combatAction!.summary).not.toContain("Maestria Lentidão")
+    })
+
+    it("Trespassar (Cleave): o acerto corpo a corpo libera o 2º ataque contra OUTRO inimigo, uma vez por turno", async () => {
+        const { id, kael, dagger } = await masteryScene("cleave")
+        await attack(id, kael.userId, dagger.id, [[15], [1]])
+        expect((await stateOf(id, kael.actorKey)).economy.cleave).toMatchObject({ targetKey: "npc:gob" })
+        const cleave = (await game.getGameState(id, kael.userId)).me.combat!.options!.action.find((option) => option.id.startsWith("cleave:"))!
+        expect(cleave).toMatchObject({ label: "Adaga (Maestria Trespassar)", attack: { damage: "1d4" } })
+        await expect(actions.submitCombatAction(id, { economy: "action", optionId: cleave.id, targets: ["npc:gob"] }, kael.userId)).rejects.toMatchObject({ code: "CLEAVE_SAME_TARGET" })
+    })
+
+    it("Esconder-se: o ataque escondido tem vantagem com o motivo gravado no passo e a condição Invisível sai depois do ataque", async () => {
+        const { id, kael, dagger } = await masteryScene("push", { mastered: false })
+        await MaddoxCombatModel.updateOne({ campaignId: id }, { $set: { "tactical.characters.$[me].conditions": [{ key: "invisible", untilRound: null, source: "Esconder" }] } }, { arrayFilters: [{ "me.actorKey": kael.actorKey }] })
+        await actions.submitCombatAction(id, { economy: "action", optionId: dagger.id, targets: ["npc:gob"] }, kael.userId)
+        expect((await actionOf(id)).combatAction!.steps[0]).toMatchObject({ mode: "advantage", modeReasons: ["atacante invisível"] })
+        dice.players.set(kael.userId, [[15, 3]])
+        await actions.rollCombatAction(id, String((await actionOf(id))._id), kael.userId)
+        const step = (await actionOf(id)).combatAction!.steps[0]!
+        expect(step).toMatchObject({ mode: "advantage", modeReasons: ["atacante invisível"] })
+        expect(step.roll!.selectedD20).toMatchObject({ kept: 15, discarded: 3 })
+        expect((await stateOf(id, kael.actorKey)).conditions).toEqual([])
+    })
+
+    it("Esconder-se: Invisível de outra origem (magia) não sai com o ataque", async () => {
+        const { id, kael, dagger } = await masteryScene("push", { mastered: false })
+        await MaddoxCombatModel.updateOne({ campaignId: id }, { $set: { "tactical.characters.$[me].conditions": [{ key: "invisible", untilRound: null, source: "Invisibilidade" }] } }, { arrayFilters: [{ "me.actorKey": kael.actorKey }] })
+        await attack(id, kael.userId, dagger.id, [[2, 1]])
+        expect((await stateOf(id, kael.actorKey)).conditions.map((condition) => condition.source)).toEqual(["Invisibilidade"])
+    })
+})
+
 describe("DND-41 — revisão (rodada 1 do revisor)", () => {
     it("Personagem Opex é preparado e o card dele vai ao dono da campanha; ele não pede ajuste", async () => {
         let kaelId = ""
