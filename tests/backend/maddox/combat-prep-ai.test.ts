@@ -57,6 +57,12 @@ describe("DND-49 — preparação com as ferramentas de catálogo", () => {
         expect(Object.keys(request.tools).sort()).toEqual(["get_catalog_entity", "search_catalog"])
         expect(request.instructions).toContain("Fonte das regras (obrigatória)")
         expect(request.instructions).toContain('"source":{"ref":"Tipo:id da entidade lida","quote":"trecho exato do texto dela"}')
+        // F6: o contrato pede `source` em todos os tipos que o servidor exige.
+        for (const type of ["ability", "attack-upsert", "weapon-mastery", '"trait-upsert"|"feat-upsert"', "spell-update"]) {
+            const line = request.instructions.split("\n").find((item) => item.includes(`{"type":"${type.replace(/^"|"$/g, "")}"`) || item.includes(`{"type":${type}`))!
+            expect(line, type).toContain('"source":{"ref"')
+        }
+        expect(request.instructions).toContain('obrigatório ao mudar "circle"')
         expect(request.stopWhen.count).toBeGreaterThan(1)
         expect(reads.refs).toEqual(["Item:69af29565ba7ae07cb540466"])
         expect(generateAiText).not.toHaveBeenCalled()

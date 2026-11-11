@@ -31,6 +31,9 @@ describe("DND-49 — registro das consultas ao catálogo", () => {
         const log = createCatalogReadLog()
         recordCatalogToolResult(log, { itens: [{ id: "x", tipo: "Item", nome: "Adaga" }] })
         expect(log.refs).toEqual([])
+        // F5: a busca conta como consulta (mesmo sem resultado), mas não vira fonte.
+        recordCatalogToolResult(log, { itens: [] })
+        expect(log.searches).toBe(2)
         recordCatalogRead(log, "Regra", "699fb13d", { name: "Maestria: Ágil / Nick", description: "<p>Ao realizar o ataque adicional da propriedade <b>Leve</b>, você pode fazê-lo como parte da Ação: Atacar.</p>" })
         expect(checkCatalogSource({ ref: "regra:699fb13d", quote: "ataque adicional da propriedade leve, voce pode faze-lo como parte da acao atacar" }, log)).toBeNull()
         expect(checkCatalogSource(undefined, log)).toBe(CATALOG_SOURCE_MISSING)

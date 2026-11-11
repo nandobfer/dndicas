@@ -61,8 +61,8 @@ const SHEET_CHANGE_CONTRACT = [
     `  - {"type":"attack-upsert","attackId":"id existente (opcional)","name":"…","attackBonus":n,"damage":{"quantity":n,"faces":4|6|8|10|12|20,"bonus":n,"type":"perfurante"},${SOURCE_FIELD}}`,
     `  - {"type":"weapon-mastery","catalogItemId":"catalogItemId do item da ficha","mastery":"nick|vex|sap|topple|graze|push|slow|cleave",${SOURCE_FIELD}} (fonte = a característica de classe que dá a maestria, com o trecho do número de armas)`,
     '  - {"type":"attack-remove","attackId":"id"}',
-    '  - {"type":"trait-upsert"|"feat-upsert","id":"id existente (opcional)","name":"…","description":"…","ref":"c1 (opcional, para ligar a uma opção acrescentada)"}',
-    '  - {"type":"spell-update","spellId":"id","prepared":true|false,"circle":0-9}',
+    `  - {"type":"trait-upsert"|"feat-upsert","id":"id existente (opcional)","name":"…","description":"…","ref":"c1 (opcional, para ligar a uma opção acrescentada)",${SOURCE_FIELD}}`,
+    `  - {"type":"spell-update","spellId":"id","prepared":true|false,"circle":0-9,${SOURCE_FIELD} (obrigatório ao mudar "circle"; dispensado só para "prepared")}`,
     '  - {"type":"item-equip","itemId":"id","equipped":true|false}',
     '  - {"type":"text-append","field":"classFeatures|speciesTraits|featuresNotes|weaponProficiencies|notes","text":"…"}',
 ]
@@ -256,7 +256,7 @@ export interface ReviewAdjustmentInput extends ReviewSheetInput {
     mustConsult?: boolean
 }
 
-export const MUST_CONSULT_NOTE = `ATENÇÃO: a resposta anterior recusou o pedido sem consultar o catálogo. Antes de decidir, leia com ${MADDOX_CATALOG_TOOL_NAMES.get} a regra que o jogador cita (busque com ${MADDOX_CATALOG_TOOL_NAMES.search} se precisar). Recusa sem consulta não é aceita.`
+export const MUST_CONSULT_NOTE = `ATENÇÃO: a resposta anterior recusou o pedido sem consultar o catálogo. Antes de decidir, procure com ${MADDOX_CATALOG_TOOL_NAMES.search} a regra que o jogador cita e leia com ${MADDOX_CATALOG_TOOL_NAMES.get} o que encontrar. Se a busca não encontrar a regra, recuse dizendo que ela não está no catálogo do DnDicas. Recusa sem nenhuma consulta não é aceita.`
 
 /** Pedido de ajuste: `{ decision, reason, sheetChanges, modify, remove, add }`. */
 export async function reviewAdjustment(input: ReviewAdjustmentInput): Promise<unknown> {

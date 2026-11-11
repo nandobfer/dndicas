@@ -19,9 +19,11 @@ export interface CatalogReadLog {
     refs: string[]
     /** Consultas que falharam (a entidade não chegou ao modelo). */
     failures: number
+    /** DND-49 (revisão, F5): buscas concluídas (`search_catalog`), mesmo sem resultado — contam como consulta. */
+    searches: number
 }
 
-export const createCatalogReadLog = (): CatalogReadLog => ({ reads: new Map(), refs: [], failures: 0 })
+export const createCatalogReadLog = (): CatalogReadLog => ({ reads: new Map(), refs: [], failures: 0, searches: 0 })
 
 /** Sem acento, minúsculo, pontuação como espaço e espaços colapsados: a comparação do `quote` não depende de formatação. */
 export function normalizeCatalogQuote(value: string): string {
@@ -65,9 +67,13 @@ export function recordCatalogRead(log: CatalogReadLog, type: string, id: string,
     if (!previous) log.refs.push(`${type}:${id}`)
 }
 
-/** Saída de uma ferramenta de catálogo: só a leitura completa (`get_catalog_entity`) conta. */
+/** Saída de uma ferramenta de catálogo: a leitura completa (`get_catalog_entity`) vira fonte; a busca só conta como consulta. */
 export function recordCatalogToolResult(log: CatalogReadLog, output: unknown): void {
-    const result = output as { tipo?: unknown; id?: unknown; entidade?: unknown } | null
+    const result = output as { tipo?: unknown; id?: unknown; entidade?: unknown; itens?: unknown } | null
+    if (result && Array.isArray(result.itens)) {
+        log.searches += 1
+        return
+    }
     if (!result || typeof result.tipo !== "string" || typeof result.id !== "string" || !result.entidade) return
     recordCatalogRead(log, result.tipo, result.id, result.entidade)
 }

@@ -1172,7 +1172,7 @@ apaga mais o furtivo do servidor.
 ajuste ("Recusada: esta opção segue a regra fixa do servidor…"), e um `add` que repete o ataque de maestria (Ágil, Trespassar, "outra
 mão") é recusado: o servidor resolve.
 
-**Pedido de ajuste.** Mesmas ferramentas e mesma exigência. Recusa sem nenhuma leitura do catálogo não vale: o servidor pede de novo exigindo a consulta (`mustConsult`); recusando outra vez sem ler, o pedido fica `error` ("não examinado": o jogador vê a mensagem genérica para tentar de novo; o dono vê o motivo) e o log registra. Aceito com tudo recusado por falta de fonte = o pedido fica `refused` com o
+**Pedido de ajuste.** Mesmas ferramentas e mesma exigência. Recusa sem nenhuma consulta ao catálogo (nem leitura nem busca; buscar e não achar a regra conta como consulta, `searches` no registro) não vale: o servidor pede de novo exigindo a consulta (`mustConsult`); recusando outra vez sem ler, o pedido fica `error` ("não examinado": o jogador vê a mensagem genérica para tentar de novo; o dono vê o motivo) e o log registra. Aceito com tudo recusado por falta de fonte = o pedido fica `refused` com o
 motivo do catálogo ("…A opção continua como está."). Cada ajuste guarda `catalogRefs` e `droppedWithoutSource`.
 
 **Registro e auditoria.** `maddox_combat_preps` grava `catalogRefs` (as refs lidas) e `droppedWithoutSource`; os logs `[maddox] mesa do

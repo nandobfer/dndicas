@@ -99,16 +99,18 @@ async function runAdjustment(campaignId: Types.ObjectId, prepId: Types.ObjectId,
         let response = combatAdjustResponseSchema.parse(await review(false))
         // DND-49 (revisão, F1): recusa sem nenhuma leitura do catálogo não vale — uma nova tentativa exigindo a consulta;
         // se de novo não consultar, o pedido fica "não examinado" (o jogador pode pedir de novo), nunca recusado de memória.
-        if (response.decision === "refuse" && reads.refs.length === 0) {
+        // Consulta = qualquer leitura ou busca concluída (buscar e não achar a regra é a recusa correta).
+        const consulted = () => reads.refs.length > 0 || reads.searches > 0
+        if (response.decision === "refuse" && !consulted()) {
             log.warn({ campaignId: String(campaignId), option: adjustment.optionId, catalogFailures: reads.failures }, "[maddox] pedido de ajuste recusado sem consultar o catálogo; nova tentativa exigindo a consulta")
             response = combatAdjustResponseSchema.parse(await review(true))
-            if (response.decision === "refuse" && reads.refs.length === 0) {
+            if (response.decision === "refuse" && !consulted()) {
                 await decide(prepId, adjustmentId, { status: "error", reason: null, error: REFUSED_WITHOUT_CATALOG, catalogRefs: [], droppedWithoutSource: 0 })
                 log.warn({ campaignId: String(campaignId), option: adjustment.optionId, catalogFailures: reads.failures }, "[maddox] pedido de ajuste não examinado: o Maddox recusou duas vezes sem consultar o catálogo")
                 return
             }
         }
-        const audit = { catalogRefs: reads.refs, refsCount: reads.refs.length, catalogFailures: reads.failures }
+        const audit = { catalogRefs: reads.refs, refsCount: reads.refs.length, catalogFailures: reads.failures, catalogSearches: reads.searches }
         if (response.decision === "refuse") {
             await decide(prepId, adjustmentId, { status: "refused", reason: response.reason, catalogRefs: reads.refs, droppedWithoutSource: 0 })
             log.info({ campaignId: String(campaignId), option: adjustment.optionId, ...audit }, "[maddox] pedido de ajuste recusado")

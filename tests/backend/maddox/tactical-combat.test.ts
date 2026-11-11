@@ -1643,6 +1643,20 @@ describe("DND-49 — Referências do catálogo e catálogo lido na preparação"
         expect((await MaddoxCombatPrepModel.findOne({ combatId }).lean())!.adjustments.at(-1)).toMatchObject({ catalogRefs: ["Regra:r1"] })
     })
 
+    it("DND-49 (F5): buscou a regra, não achou e recusou: vale a recusa com o motivo, sem nova geração", async () => {
+        const { id, kael, combatId } = await scene()
+        await readyPrep(id, combatId, kael)
+        const { recordCatalogToolResult } = await import("@/features/maddox/server/catalog-reads")
+        combatPrepAi.adjust.mockImplementation(async (input) => {
+            recordCatalogToolResult(input.reads!, { itens: [], total: 0 })
+            return { decision: "refuse", reason: "Essa regra não está no catálogo do DnDicas." }
+        })
+        await adjustments.requestCombatAdjustment(id, { economy: "action", optionId: "unarmed", text: "pela regra do soco atordoante, 2d10" }, kael.userId)
+        await combatPrep.waitForCombatPreps()
+        expect(combatPrepAi.adjust).toHaveBeenCalledTimes(1)
+        expect((await game.getGameState(id, kael.userId)).me.combat!.adjustments!.at(-1)).toMatchObject({ status: "refused", reason: "Essa regra não está no catálogo do DnDicas." })
+    })
+
     it("pedido de ajuste citando regra que não existe no catálogo é recusado com o motivo; a opção continua igual", async () => {
         const { id, kael, combatId } = await scene()
         await readyPrep(id, combatId, kael)
