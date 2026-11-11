@@ -1924,7 +1924,7 @@ memória, `campaign-routes.test.ts`, `grant-maddox-play.test.ts`; Personagens Op
 (`maddox-tab.test.tsx`, `maddox-campaigns.test.tsx`, `maddox-campaigns-realtime.test.tsx`, `maddox-opex.test.tsx`, `maddox-opex-npc.test.tsx`; happy-dom).
 Reiniciar campanha (DND-50): `campaign-reset.test.ts` (reinício completo — o que apaga e o que preserva —, só o dono, fases aceitas,
 duas vezes seguidas, limpeza interrompida retomada, Engramind fora com início recusado e rotina, narração em andamento interrompida
-sem gravar e job da fila descartado, narração interrompida no meio da gravação, teto da espera pelos Opex, `resetAt` no estado da
+sem gravar e job da fila descartado, narração interrompida no meio da gravação, job preso liberado pela folga com o próximo job executando, teto da espera pelos Opex, `resetAt` no estado da
 mesa), `opex-table.test.ts` (Personagem Opex decidindo no momento do reinício), `sheet-restore.test.ts` (as três fontes da ficha, cópia de quem
 entra depois, bloqueio do início durante o ajuste, falha num personagem com "Tentar de novo" só dele e sem o motivo no DTO, ajuste
 preso, personagem sem ficha), `campaign-routes.test.ts` (rotas), `tests/backend/engramind/campaign-rewind.test.ts` (exclusão de todas

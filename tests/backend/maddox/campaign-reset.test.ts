@@ -78,6 +78,18 @@ vi.mock("@/features/engramind/server/campaign-rewind", () => {
     }
 })
 
+/** Folga do job interrompido (`MADDOX_JOB_ABORT_GRACE_MS`): encurtada no teste do job que nunca termina. */
+const timing = vi.hoisted(() => ({ grace: 15_000 }))
+vi.mock("@/features/maddox/constants", async (importOriginal) => {
+    const actual = await importOriginal<typeof import("@/features/maddox/constants")>()
+    return {
+        ...actual,
+        get MADDOX_JOB_ABORT_GRACE_MS() {
+            return timing.grace
+        },
+    }
+})
+
 const models = await import("@/features/maddox/models")
 const { MaddoxCampaignMemberModel, MaddoxCampaignMessageModel, MaddoxCampaignModel, MaddoxCharacterModel, MaddoxCampaignSnapshotModel, MaddoxSceneImageModel, INCLUDE_DISCARDED } = models
 const campaigns = await import("@/features/maddox/server/campaigns")
@@ -175,6 +187,7 @@ beforeEach(async () => {
     gate.hold = null
     gate.signals = []
     gate.toolErrors = []
+    timing.grace = 15_000
     for (const mock of [recordAudit, publishToChannels, rotateNarratorSession, deleteFile, syncCampaignChannelLifecycle, retireOpexNpcAgent, fakeMaster.narrate, fakeMaster.answer]) mock.mockClear()
     const { campaignMemoriesStore } = await import("../../helpers/campaign-memories-mock")
     campaignMemoriesStore.reset()
@@ -396,6 +409,32 @@ describe("interrupção da mesa", () => {
         expect(campaign!.status).toBe("lobby")
         expect(campaign!.turn).toMatchObject({ number: 0, phase: "master", generating: null })
         expect(campaign!.reset).toMatchObject({ status: "done" })
+    })
+
+    it("job interrompido que nunca termina: a fila libera a vaga depois da folga, a limpeza roda e o próximo job executa", async () => {
+        const { id, owner } = await playTo(2)
+        timing.grace = 300
+        const stuck = vi.fn((job: { signal: AbortSignal }) => {
+            void job.signal
+            return new Promise<void>(() => undefined)
+        })
+        void live.enqueueMaddoxJob(id, "geração presa", stuck)
+        await vi.waitFor(() => expect(stuck).toHaveBeenCalled())
+
+        const startedAt = Date.now()
+        await reset.resetCampaign(id, owner)
+        expect(Date.now() - startedAt).toBeGreaterThanOrEqual(250)
+        expect(Date.now() - startedAt).toBeLessThan(10_000)
+        expect(stuck.mock.calls[0]![0].signal.aborted).toBe(true)
+        expect(await allMessages(id)).toHaveLength(0)
+        const campaign = await campaignOf(id)
+        expect(campaign!.status).toBe("lobby")
+        expect(campaign!.reset).toMatchObject({ status: "done" })
+
+        const next = vi.fn(async () => undefined)
+        await live.enqueueMaddoxJob(id, "próximo job", next)
+        expect(next).toHaveBeenCalledTimes(1)
+        expect(live.isCampaignBusy(id)).toBe(false)
     })
 
     it("execução viva de um Personagem Opex que não termina: a limpeza segue depois do teto de espera", async () => {
