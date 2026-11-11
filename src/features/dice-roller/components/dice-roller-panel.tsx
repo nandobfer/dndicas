@@ -63,6 +63,8 @@ interface DiceRollerPanelProps {
     rollButtonClassName?: string
     /** Fim da animação de qualquer rolagem (local ou externa); `onRollResolved` só avisa as locais. */
     onRollSettled?: (result: DiceRollResponse) => void
+    /** Com `stageVisibility="roll"` e `stageHideDelayMs`: o palco daquele resultado terminou de sair da tela. */
+    onStageHidden?: (result: DiceRollResponse) => void
 }
 
 export function DiceRollerPanel({
@@ -86,6 +88,7 @@ export function DiceRollerPanel({
     stageHideDelayMs,
     rollButtonClassName,
     onRollSettled,
+    onStageHidden,
 }: DiceRollerPanelProps) {
     const inline = appearance === "inline"
     const [hiddenStageRollId, setHiddenStageRollId] = React.useState<string | null>(null)
@@ -94,6 +97,10 @@ export function DiceRollerPanel({
     React.useEffect(() => {
         onRollSettledRef.current = onRollSettled
     }, [onRollSettled])
+    const onStageHiddenRef = React.useRef(onStageHidden)
+    React.useEffect(() => {
+        onStageHiddenRef.current = onStageHidden
+    }, [onStageHidden])
     React.useEffect(() => () => {
         if (stageHideTimeoutRef.current) window.clearTimeout(stageHideTimeoutRef.current)
     }, [])
@@ -104,6 +111,8 @@ export function DiceRollerPanel({
     const sourceRef = React.useRef(getInitialState(preset).source)
     const [result, setResult] = React.useState<DiceRollResponse | null>(null)
     const [isRolling, setIsRolling] = React.useState(false)
+    // Só a espera da resposta do servidor (sem a folga do botão): é o que o palco mostra como "preparando".
+    const [awaitingResult, setAwaitingResult] = React.useState(false)
     const [isAnimatingDice, setIsAnimatingDice] = React.useState(false)
     const [errorMessage, setErrorMessage] = React.useState<string | null>(null)
     const lastExternalRollIdRef = React.useRef<string | null>(null)
@@ -190,6 +199,7 @@ export function DiceRollerPanel({
         isLocalRollRef.current = false
         setResult(externalResult)
         setIsRolling(false)
+        setAwaitingResult(false)
         setShowResults(false)
         setErrorMessage(null)
     }, [externalResult, result])
@@ -296,6 +306,7 @@ export function DiceRollerPanel({
         }
 
         setIsRolling(true)
+        setAwaitingResult(true)
         setShowResults(false)
         setErrorMessage(null)
         try {
@@ -310,10 +321,12 @@ export function DiceRollerPanel({
                 owlbearPlayerId: requestContext?.owlbearPlayerId,
             })
             isLocalRollRef.current = true
+            setAwaitingResult(false)
             onRollCreatedRef.current?.(nextResult)
             setResult(nextResult)
         } catch (error) {
             console.error("Failed to roll dice", error)
+            setAwaitingResult(false)
             setErrorMessage(error instanceof Error ? error.message : "Não foi possível rolar os dados.")
         } finally {
             window.setTimeout(() => setIsRolling(false), 500)
@@ -325,7 +338,7 @@ export function DiceRollerPanel({
         <DiceVisualStage
             terms={normalizedTerms}
             result={result}
-            isRolling={isRolling}
+            isRolling={awaitingResult}
             mode={displayedMode}
             criticalState={criticalState}
             onAnimationStateChange={handleAnimationStateChange}
@@ -361,7 +374,12 @@ export function DiceRollerPanel({
                     {stageVisibility === "always" ? (
                         stage
                     ) : (
-                        <AnimatePresence initial={false}>
+                        <AnimatePresence
+                            initial={false}
+                            onExitComplete={() => {
+                                if (result && hiddenStageRollId === result.rollId) onStageHiddenRef.current?.(result)
+                            }}
+                        >
                             {stageMounted && (
                                 <motion.div
                                     key="dice-stage"

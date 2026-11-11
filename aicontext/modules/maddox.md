@@ -1037,8 +1037,18 @@ o passo anima antes do resultado). Dados do servidor repetidos com `ReplayDie` (
 faixa compacta no cabeçalho em telas pequenas), `CombatActionBar` (na minha vez substitui o campo: Ação, Ação bônus, economia,
 "Movimento e posição", Encerrar turno, "Perguntar ao mestre"; um único painel ancorado ao botão que o abriu, `anchorLeft` limita ao
 contêiner e à janela; categorias em `OptionTabs`, alvos/círculo/perícia em `GlassSelector`), `CombatWaitBar` ("Vez de Kael
-(iniciativa 17) · Rodada 2"), cards `CombatActionCard` (dado inline, Acertou/Errou/Crítico, dano), `CombatRollCard`,
+(iniciativa 17) · Rodada 2"), cards `CombatActionCard` (dado inline, Acertou/Errou/Crítico, dano; ciclo do dado abaixo), `CombatRollCard`,
 `CombatReactionCard` (contagem, "Não reagir", "Não reagir no lugar" do dono) e `CombatOrderCard`.
+
+**Dado do card até sair de cena (DND-48).** A resposta de "Rolar" já traz a mesa nova (`setQueryData` no `useRollCombatStep`) com o
+passo resolvido, no meio da animação. Por isso `CombatActionCard` e o card de rolagem avulsa (`CombatRollCard`, exceto a iniciativa dos
+inimigos) seguram o dado no passo do clique com `useHeldRoll` (`components/game/combat/use-held-roll.ts`, decisão pura em `rollSlot`,
+`roll-hold.ts`): o clique prende o passo; enquanto o dado rola, o passo aparece como "rolando…" sem total nem veredito (no card avulso,
+sem o desfecho nem a cor); quando o dado para (`onRollSettled`) o resultado aparece; quando o palco termina de sair (`onStageHidden`,
+depois de `MADDOX_CHECK_DIE_HIDE_MS`) o passo é liberado e surge o próximo "Rolar" (ou o dado sai do card). Falha da rolagem libera o
+passo na hora; se o palco nunca avisar, o passo é liberado depois de `MADDOX_COMBAT_ROLL_HOLD_MAX_MS` (10 s). Quem assiste segue o mesmo
+ciclo pelo `replay`: o dado fica no passo cuja `step.roll.rollId` é a da repetição (antes da mesa nova, no pendente) e, depois que o
+palco sai, a mesma repetição (que continua no mapa do stream) não roda de novo no passo seguinte.
 
 Sem permissão nova (`maddox.play` cobre). Fora do escopo: grid e alcance medido (o movimento é texto), ações lendárias e de covil,
 XP e subida de nível, reações dos adversários além do ataque de oportunidade conduzido pelo Maddox, novo personagem depois da morte.

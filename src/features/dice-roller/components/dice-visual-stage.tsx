@@ -3,7 +3,7 @@
 import * as React from "react"
 import { colors } from "@/lib/config/colors"
 import { cn } from "@/core/utils"
-import { getSharedDiceBox, releaseSharedDiceBox, type SharedDiceBox } from "../dice-box-loader"
+import { getSharedDiceBox, releaseSharedDiceBox, syncDiceBoxSize, type SharedDiceBox } from "../dice-box-loader"
 import { buildDiceBoxNotation, buildDiceBoxStandbyNotation, expandStandbyVisualTerms, expandVisualResult } from "../dice-box-notation"
 import { renderStaticDiceBoxStandby } from "../dice-box-static-standby"
 import { CRITICAL_STAGE_CONFIG, CriticalHighlight, criticalBoxShadow } from "./critical-highlight"
@@ -49,6 +49,8 @@ export function DiceVisualStage({ terms, result, isRolling, mode, criticalState,
     const [isReady, setIsReady] = React.useState(false)
     const [visualError, setVisualError] = React.useState<string | null>(null)
     const [showRollResults, setShowRollResults] = React.useState(false)
+    // Entre `box.roll` e o fim da animação: o indicador de preparação nunca cobre o dado rolando.
+    const [isAnimating, setIsAnimating] = React.useState(false)
     const showStageResults = result && showRollResults
     const dice = showStageResults ? expandVisualResult(result) : expandStandbyVisualTerms(terms, mode)
     const stageColor = getStageColor(mode, showStageResults ? criticalState : null)
@@ -80,7 +82,10 @@ export function DiceVisualStage({ terms, result, isRolling, mode, criticalState,
                     shared.container.style.left = "0"
                     shared.container.style.top = "0"
                     shared.container.style.zIndex = "1"
-                    
+
+                    // O container nasce fora da tela em 450×260: ajusta o canvas ao palco antes da primeira rolagem.
+                    syncDiceBoxSize(box)
+
                     // Dispatch a resize event to ensure Three.js canvas size matches the new container
                     setTimeout(() => {
                         if (typeof window !== "undefined") {
@@ -126,6 +131,7 @@ export function DiceVisualStage({ terms, result, isRolling, mode, criticalState,
         if (!result) {
             rollTokenRef.current += 1
             onAnimationStateChange?.(false)
+            setIsAnimating(false)
             lastRolledResultIdRef.current = null
             setShowRollResults(false)
 
@@ -169,6 +175,7 @@ export function DiceVisualStage({ terms, result, isRolling, mode, criticalState,
         rollTokenRef.current = token
         setVisualError(null)
         onAnimationStateChange?.(true)
+        setIsAnimating(true)
         setShowRollResults(false)
 
         box.clearDice?.()
@@ -182,6 +189,7 @@ export function DiceVisualStage({ terms, result, isRolling, mode, criticalState,
             .finally(() => {
                 if (rollTokenRef.current === token) {
                     onAnimationStateChange?.(false)
+                    setIsAnimating(false)
                     setShowRollResults(true)
                     if (result) {
                         onRollComplete?.(result)
@@ -240,7 +248,7 @@ export function DiceVisualStage({ terms, result, isRolling, mode, criticalState,
                 className="absolute inset-0 z-10"
                 aria-hidden="true"
             />
-            {(isRolling || !isReady) && !visualError && (
+            {(isRolling || !isReady) && !isAnimating && !visualError && (
                 <div className={cn("pointer-events-none absolute inset-0 z-20 flex items-center justify-center text-xs font-black uppercase tracking-[0.28em] text-white/45", !bare && "bg-black/10")}>
                     <span data-testid="dice-loading-ellipsis" aria-label="Preparando dados" className="inline-flex min-w-12 justify-center">
                         <span className="animate-pulse [animation-delay:0ms]">.</span>

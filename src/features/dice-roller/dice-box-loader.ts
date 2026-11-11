@@ -157,6 +157,26 @@ export function releaseSharedDiceBox(shared: SharedDiceBox) {
     }
 }
 
+/**
+ * Ajusta o mundo 3D ao tamanho atual do container (depois de movê-lo para outro palco). Usa o `setDimensions` da lib
+ * quando existe; senão, cai no evento `resize` que a lib escuta (adiado por um quadro).
+ */
+export function syncDiceBoxSize(box: DiceBox) {
+    const sizable = box as unknown as { container?: HTMLElement; setDimensions?: (size: { x: number; y: number }) => void }
+    try {
+        const width = sizable.container?.clientWidth ?? 0
+        const height = sizable.container?.clientHeight ?? 0
+        // Mesma chamada do handler de `resize` da lib, só que na hora.
+        if (typeof sizable.setDimensions === "function" && width > 0 && height > 0) {
+            sizable.setDimensions({ x: width, y: height })
+            return
+        }
+    } catch (error) {
+        console.error("Failed to resize dice box", error)
+    }
+    if (typeof window !== "undefined") window.dispatchEvent(new Event("resize"))
+}
+
 export async function loadDiceBox() {
     if (globalThis.__DNDICAS_DICE_BOX_LOADER__) {
         return globalThis.__DNDICAS_DICE_BOX_LOADER__()

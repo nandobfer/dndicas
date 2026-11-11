@@ -15,6 +15,7 @@ const diceBoxMocks = vi.hoisted(() => ({
     initialize: vi.fn(),
     render: vi.fn(),
     roll: vi.fn(),
+    setDimensions: vi.fn(),
     simulateThrow: vi.fn(),
     spawnDice: vi.fn(),
     startClickThrow: vi.fn(),
@@ -53,6 +54,8 @@ describe("DiceRollerPanel", () => {
                 position: { x: number, y: number, z: number, set: (x: number, y: number, z: number) => void }
             }> = []
             display = { containerWidth: 160, containerHeight: 120, scale: 10 }
+            container = { clientWidth: 240, clientHeight: 190 }
+            setDimensions = diceBoxMocks.setDimensions
             renderer = { render: diceBoxMocks.render }
             scene = {}
             camera = {}
@@ -809,5 +812,80 @@ describe("DiceRollerPanel", () => {
 
         // The die visual chip should now show the rolled value "14"
         expect(die.getAttribute("data-value")).toBe("14")
+    })
+
+    describe("indicador de preparação (DND-48)", () => {
+        const preset = { label: "Espada Curta · Ataque", terms: [{ dice: "d20" as const, quantity: 1 }], modifier: 6, mode: "normal" as const, source: "sheet" as const }
+        const attack = { rollId: "attack-1", label: "Espada Curta · Ataque", terms: [{ dice: "d20" as const, quantity: 1, results: [11] }], mode: "normal" as const, selectedD20: { kept: 11, reason: "normal" as const }, diceTotal: 11, modifier: 6, total: 17, createdAt: "2026-01-01T00:00:00.000Z" }
+        const inlineProps = { preset, hideConfigurationControls: true, appearance: "inline" as const, stageVariant: "bare" as const, stageSize: "compact" as const, stageVisibility: "roll" as const, rollButtonLabel: "Rolar ataque" }
+
+        function deferred<T>() {
+            let resolve!: (value: T) => void
+            const promise = new Promise<T>((done) => {
+                resolve = done
+            })
+            return { promise, resolve }
+        }
+
+        it("o '...' aparece só enquanto espera a resposta e nunca cobre o dado rolando", async () => {
+            const request = deferred<typeof attack>()
+            const animation = deferred<unknown[]>()
+            diceBoxMocks.roll.mockReturnValue(animation.promise)
+            render(<DiceRollerPanel {...inlineProps} stageHideDelayMs={40} rollRequest={() => request.promise} />)
+
+            fireEvent.click(screen.getByRole("button", { name: "Rolar ataque" }))
+            await screen.findByTestId("dice-visual-stage")
+            await waitFor(() => expect(diceBoxMocks.startClickThrow).toHaveBeenCalled())
+            // Esperando o servidor: preparação.
+            expect(screen.getByTestId("dice-loading-ellipsis")).toBeInTheDocument()
+
+            await act(async () => request.resolve(attack))
+            await waitFor(() => expect(diceBoxMocks.roll).toHaveBeenCalledWith("1d20@11!!"))
+            // A animação começou ainda dentro da folga de 500 ms do botão: nada por cima do dado.
+            expect(screen.queryByTestId("dice-loading-ellipsis")).not.toBeInTheDocument()
+            expect(screen.getByRole("button", { name: "Rolando..." })).toBeDisabled()
+
+            await act(async () => animation.resolve([]))
+            expect(screen.queryByTestId("dice-loading-ellipsis")).not.toBeInTheDocument()
+        })
+
+        it("ajusta o canvas ao palco antes da primeira rolagem", async () => {
+            render(<DiceRollerPanel {...inlineProps} rollRequest={async () => attack} />)
+            fireEvent.click(screen.getByRole("button", { name: "Rolar ataque" }))
+            await waitFor(() => expect(diceBoxMocks.roll).toHaveBeenCalled())
+            expect(diceBoxMocks.setDimensions).toHaveBeenCalledWith({ x: 240, y: 190 })
+            expect(diceBoxMocks.setDimensions.mock.invocationCallOrder[0]).toBeLessThan(diceBoxMocks.roll.mock.invocationCallOrder[0]!)
+        })
+
+        it("avisa quando o palco daquele resultado terminou de sair", async () => {
+            const hidden = vi.fn()
+            const settled = vi.fn()
+            render(<DiceRollerPanel {...inlineProps} stageHideDelayMs={20} rollRequest={async () => attack} onRollSettled={settled} onStageHidden={hidden} />)
+            fireEvent.click(screen.getByRole("button", { name: "Rolar ataque" }))
+            await waitFor(() => expect(settled).toHaveBeenCalledWith(expect.objectContaining({ rollId: "attack-1" })))
+            expect(hidden).not.toHaveBeenCalled()
+            await waitFor(() => expect(hidden).toHaveBeenCalledWith(expect.objectContaining({ rollId: "attack-1" })))
+            expect(hidden).toHaveBeenCalledTimes(1)
+            expect(screen.queryByTestId("dice-visual-stage")).not.toBeInTheDocument()
+        })
+
+        it("painel comum: numa nova jogada o '...' aparece na espera e some quando o dado rola", async () => {
+            render(<DiceRollerPanel />)
+            fireEvent.click(screen.getByRole("button", { name: "JOGAR" }))
+            await waitFor(() => expect(screen.getByText("16")).toBeInTheDocument())
+
+            const request = deferred<Awaited<ReturnType<typeof requestDiceRoll>>>()
+            requestDiceRollMock.mockReturnValueOnce(request.promise)
+            const animation = deferred<unknown[]>()
+            diceBoxMocks.roll.mockReturnValueOnce(animation.promise)
+            await waitFor(() => expect(screen.getByRole("button", { name: "JOGAR" })).not.toBeDisabled())
+            fireEvent.click(screen.getByRole("button", { name: "JOGAR" }))
+            expect(screen.getByTestId("dice-loading-ellipsis")).toBeInTheDocument()
+
+            await act(async () => request.resolve({ ...attack, rollId: "roll-2" }))
+            await waitFor(() => expect(diceBoxMocks.roll).toHaveBeenLastCalledWith("1d20@11!!"))
+            expect(screen.queryByTestId("dice-loading-ellipsis")).not.toBeInTheDocument()
+            await act(async () => animation.resolve([]))
+        })
     })
 })

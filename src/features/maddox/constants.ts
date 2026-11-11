@@ -387,6 +387,11 @@ export const MADDOX_CHECK_REASON_GUIDE = 200
 export const MADDOX_CHECK_HINT_TIMEOUT_MS = 20_000
 /** Tempo (ms) que o dado do teste fica no card depois de parar, antes de sumir com animação. */
 export const MADDOX_CHECK_DIE_HIDE_MS = 1_400
+/**
+ * Teto (ms) que um card de combate segura o dado de um passo esperando a animação terminar e o palco sair (DND-48): se o
+ * palco nunca avisar, o card libera o passo e segue para o próximo.
+ */
+export const MADDOX_COMBAT_ROLL_HOLD_MAX_MS = 10_000
 
 // ── Combate narrativo (Maddox 6) ───────────────────────────────────────────────
 

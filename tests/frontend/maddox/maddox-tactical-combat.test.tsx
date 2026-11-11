@@ -1,27 +1,52 @@
 /** @vitest-environment happy-dom */
 import { describe, expect, it, vi } from "vitest"
+import { useState } from "react"
 import { act, fireEvent, render, screen, within } from "@testing-library/react"
+import type { DiceRollResponse } from "@/features/dice-roller/types"
 import type { CombatOption } from "@/features/maddox/combat-options"
 import type { MaddoxGameMessageDto, MaddoxMyCombatDto, MaddoxTacticalCombatDto } from "@/features/maddox/game-types"
 import { freshEconomy } from "@/features/maddox/combat-rules"
+import { MADDOX_COMBAT_ROLL_HOLD_MAX_MS } from "@/features/maddox/constants"
 import { rarityColors } from "@/lib/config/colors"
 
-vi.mock("@/features/dice-roller/components/dice-roller-panel", () => ({
-    DiceRollerPanel: (props: { rollButtonLabel?: string; hideRollButton?: boolean; rollRequest?: () => Promise<unknown>; externalResult?: { total: number } | null }) => (
+// Painel falso: "parar" é o fim da animação do dado (`onRollSettled`) e "sair" o fim da saída do palco (`onStageHidden`).
+interface PanelProps {
+    rollButtonLabel?: string
+    hideRollButton?: boolean
+    rollRequest?: () => Promise<DiceRollResponse>
+    externalResult?: DiceRollResponse | null
+    onRollSettled?: (roll: DiceRollResponse) => void
+    onStageHidden?: (roll: DiceRollResponse) => void
+}
+function FakePanel(props: PanelProps) {
+    const [local, setLocal] = useState<DiceRollResponse | null>(null)
+    const result = local ?? props.externalResult ?? null
+    return (
         <div data-testid="dice-panel">
             {!props.hideRollButton && (
-                <button type="button" onClick={() => void props.rollRequest?.()}>
+                <button type="button" onClick={() => void props.rollRequest?.().then(setLocal, () => undefined)}>
                     {props.rollButtonLabel}
                 </button>
             )}
             {props.externalResult && <span data-testid="dice-replay">{props.externalResult.total}</span>}
+            {result && (
+                <>
+                    <button type="button" onClick={() => props.onRollSettled?.(result)}>
+                        parar
+                    </button>
+                    <button type="button" onClick={() => props.onStageHidden?.(result)}>
+                        sair
+                    </button>
+                </>
+            )}
         </div>
-    ),
-}))
+    )
+}
+vi.mock("@/features/dice-roller/components/dice-roller-panel", () => ({ DiceRollerPanel: FakePanel }))
 
 const { CombatActionBar, CombatWaitBar, anchorLeft, COMBAT_MENU_WIDTH } = await import("@/features/maddox/components/game/combat/CombatActionBar")
 const { InitiativeTracker } = await import("@/features/maddox/components/game/combat/InitiativeTracker")
-const { CombatActionCard, CombatReactionCard } = await import("@/features/maddox/components/game/combat/CombatCards")
+const { CombatActionCard, CombatReactionCard, CombatRollCard } = await import("@/features/maddox/components/game/combat/CombatCards")
 
 const option = (over: Partial<CombatOption>): CombatOption => ({ id: "x", category: "weapons", economy: "action", label: "X", detail: "", target: "enemy", multiTarget: false, resolution: "attack", ...over })
 
@@ -172,26 +197,35 @@ const baseMessage = (over: Partial<MaddoxGameMessageDto>): MaddoxGameMessageDto 
     ...over,
 })
 
+const rollOf = (rollId: string, total: number, dice: "d20" | "d6" = "d20"): DiceRollResponse => ({ rollId, label: "Rolagem", terms: [{ dice, quantity: 1, results: [total] }], mode: "normal", diceTotal: total, modifier: 0, total, createdAt: "2026-11-01T10:00:00.000Z" })
+const attackRoll = rollOf("roll-attack", 17)
+const damageRoll = rollOf("roll-damage", 6, "d6")
+const baseStep = { targetKey: "npc:g1", targetName: "Goblin 1", roller: "player" as const, mode: "normal" as const, roll: null, total: null, hit: null, critical: false, success: null, amount: null, damageType: "perfurante", note: null, skill: null }
+const pendingAttack = baseMessage({
+    combatAction: { actorKey: "pc:kael", actorName: "Kael", actorKind: "character", economy: "action", category: "weapons", label: "Espada Curta", targets: [{ actorKey: "npc:g1", name: "Goblin 1" }], spellLevel: null, freeText: null, status: "pending", steps: [{ ...baseStep, kind: "attack", status: "pending", dice: "1d20+6" }, { ...baseStep, kind: "damage", status: "pending", dice: "1d6+3" }], summary: "", cancellable: true, round: 2 },
+})
+/** A mesa nova que chega logo depois da resposta da rolagem: ataque resolvido, dano pendente. */
+const hitAttack: MaddoxGameMessageDto = { ...pendingAttack, combatAction: { ...pendingAttack.combatAction!, cancellable: false, steps: [{ ...baseStep, kind: "attack", status: "done", dice: "1d20+6", roll: attackRoll, total: 17, hit: true }, { ...baseStep, kind: "damage", status: "pending", dice: "1d6+3" }] } }
+/** Último passo resolvido: a ação acabou e não há mais passo pendente. */
+const resolvedAction: MaddoxGameMessageDto = { ...hitAttack, combatAction: { ...hitAttack.combatAction!, status: "resolved", steps: [hitAttack.combatAction!.steps[0]!, { ...baseStep, kind: "damage", status: "done", dice: "1d6+3", roll: damageRoll, total: 6, amount: 6 }] } }
+
 describe("combate tático — cards na conversa", () => {
     it("ação: Rolar ataque, Acertou, Rolar dano e o cancelamento só de quem age", async () => {
-        const step = { targetKey: "npc:g1", targetName: "Goblin 1", roller: "player" as const, mode: "normal" as const, roll: null, total: null, hit: null, critical: false, success: null, amount: null, damageType: "perfurante", note: null, skill: null }
-        const pending = baseMessage({
-            combatAction: { actorKey: "pc:kael", actorName: "Kael", actorKind: "character", economy: "action", category: "weapons", label: "Espada Curta", targets: [{ actorKey: "npc:g1", name: "Goblin 1" }], spellLevel: null, freeText: null, status: "pending", steps: [{ ...step, kind: "attack", status: "pending", dice: "1d20+6" }, { ...step, kind: "damage", status: "pending", dice: "1d6+3" }], summary: "", cancellable: true, round: 2 },
-        })
-        const onRoll = vi.fn(async () => ({ total: 17 }) as never)
+        const onRoll = vi.fn(async () => attackRoll)
         const onCancel = vi.fn()
-        const { rerender } = render(<CombatActionCard message={pending} mine replay={null} onRoll={onRoll} onCancel={onCancel} />)
-        await act(async () => fireEvent.click(screen.getByText("Rolar ataque")))
-        expect(onRoll).toHaveBeenCalledWith("msg1")
+        const { rerender } = render(<CombatActionCard message={pendingAttack} mine replay={null} onRoll={onRoll} onCancel={onCancel} />)
         fireEvent.click(screen.getByTestId("combat-action-cancel"))
         expect(onCancel).toHaveBeenCalledWith("msg1")
-        const hit = { ...pending, combatAction: { ...pending.combatAction!, cancellable: false, steps: [{ ...step, kind: "attack" as const, status: "done" as const, dice: "1d20+6", total: 17, hit: true }, { ...step, kind: "damage" as const, status: "pending" as const, dice: "1d6+3" }] } }
-        rerender(<CombatActionCard message={hit} mine replay={null} onRoll={onRoll} onCancel={onCancel} />)
+        await act(async () => fireEvent.click(screen.getByText("Rolar ataque")))
+        expect(onRoll).toHaveBeenCalledWith("msg1")
+        rerender(<CombatActionCard message={hitAttack} mine replay={null} onRoll={onRoll} onCancel={onCancel} />)
+        fireEvent.click(screen.getByText("parar"))
+        fireEvent.click(screen.getByText("sair"))
         expect(screen.getByTestId("combat-step-verdict")).toHaveTextContent("Acertou")
         expect(screen.getByText("Rolar dano")).toBeInTheDocument()
         expect(screen.queryByTestId("combat-action-cancel")).not.toBeInTheDocument()
         // Quem assiste não rola: vê o dado repetido pelo stream.
-        rerender(<CombatActionCard message={hit} mine={false} replay={{ total: 6 } as never} onRoll={onRoll} onCancel={onCancel} />)
+        rerender(<CombatActionCard message={hitAttack} mine={false} replay={damageRoll} onRoll={onRoll} onCancel={onCancel} />)
         expect(screen.queryByText("Rolar dano")).not.toBeInTheDocument()
         expect(screen.getByTestId("dice-replay")).toHaveTextContent("6")
     })
@@ -217,6 +251,101 @@ describe("combate tático — cards na conversa", () => {
         } finally {
             vi.useRealTimers()
         }
+    })
+})
+
+describe("combate tático — o dado do card fica até sair de cena (DND-48)", () => {
+    const noop = () => undefined
+
+    it("ataque: a mesa nova chega no meio da animação e o dado continua no passo do ataque até o palco sair", async () => {
+        const onRoll = vi.fn(async () => attackRoll)
+        const { rerender } = render(<CombatActionCard message={pendingAttack} mine replay={null} onRoll={onRoll} onCancel={noop} />)
+        await act(async () => fireEvent.click(screen.getByText("Rolar ataque")))
+        rerender(<CombatActionCard message={hitAttack} mine replay={null} onRoll={onRoll} onCancel={noop} />)
+        // Ainda rolando: o mesmo painel, sem o próximo "Rolar" nem o resultado do ataque.
+        expect(screen.getAllByTestId("dice-panel")).toHaveLength(1)
+        expect(screen.queryByText("Rolar dano")).not.toBeInTheDocument()
+        expect(screen.getAllByTestId("combat-step")[0]).toHaveAttribute("data-status", "rolling")
+        expect(screen.queryByTestId("combat-step-verdict")).not.toBeInTheDocument()
+        expect(screen.queryByTestId("combat-step-total")).not.toBeInTheDocument()
+        // O dado parou: o resultado aparece, o dado continua na tela.
+        fireEvent.click(screen.getByText("parar"))
+        expect(screen.getByTestId("combat-step-verdict")).toHaveTextContent("Acertou")
+        expect(screen.getByTestId("combat-step-total")).toHaveTextContent("17")
+        expect(screen.queryByText("Rolar dano")).not.toBeInTheDocument()
+        // O palco saiu: só então o próximo passo.
+        fireEvent.click(screen.getByText("sair"))
+        expect(screen.getByText("Rolar dano")).toBeInTheDocument()
+    })
+
+    it("último passo: a ação resolvida não tira o dado do card antes de o palco sair", async () => {
+        const onRoll = vi.fn(async () => damageRoll)
+        const { rerender } = render(<CombatActionCard message={hitAttack} mine replay={null} onRoll={onRoll} onCancel={noop} />)
+        await act(async () => fireEvent.click(screen.getByText("Rolar dano")))
+        rerender(<CombatActionCard message={resolvedAction} mine replay={null} onRoll={onRoll} onCancel={noop} />)
+        expect(screen.getByTestId("combat-roll-panel")).toBeInTheDocument()
+        expect(screen.queryByTestId("combat-step-amount")).not.toBeInTheDocument()
+        fireEvent.click(screen.getByText("parar"))
+        expect(screen.getByTestId("combat-step-amount")).toHaveTextContent("6 de dano")
+        expect(screen.getByTestId("combat-roll-panel")).toBeInTheDocument()
+        fireEvent.click(screen.getByText("sair"))
+        expect(screen.queryByTestId("combat-roll-panel")).not.toBeInTheDocument()
+    })
+
+    it("falha da rolagem: o passo é liberado e o botão volta", async () => {
+        const onRoll = vi.fn(async (): Promise<DiceRollResponse> => {
+            throw new Error("Este passo já está sendo rolado.")
+        })
+        render(<CombatActionCard message={pendingAttack} mine replay={null} onRoll={onRoll} onCancel={noop} />)
+        await act(async () => fireEvent.click(screen.getByText("Rolar ataque")))
+        expect(screen.getByText("Rolar ataque")).toBeInTheDocument()
+        expect(screen.getAllByTestId("combat-step")[0]).toHaveAttribute("data-status", "pending")
+    })
+
+    it("quem assiste: a repetição continua no passo do ataque mesmo depois da mesa nova e não se repete no passo seguinte", () => {
+        const { rerender } = render(<CombatActionCard message={pendingAttack} mine={false} replay={attackRoll} onRoll={vi.fn()} onCancel={noop} />)
+        expect(screen.getByTestId("dice-replay")).toHaveTextContent("17")
+        rerender(<CombatActionCard message={hitAttack} mine={false} replay={attackRoll} onRoll={vi.fn()} onCancel={noop} />)
+        expect(screen.getByTestId("dice-replay")).toHaveTextContent("17")
+        expect(screen.getAllByTestId("combat-step")[0]).toHaveAttribute("data-status", "rolling")
+        fireEvent.click(screen.getByText("parar"))
+        expect(screen.getByTestId("combat-step-verdict")).toHaveTextContent("Acertou")
+        fireEvent.click(screen.getByText("sair"))
+        // A mesma repetição continua no mapa do stream, mas não volta a rolar no passo do dano.
+        expect(screen.queryByTestId("dice-panel")).not.toBeInTheDocument()
+    })
+
+    it("teto: se o palco nunca avisar, o passo é liberado depois do prazo", async () => {
+        vi.useFakeTimers()
+        try {
+            const onRoll = vi.fn(async () => attackRoll)
+            const { rerender } = render(<CombatActionCard message={pendingAttack} mine replay={null} onRoll={onRoll} onCancel={noop} />)
+            await act(async () => fireEvent.click(screen.getByText("Rolar ataque")))
+            rerender(<CombatActionCard message={hitAttack} mine replay={null} onRoll={onRoll} onCancel={noop} />)
+            expect(screen.queryByText("Rolar dano")).not.toBeInTheDocument()
+            act(() => vi.advanceTimersByTime(MADDOX_COMBAT_ROLL_HOLD_MAX_MS))
+            expect(screen.getByText("Rolar dano")).toBeInTheDocument()
+            expect(screen.getByTestId("combat-step-verdict")).toHaveTextContent("Acertou")
+        } finally {
+            vi.useRealTimers()
+        }
+    })
+
+    it("rolagem avulsa: o desfecho espera o dado parar e o dado sai só depois do palco", async () => {
+        const save = rollOf("roll-death", 14)
+        const pendingRoll = baseMessage({ kind: "combat-roll", combatRoll: { kind: "death-save", status: "pending", reason: "Teste contra a morte", dice: "1d20", mode: "normal", dc: 10, roll: null, total: null, success: null, outcome: null, rolledByName: null } })
+        const rolled = { ...pendingRoll, combatRoll: { ...pendingRoll.combatRoll!, status: "rolled" as const, roll: save, total: 14, success: true, outcome: "Sucesso" } }
+        const onRoll = vi.fn(async () => save)
+        const { rerender } = render(<CombatRollCard message={pendingRoll} mine replay={null} onRoll={onRoll} />)
+        await act(async () => fireEvent.click(screen.getByText("Rolar")))
+        rerender(<CombatRollCard message={rolled} mine replay={null} onRoll={onRoll} />)
+        expect(screen.getByTestId("combat-roll-panel")).toBeInTheDocument()
+        expect(screen.queryByTestId("combat-roll-outcome")).not.toBeInTheDocument()
+        fireEvent.click(screen.getByText("parar"))
+        expect(screen.getByTestId("combat-roll-outcome")).toHaveTextContent("14")
+        fireEvent.click(screen.getByText("sair"))
+        expect(screen.queryByTestId("combat-roll-panel")).not.toBeInTheDocument()
+        expect(screen.getByTestId("combat-roll-outcome")).toHaveTextContent("Sucesso")
     })
 })
 
