@@ -81,3 +81,39 @@ export function verifyMaddoxInterviewToken(token: string | null | undefined, now
         return null
     }
 }
+
+/**
+ * Token de CATÁLOGO (DND-49): a preparação do combate e o pedido de ajuste rodam no OpenCode com as ferramentas de
+ * catálogo pelo MCP. Domínio de assinatura próprio — só abre `search_catalog`/`get_catalog_entity`, nunca as ferramentas
+ * que gravam. Vale enquanto o job da campanha roda e a execução (`runId`) está aberta; cada leitura entra no registro dela.
+ */
+export interface MaddoxCatalogTokenPayload {
+    campaignId: string
+    jobId: string
+    runId: string
+    exp: number
+}
+
+const signCatalog = (payload: string) => createHmac("sha256", signingKey()).update(`maddox-catalog:${payload}`).digest("base64url")
+
+export function createMaddoxCatalogToken(input: Omit<MaddoxCatalogTokenPayload, "exp">, now = Date.now()): string {
+    const payload = Buffer.from(JSON.stringify({ ...input, exp: now + MADDOX_TURN_TOKEN_TTL_MS } satisfies MaddoxCatalogTokenPayload)).toString("base64url")
+    return `${payload}.${signCatalog(payload)}`
+}
+
+export function verifyMaddoxCatalogToken(token: string | null | undefined, now = Date.now()): MaddoxCatalogTokenPayload | null {
+    if (!token || typeof token !== "string") return null
+    const [payload, signature] = token.trim().split(".")
+    if (!payload || !signature) return null
+    const expected = Buffer.from(signCatalog(payload))
+    const received = Buffer.from(signature)
+    if (expected.length !== received.length || !timingSafeEqual(expected, received)) return null
+    try {
+        const parsed = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as Partial<MaddoxCatalogTokenPayload>
+        if (typeof parsed.campaignId !== "string" || typeof parsed.jobId !== "string" || typeof parsed.runId !== "string" || typeof parsed.exp !== "number") return null
+        if (parsed.exp < now) return null
+        return parsed as MaddoxCatalogTokenPayload
+    } catch {
+        return null
+    }
+}

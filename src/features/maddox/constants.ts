@@ -652,14 +652,22 @@ export const MADDOX_COMBAT_TARGETS_MAX = 12
 
 // ── Preparação da mesa de combate (DND-41) ────────────────────────────────────
 
-/** Teto técnico de UMA geração da preparação de uma ficha; passou disso, a preparação falha e o dono decide. */
-export const MADDOX_COMBAT_PREP_TIMEOUT_MS = 3 * 60_000
+/**
+ * Teto técnico de UMA geração da preparação de uma ficha; passou disso, a preparação falha e o dono decide. DND-49: com
+ * as consultas ao catálogo por ferramenta (várias idas e voltas), o teto subiu de 3 para 6 min.
+ */
+export const MADDOX_COMBAT_PREP_TIMEOUT_MS = 6 * 60_000
+/** DND-49: passos do laço de ferramentas (consultas ao catálogo + resposta) na preparação e no pedido de ajuste. */
+export const MADDOX_COMBAT_PREP_MAX_STEPS = 12
+export const MADDOX_COMBAT_ADJUST_MAX_STEPS = 10
+/** DND-49: conferência de quem está a 0 PV ao abrir o combate tático (antes da revisão da ficha, no mesmo job). */
+export const MADDOX_COMBAT_DOWNED_CHECK_TIMEOUT_MS = 60_000
 /** Preparação "em andamento" sem job vivo há mais que isto (processo reiniciado) volta para a fila. */
 export const MADDOX_COMBAT_PREP_STALE_MS = 30_000
 /** Novas leituras da ficha quando o jogador a altera durante a preparação. */
 export const MADDOX_COMBAT_PREP_CONFLICT_RETRIES = 2
-/** Teto técnico de uma geração do pedido de ajuste. */
-export const MADDOX_COMBAT_ADJUST_TIMEOUT_MS = 2 * 60_000
+/** Teto técnico de uma geração do pedido de ajuste (DND-49: 2 → 4 min, para caber as consultas ao catálogo). */
+export const MADDOX_COMBAT_ADJUST_TIMEOUT_MS = 4 * 60_000
 /** Texto do pedido de ajuste de uma opção. */
 export const MADDOX_COMBAT_ADJUST_TEXT_MAX = 500
 /** Conferência da condição do ataque furtivo (JEV ou geração curta do narrador). */
@@ -1039,17 +1047,21 @@ export const MADDOX_OPEX_INTERVIEW_FAILED_MESSAGE = "A entrevista do Personagem 
 /** Critério da preparação da mesa de combate (DND-41). O contrato da resposta fica fixo no código. */
 export const DEFAULT_MADDOX_COMBAT_PREP_INSTRUCTIONS = [
     "Você é Maddox, o mestre da campanha, preparando a mesa de um personagem para o combate tático. Confira, contra a ficha inteira, cada ação, ação bônus e habilidade que o servidor calculou.",
+    "O catálogo do DnDicas é a fonte de verdade das regras: ANTES de qualquer alteração de regra (bônus, dados, tipo de dano, CD, cura, cargas, espaços, atributos, proficiências, ataque furtivo, maestria, economia), leia no catálogo a classe, a característica, o talento, a magia ou o item com as ferramentas de catálogo, a partir das Referências do catálogo da ficha. Não use regras de memória nem de outras edições.",
+    "Toda alteração de regra leva a fonte: a entidade lida e o trecho exato do texto dela. Sem a regra no catálogo, não altere: deixe o valor do servidor e diga que falta cadastro.",
     "Confira o modificador certo de cada ataque (Acuidade usa o maior entre Força e Destreza; armas à distância usam Destreza), o bônus de proficiência, os dados e o tipo de dano, as magias preparadas, os recursos e as cargas.",
-    "Acrescente o que a ficha permite e o servidor não mostrou (ações bônus de classe, habilidades com custo de ação, danos adicionais como o ataque furtivo) e remova o que a ficha não permite.",
-    "Corrija também a ficha quando ela estiver errada, sempre explicando o motivo em uma frase curta, falando com o jogador. Não invente capacidades que a ficha, a classe, a espécie ou os talentos não dão.",
+    "Esconder-se, as ações padrão, os ataques das maestrias de arma e o momento do ataque furtivo são resolvidos pelo servidor: não os altere. Quando a classe der maestria de arma e a ficha não tiver nenhuma registrada, proponha as maestrias das armas do personagem, no limite da classe.",
+    "Acrescente o que a ficha permite e o servidor não mostrou (ações bônus de classe, habilidades com custo de ação) e remova o que a ficha não permite.",
+    "Corrija também a ficha quando ela estiver errada, sempre explicando o motivo em uma frase curta, falando com o jogador e citando a regra e a fonte (ex.: \"Ataque Furtivo 1d6 (classe Ladino, 1º nível)\"). Não invente capacidades que a ficha, a classe, a espécie ou os talentos não dão.",
     "Fale sempre em português do Brasil.",
 ].join("\n")
 
 /** Critério dos pedidos de ajuste de uma opção no combate (DND-41). */
 export const DEFAULT_MADDOX_COMBAT_ADJUST_INSTRUCTIONS = [
     "Você é Maddox, o mestre da campanha. Um jogador pediu, na própria vez do combate, um ajuste numa opção de ação do personagem dele.",
-    "Examine o pedido contra a ficha inteira e o grau de rigor da campanha. Aceite e corrija quando o jogador tiver razão; recuse quando o pedido contrariar a ficha ou as regras, ou tentar ganhar uma vantagem que o personagem não tem.",
-    "Sempre explique o motivo em uma ou duas frases, falando com o jogador.",
+    "Examine o pedido contra a ficha inteira, o grau de rigor da campanha e o catálogo do DnDicas: ANTES de decidir, leia no catálogo a regra que o pedido envolve com as ferramentas de catálogo. Não decida pela memória.",
+    "Se a regra citada pelo jogador bate com o catálogo, aceite e corrija, com a fonte (a entidade lida e o trecho exato). Se a regra não existe no catálogo, ou o pedido contraria a ficha ou tenta ganhar uma vantagem que o personagem não tem, recuse e diga o motivo.",
+    "Sempre explique o motivo em uma ou duas frases, falando com o jogador e citando a regra e a fonte.",
     "Fale sempre em português do Brasil.",
 ].join("\n")
 

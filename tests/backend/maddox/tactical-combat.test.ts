@@ -143,7 +143,10 @@ const { ItemModel } = await import("@/features/items/database/item")
 const { MaddoxCombatPrepModel } = await import("@/features/maddox/models")
 const combatPrep = await import("@/features/maddox/server/combat-prep")
 const adjustments = await import("@/features/maddox/server/combat-adjustments")
-const { combatPrepAi } = await import("../../helpers/combat-prep-mock")
+const { combatPrepAi, readCatalog } = await import("../../helpers/combat-prep-mock")
+/** DND-49: a regra lida no catálogo nesta execução e a fonte que a cita. */
+const RULE = { ref: "Regra:r1", quote: "regra do catálogo" }
+const readRule = (input: Parameters<typeof readCatalog>[0]) => readCatalog(input, "Regra", "r1", { name: "Regra", description: "Esta é a regra do catálogo do DnDicas." })
 const { recordAudit } = await import("@/lib/db")
 const { opexUserIdFor } = await import("@/features/maddox/server/opex-members")
 const { waitForOpexIdle } = await import("@/features/maddox/server/opex-runtime")
@@ -1071,10 +1074,11 @@ describe("DND-41 — a ordem de iniciativa espera a preparação da mesa", () =>
         combatPrepAi.review.mockImplementation(async (input) => {
             if (input.characterName !== "Kael") return { sheetChanges: [], modify: [], remove: [], add: [] }
             const weapon = /id="(weapon:[^"]+)"/.exec(input.optionsText)![1]
+            readRule(input)
             return {
-                sheetChanges: [{ type: "ability", attribute: "dexterity", value: 16, reason: "A rolagem da entrevista deu 16." }],
-                modify: [{ optionId: weapon, attack: { bonus: 7, damage: "1d8+3", damageType: "cortante" }, reason: "Estilo de luta Duelismo." }],
-                add: [{ id: "segundo-folego", category: "abilities", economy: "bonus", label: "Retomar o Fôlego", resolution: "heal", heal: { dice: "1d10+3" }, target: "self", reason: "Guerreiro de nível 3." }],
+                sheetChanges: [{ type: "ability", attribute: "dexterity", value: 16, reason: "A rolagem da entrevista deu 16.", source: RULE }],
+                modify: [{ optionId: weapon, attack: { bonus: 7, damage: "1d8+3", damageType: "cortante" }, reason: "Estilo de luta Duelismo.", source: RULE }],
+                add: [{ id: "segundo-folego", category: "abilities", economy: "bonus", label: "Retomar o Fôlego", resolution: "heal", heal: { dice: "1d10+3" }, target: "self", reason: "Guerreiro de nível 3.", source: RULE }],
             }
         })
         const { id, kael, lyra, cardOf } = await initiativeScene()
@@ -1109,7 +1113,8 @@ describe("DND-41 — a ordem de iniciativa espera a preparação da mesa", () =>
             if (input.characterName !== "Kael") return { sheetChanges: [], modify: [], remove: [], add: [] }
             calls += 1
             if (calls === 1) await CharacterSheet.collection.updateOne({ characterName: { $exists: false }, name: "Kael" }, { $set: { strength: 18, updatedAt: new Date() } })
-            return { sheetChanges: [{ type: "ability", attribute: "wisdom", value: 13, reason: "Corrigido." }] }
+            readRule(input)
+            return { sheetChanges: [{ type: "ability", attribute: "wisdom", value: 13, reason: "Corrigido.", source: RULE }] }
         })
         const { id, kael } = await initiativeScene()
         expect(calls).toBe(2)
@@ -1160,11 +1165,11 @@ describe("DND-41 — pedido de ajuste na própria vez", () => {
         const before = (await game.getGameState(id, kael.userId)).me.combat!
         const sword = before.options!.action.find((option) => option.category === "weapons" && option.id !== "unarmed")!
         const hold = deferred()
-        combatPrepAi.adjust.mockImplementation(async () => (await hold.gate, {
+        combatPrepAi.adjust.mockImplementation(async (input) => (await hold.gate, readRule(input), {
             decision: "accept",
             reason: "A espada tem acuidade nesta campanha: vale a Destreza.",
-            sheetChanges: [{ type: "ability", attribute: "dexterity", value: 16, reason: "Valor da entrevista." }],
-            modify: [{ optionId: sword.id, attack: { bonus: 6, damage: "1d8+3", damageType: "cortante", finesse: true }, reason: "A espada tem acuidade." }],
+            sheetChanges: [{ type: "ability", attribute: "dexterity", value: 16, reason: "Valor da entrevista.", source: RULE }],
+            modify: [{ optionId: sword.id, attack: { bonus: 6, damage: "1d8+3", damageType: "cortante", finesse: true }, reason: "A espada tem acuidade.", source: RULE }],
         }))
         await adjustments.requestCombatAdjustment(id, { economy: "action", optionId: sword.id, text: "mas a espada tem acuidade, deveria ser destreza" }, kael.userId)
         expect((await game.getGameState(id, kael.userId)).me.combat!.adjustments!.at(-1)!.status).toBe("pending")
@@ -1367,7 +1372,7 @@ describe("DND-41 — revisão (rodada 1 do revisor)", () => {
         await readyPrep(id, combatId, lyra, { characterName: "Lyra" })
         await MaddoxCampaignModel.updateOne({ _id: id }, { $set: { "turn.combatActor.actorKey": lyra.actorKey, "turn.combatActor.memberId": new mongoose.Types.ObjectId(lyra.memberId), "turn.eligibleMemberIds": [new mongoose.Types.ObjectId(lyra.memberId)] } })
         await MaddoxCombatModel.updateOne({ campaignId: id }, { $set: { "tactical.activeIndex": 2 } })
-        combatPrepAi.adjust.mockImplementation(async () => ({ decision: "accept", reason: "Corrigido.", sheetChanges: [{ type: "ability", attribute: "dexterity", value: 15, reason: "Valor da entrevista." }] }))
+        combatPrepAi.adjust.mockImplementation(async (input) => (readRule(input), { decision: "accept", reason: "Corrigido.", sheetChanges: [{ type: "ability", attribute: "dexterity", value: 15, reason: "Valor da entrevista.", source: RULE }] }))
         await adjustments.requestCombatAdjustment(id, { economy: "action", optionId: "unarmed", text: "minha destreza é 15" }, lyra.userId)
         await combatPrep.waitForCombatPreps()
         expect(vi.mocked(recordAudit)).toHaveBeenCalledWith(expect.objectContaining({ userId: lyra.userId, entidade: "FichaPersonagem", entidadeId: lyra.sheetId, depois: expect.objectContaining({ requestedBy: lyra.userId, origin: "combat-adjust" }) }))

@@ -288,13 +288,16 @@ export interface CombatPrepRider {
 
 /** Uma mudança para o card "Sua mesa está pronta": o que era, o que ficou e o motivo. */
 export interface CombatPrepChange {
-    area: "ficha" | "opcao" | "dano-adicional"
+    /** `aviso` (DND-49): linha só com o motivo (ex.: o Maddox não consultou o catálogo). */
+    area: "ficha" | "opcao" | "dano-adicional" | "aviso"
     label: string
     before: string
     after: string
     reason: string
     /** `false` = não aplicada (a ficha mudou ou o valor não passou na validação). */
     applied: boolean
+    /** DND-49: recusada por não estar confirmada no catálogo do DnDicas (o motivo da recusa, para o jogador). */
+    refused?: string | null
 }
 
 export interface CombatPrepAdjustment {
@@ -310,6 +313,9 @@ export interface CombatPrepAdjustment {
     changes: CombatPrepChange[]
     requestedAt: Date
     decidedAt: Date | null
+    /** DND-49: entidades do catálogo lidas ao examinar o pedido e alterações descartadas sem fonte. */
+    catalogRefs?: string[]
+    droppedWithoutSource?: number
 }
 
 export const emptyOverlay = (): CombatPrepOverlay => ({ modify: [], remove: [], add: [], suppress: [] })

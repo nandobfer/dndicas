@@ -1,13 +1,19 @@
+import { randomUUID } from "node:crypto"
 import type { MaddoxRigorLevel } from "../constants"
 import {
+    MADDOX_CATALOG_TOOL_NAMES,
     MADDOX_COMBAT_ADJUST_CONSUMPTION_ORIGIN,
+    MADDOX_COMBAT_ADJUST_MAX_STEPS,
     MADDOX_COMBAT_ADJUST_TIMEOUT_MS,
     MADDOX_COMBAT_PREP_CONSUMPTION_ORIGIN,
+    MADDOX_COMBAT_PREP_MAX_STEPS,
     MADDOX_COMBAT_PREP_TIMEOUT_MS,
+    MADDOX_MCP_SERVER_NAME,
     MADDOX_JEV_MODEL,
     MADDOX_SNEAK_ATTACK_CHECK_TIMEOUT_MS,
     MADDOX_SNEAK_ATTACK_CONSUMPTION_ORIGIN,
 } from "../constants"
+import { closeCatalogRun, openCatalogRun, recordCatalogToolResult, type CatalogReadLog } from "./catalog-reads"
 
 /**
  * Chamadas de IA da preparação da mesa de combate (DND-41) — SOMENTE servidor. Usa o mesmo modelo do narrador no grau
@@ -41,15 +47,18 @@ export async function withTimeout<T>(ms: number, label: string, run: (signal: Ab
     }
 }
 
+const SOURCE_FIELD = '"source":{"ref":"Tipo:id da entidade lida","quote":"trecho exato do texto dela"}'
+
 const SHEET_CHANGE_CONTRACT = [
-    '"sheetChanges": correções na ficha, cada uma com "type", os campos dela e "reason" (motivo curto, falando com o jogador). Tipos permitidos:',
-    '  - {"type":"ability","attribute":"strength|dexterity|constitution|intelligence|wisdom|charisma","value":1-30}',
-    '  - {"type":"save-proficiency","attribute":"…","proficient":true|false}',
-    '  - {"type":"skill-proficiency","skill":"nome da perícia como na ficha","proficient":true|false,"expertise":true|false}',
-    '  - {"type":"spellcasting-attribute","attribute":"…"|null}',
-    '  - {"type":"spell-slots","circle":1-9,"total":0-9}',
-    '  - {"type":"charge-upsert","chargeId":"id existente (opcional)","name":"…","total":n,"used":n}',
-    '  - {"type":"attack-upsert","attackId":"id existente (opcional)","name":"…","attackBonus":n,"damage":{"quantity":n,"faces":4|6|8|10|12|20,"bonus":n,"type":"perfurante"}}',
+    '"sheetChanges": correções na ficha, cada uma com "type", os campos dela e "reason" (motivo curto, falando com o jogador, citando a regra e a fonte). Tipos permitidos:',
+    `  - {"type":"ability","attribute":"strength|dexterity|constitution|intelligence|wisdom|charisma","value":1-30,${SOURCE_FIELD}}`,
+    `  - {"type":"save-proficiency","attribute":"…","proficient":true|false,${SOURCE_FIELD}}`,
+    `  - {"type":"skill-proficiency","skill":"nome da perícia como na ficha","proficient":true|false,"expertise":true|false,${SOURCE_FIELD}}`,
+    `  - {"type":"spellcasting-attribute","attribute":"…"|null,${SOURCE_FIELD}}`,
+    `  - {"type":"spell-slots","circle":1-9,"total":0-9,${SOURCE_FIELD}}`,
+    `  - {"type":"charge-upsert","chargeId":"id existente (opcional)","name":"…","total":n,"used":n,${SOURCE_FIELD}}`,
+    `  - {"type":"attack-upsert","attackId":"id existente (opcional)","name":"…","attackBonus":n,"damage":{"quantity":n,"faces":4|6|8|10|12|20,"bonus":n,"type":"perfurante"},${SOURCE_FIELD}}`,
+    `  - {"type":"weapon-mastery","catalogItemId":"catalogItemId do item da ficha","mastery":"nick|vex|sap|topple|graze|push|slow|cleave",${SOURCE_FIELD}} (fonte = a característica de classe que dá a maestria, com o trecho do número de armas)`,
     '  - {"type":"attack-remove","attackId":"id"}',
     '  - {"type":"trait-upsert"|"feat-upsert","id":"id existente (opcional)","name":"…","description":"…","ref":"c1 (opcional, para ligar a uma opção acrescentada)"}',
     '  - {"type":"spell-update","spellId":"id","prepared":true|false,"circle":0-9}',
@@ -58,12 +67,35 @@ const SHEET_CHANGE_CONTRACT = [
 ]
 
 const OPTION_CONTRACT = [
-    '"modify": opções que o servidor já mostra e precisam de correção: {"optionId":"id da lista","label"?,"detail"?,"economy"?:"action|bonus","attack"?:{"bonus":n,"damage":"1d4+3","damageType":"perfurante","ranged":bool,"light":bool,"finesse":bool},"save"?:{"ability":"…","dc":n,"halfOnSave":bool,"damage":"2d6"|null,"damageType":…},"heal"?:{"dice":"1d8+2"},"reason":"…"}',
+    `"modify": opções que o servidor já mostra e precisam de correção: {"optionId":"id da lista","label"?,"detail"?,"economy"?:"action|bonus","attack"?:{"bonus":n,"damage":"1d4+3","damageType":"perfurante","ranged":bool,"light":bool,"finesse":bool},"save"?:{"ability":"…","dc":n,"halfOnSave":bool,"damage":"2d6"|null,"damageType":…},"heal"?:{"dice":"1d8+2"},"reason":"…",${SOURCE_FIELD} (obrigatório com attack, save, heal ou economy)}`,
     '"remove": opções que a ficha não permite: {"optionId":"…","reason":"…"}',
-    '"add": opções que a ficha permite e faltam: {"id":"slug-curto","category":"weapons|spells|items|abilities|other","economy":"action|bonus|reaction","label":"…","detail":"…","target":"enemy|ally|self|any|none","resolution":"attack|save|heal|auto|utility","attack"?,"save"?,"heal"?,"chargeId"?:"id do recurso que gasta","itemId"?:"id do item que gasta","spellCircle"?:n,"fromChange"?:"ref da criação na ficha","reason":"…"}',
-    "Use os ids exatamente como aparecem na ficha e na lista. Não crie números que a ficha não sustente.",
+    `"add": opções que a ficha permite e faltam: {"id":"slug-curto","category":"weapons|spells|items|abilities|other","economy":"action|bonus|reaction","label":"…","detail":"…","target":"enemy|ally|self|any|none","resolution":"attack|save|heal|auto|utility","attack"?,"save"?,"heal"?,"chargeId"?:"id do recurso que gasta","itemId"?:"id do item que gasta","spellCircle"?:n,"fromChange"?:"ref da criação na ficha","reason":"…",${SOURCE_FIELD} (obrigatório com attack, save ou heal)}`,
+    "As ações padrão (Esconder-se, Esquivar, Disparada…), o ataque desarmado, o ataque de oportunidade, \"Outra ação\" e os ataques das maestrias (Ágil, Trespassar) são do servidor: não os altere, não os remova e não os acrescente.",
+    "Use os ids exatamente como aparecem na ficha e na lista. Não crie números que a ficha e o catálogo não sustentem.",
 ]
 
+/** Regras de fonte, fixas no código (valem mesmo com instruções antigas salvas na aba Agente Maddox). */
+const SOURCE_RULES = [
+    "## Fonte das regras (obrigatória)",
+    `Consulte o catálogo do DnDicas com ${MADDOX_CATALOG_TOOL_NAMES.search} e ${MADDOX_CATALOG_TOOL_NAMES.get} (use os ids das Referências do catálogo da ficha) ANTES de qualquer alteração de regra. Toda alteração de número ou de regra leva "source" com o "ref" (Tipo:id de uma entidade lida com ${MADDOX_CATALOG_TOOL_NAMES.get} nesta resposta) e o "quote" (trecho copiado literalmente do texto dela).`,
+    "O servidor confere cada fonte: sem source, com ref não lido ou com trecho que não está no texto, a alteração é recusada. Sem a regra no catálogo, não altere: deixe o valor do servidor e diga, no reason, que falta cadastro.",
+].join("\n")
+
+interface CatalogGeneration {
+    campaign: PrepCampaign
+    instructions: string
+    prompt: string
+    title: string
+    origin: string
+    signal: AbortSignal
+    /** Registro das consultas desta execução (fonte das alterações de regra). */
+    reads: CatalogReadLog
+    /** Job da fila da campanha (o token do MCP só vale enquanto ele roda). */
+    jobId: string
+    maxSteps: number
+}
+
+/** Geração curta do narrador, sem ferramentas (condição do ataque furtivo, checagem de quem está a 0 PV). */
 async function narratorText(campaign: PrepCampaign, instructions: string, prompt: string, title: string, origin: string, signal: AbortSignal): Promise<string> {
     const [{ loadNarrator }, { generateAiText }] = await Promise.all([import("./narrator"), import("@/lib/ai/stream")])
     const { model } = await loadNarrator(campaign.rigor)
@@ -81,6 +113,95 @@ async function narratorText(campaign: PrepCampaign, instructions: string, prompt
     return text
 }
 
+/**
+ * Geração com as ferramentas de catálogo (DND-49): na AI SDK, `search_catalog`/`get_catalog_entity` entram na chamada;
+ * no OpenCode, pelo MCP `dndicas-maddox` com o token de catálogo desta execução. Cada leitura entra em `reads`.
+ * Devolve o texto do último passo (o JSON da resposta).
+ */
+async function catalogGeneration(input: CatalogGeneration): Promise<string> {
+    const { loadNarrator } = await import("./narrator")
+    const { settings, model } = await loadNarrator(input.campaign.rigor)
+    if (model.provider === "opencode") {
+        const [{ ensureMaddoxMcp }, { createMaddoxCatalogToken }, { generateAiText }] = await Promise.all([import("./opencode-mcp"), import("./master-turn-token"), import("@/lib/ai/stream")])
+        await ensureMaddoxMcp(settings)
+        const runId = randomUUID()
+        const token = createMaddoxCatalogToken({ campaignId: String(input.campaign._id), jobId: input.jobId, runId })
+        const tools = [
+            "## Ferramentas",
+            `As ferramentas de catálogo (${MADDOX_CATALOG_TOOL_NAMES.search} e ${MADDOX_CATALOG_TOOL_NAMES.get}) vêm do servidor MCP \`${MADDOX_MCP_SERVER_NAME}\`.`,
+            `- Em TODA chamada a essas ferramentas, envie o campo \`turno\` exatamente com este valor: \`${token}\`.`,
+            "- Use só as ferramentas de catálogo nesta resposta.",
+        ].join("\n")
+        openCatalogRun(runId, input.reads)
+        try {
+            const { text } = await generateAiText({
+                provider: "opencode",
+                model: model.model,
+                agent: model.agent,
+                variant: model.variant,
+                instructions: `${input.instructions}\n\n${tools}`,
+                prompt: input.prompt,
+                title: input.title,
+                consumption: { origin: input.origin, subject: String(input.campaign._id) },
+                signal: input.signal,
+            })
+            return text
+        } finally {
+            closeCatalogRun(runId)
+        }
+    }
+    const [{ generateText, stepCountIs }, { prepareModel, samplingOptions, describeAiError }, { buildCatalogAiTools }, { recordAiConsumption }, { stepCostUsd }] = await Promise.all([
+        import("ai"),
+        import("@/lib/ai/stream"),
+        import("./catalog-tools"),
+        import("@/lib/ai/consumption"),
+        import("@/lib/ai/step-cost"),
+    ])
+    const prepared = await prepareModel({ provider: model.provider, model: model.model, variant: model.variant, sessionKey: `maddox:${String(input.campaign._id)}:combat-prep` })
+    try {
+        const tools = await buildCatalogAiTools({
+            onResult: (_tool, output) => recordCatalogToolResult(input.reads, output),
+            onError: (tool) => {
+                if (tool === MADDOX_CATALOG_TOOL_NAMES.get) input.reads.failures += 1
+            },
+        })
+        const result = await generateText({
+            model: prepared.model,
+            instructions: input.instructions,
+            messages: [{ role: "user", content: input.prompt }],
+            tools,
+            stopWhen: stepCountIs(input.maxSteps),
+            abortSignal: input.signal,
+            providerOptions: prepared.providerOptions,
+            ...(prepared.reasoning ? { reasoning: prepared.reasoning } : {}),
+            ...samplingOptions({ provider: model.provider, variant: model.variant, temperature: model.temperature, maxOutputTokens: model.maxOutputTokens }),
+        })
+        let costUsd: number | null = null
+        for (const step of result.steps) {
+            const cost = stepCostUsd(step.providerMetadata)
+            if (cost !== null) costUsd = (costUsd ?? 0) + cost
+        }
+        const num = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? value : null)
+        await recordAiConsumption({
+            dedupKey: `${input.origin}:${randomUUID()}`,
+            provider: model.provider,
+            origin: input.origin,
+            subject: String(input.campaign._id),
+            model: model.model,
+            inputTokens: num(result.totalUsage.inputTokens),
+            outputTokens: num(result.totalUsage.outputTokens),
+            totalTokens: num(result.totalUsage.totalTokens),
+            costUsd,
+        })
+        const last = [...result.steps].reverse().find((step) => step.text.trim())
+        return last?.text ?? result.text
+    } catch (error) {
+        throw new Error(describeAiError(error, model))
+    } finally {
+        await prepared.dispose().catch(() => undefined)
+    }
+}
+
 export interface ReviewSheetInput {
     campaign: PrepCampaign
     characterName: string
@@ -90,6 +211,10 @@ export interface ReviewSheetInput {
     optionsText: string
     /** Ataque furtivo detectado pelo servidor ("1d6" ou nenhum). */
     sneakAttack: string | null
+    /** DND-49: registro das consultas ao catálogo desta execução. */
+    reads: CatalogReadLog
+    /** DND-49: job da fila da campanha (token do MCP no OpenCode). */
+    jobId: string
 }
 
 /** Revisão da mesa de UM personagem. Devolve o objeto JSON da resposta (validado por quem chama). */
@@ -101,9 +226,11 @@ export async function reviewCombatSheet(input: ReviewSheetInput): Promise<unknow
         rigorBlock(input.campaign.rigor),
         "## Formato da resposta",
         "Responda SOMENTE com um objeto JSON com as chaves abaixo (listas vazias quando não houver nada a mudar):",
+        SOURCE_RULES,
+        "## Formato da resposta (continuação)",
         ...SHEET_CHANGE_CONTRACT,
         ...OPTION_CONTRACT,
-        '"sneakAttack": {"dice":"Xd6"|null,"reason":"…"} só quando o ataque furtivo detectado pelo servidor estiver errado (dados diferentes, ou o personagem não o tem); omita se estiver certo.',
+        `"sneakAttack": {"dice":"Xd6"|null,"reason":"…",${SOURCE_FIELD}} só quando o ataque furtivo detectado pelo servidor estiver errado pelo catálogo (dados diferentes, ou o personagem não o tem); omita se estiver certo.`,
     ].join("\n\n")
     const prompt = [
         `# Personagem: ${input.characterName}`,
@@ -112,7 +239,9 @@ export async function reviewCombatSheet(input: ReviewSheetInput): Promise<unknow
         input.optionsText,
         `## Ataque furtivo detectado pelo servidor: ${input.sneakAttack ? `+${input.sneakAttack}` : "nenhum"}`,
     ].join("\n\n")
-    const text = await withTimeout(MADDOX_COMBAT_PREP_TIMEOUT_MS, "a preparação da ficha", (signal) => narratorText(input.campaign, instructions, prompt, `Maddox · preparação do combate · ${input.campaign.name}`, MADDOX_COMBAT_PREP_CONSUMPTION_ORIGIN, signal))
+    const text = await withTimeout(MADDOX_COMBAT_PREP_TIMEOUT_MS, "a preparação da ficha", (signal) =>
+        catalogGeneration({ campaign: input.campaign, instructions, prompt, title: `Maddox · preparação do combate · ${input.campaign.name}`, origin: MADDOX_COMBAT_PREP_CONSUMPTION_ORIGIN, signal, reads: input.reads, jobId: input.jobId, maxSteps: MADDOX_COMBAT_PREP_MAX_STEPS }),
+    )
     return parseJsonObject(text)
 }
 
@@ -132,7 +261,9 @@ export async function reviewAdjustment(input: ReviewAdjustmentInput): Promise<un
         settings.combatAdjustInstructions,
         rigorBlock(input.campaign.rigor),
         "## Formato da resposta",
-        'Responda SOMENTE com um objeto JSON: {"decision":"accept"|"refuse","reason":"motivo em uma ou duas frases, falando com o jogador", e, quando aceitar, as correções:}',
+        'Responda SOMENTE com um objeto JSON: {"decision":"accept"|"refuse","reason":"motivo em uma ou duas frases, falando com o jogador e citando a regra e a fonte", e, quando aceitar, as correções:}',
+        SOURCE_RULES,
+        "Se a regra que o jogador cita bate com o catálogo, aceite com a fonte. Se ela não existe no catálogo, recuse e diga o motivo.",
         ...SHEET_CHANGE_CONTRACT,
         ...OPTION_CONTRACT,
         "Ao aceitar, corrija a opção pedida (modify, remove ou add) e grave a correção na ficha quando ela estiver errada lá. Ao recusar, deixe as listas vazias.",
@@ -147,7 +278,9 @@ export async function reviewAdjustment(input: ReviewAdjustmentInput): Promise<un
         ...(input.previous ? ["## Pedidos anteriores nesta preparação", input.previous] : []),
         `## Pedido do jogador\n${input.request}`,
     ].join("\n\n")
-    const text = await withTimeout(MADDOX_COMBAT_ADJUST_TIMEOUT_MS, "o pedido de ajuste", (signal) => narratorText(input.campaign, instructions, prompt, `Maddox · ajuste no combate · ${input.campaign.name}`, MADDOX_COMBAT_ADJUST_CONSUMPTION_ORIGIN, signal))
+    const text = await withTimeout(MADDOX_COMBAT_ADJUST_TIMEOUT_MS, "o pedido de ajuste", (signal) =>
+        catalogGeneration({ campaign: input.campaign, instructions, prompt, title: `Maddox · ajuste no combate · ${input.campaign.name}`, origin: MADDOX_COMBAT_ADJUST_CONSUMPTION_ORIGIN, signal, reads: input.reads, jobId: input.jobId, maxSteps: MADDOX_COMBAT_ADJUST_MAX_STEPS }),
+    )
     return parseJsonObject(text)
 }
 

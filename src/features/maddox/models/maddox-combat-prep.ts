@@ -31,6 +31,10 @@ export interface IMaddoxCombatPrep {
     riders: CombatPrepRider[]
     changes: CombatPrepChange[]
     adjustments: CombatPrepAdjustment[]
+    /** DND-49: entidades do catálogo lidas por ferramenta na preparação (`Tipo:id`). */
+    catalogRefs: string[]
+    /** DND-49: alterações de regra descartadas por falta de fonte confirmada no catálogo. */
+    droppedWithoutSource: number
     /** Mensagem privada "Sua mesa está pronta". */
     messageId: Types.ObjectId | null
     createdAt: Date
@@ -59,6 +63,8 @@ const PrepSchema = new Schema<IMaddoxCombatPrep>(
         riders: { type: Schema.Types.Mixed, default: () => [] },
         changes: { type: Schema.Types.Mixed, default: () => [] },
         adjustments: { type: Schema.Types.Mixed, default: () => [] },
+        catalogRefs: { type: [String], default: () => [] },
+        droppedWithoutSource: { type: Number, default: 0 },
         messageId: { type: Schema.Types.ObjectId, default: null },
     },
     { collection: "maddox_combat_preps", timestamps: true, versionKey: false, minimize: false },

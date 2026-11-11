@@ -420,18 +420,29 @@ export function CombatPrepCard({ message }: { message: MaddoxGameMessageDto }) {
                     </p>
                 ) : (
                     <ul className="space-y-1.5" data-testid="combat-prep-changes">
-                        {changes.map((change, index) => (
-                            <li key={`${change.label}-${index}`} className="break-words rounded-lg border border-white/10 px-2.5 py-1.5 text-xs" data-applied={change.applied} data-testid="combat-prep-change">
-                                <p className="flex flex-wrap items-center gap-1.5 text-white/85">
-                                    <span className="font-semibold text-white">{change.label}</span>
-                                    <span className="text-white/50 line-through">{change.before}</span>
-                                    <ArrowRight className="h-3 w-3 text-white/40" aria-hidden />
-                                    <span>{change.after}</span>
-                                    {!change.applied && <RarityChip color={rarityColors.artifact}>não aplicada: a ficha mudou</RarityChip>}
-                                </p>
-                                <p className="mt-0.5 whitespace-pre-wrap break-words text-white/60">{change.reason}</p>
-                            </li>
-                        ))}
+                        {changes.map((change, index) =>
+                            change.area === "aviso" ? (
+                                <li key={`aviso-${index}`} className="break-words rounded-lg border px-2.5 py-1.5 text-xs text-white/80" style={{ borderColor: `${rarityColors.artifact}55` }} data-applied={false} data-testid="combat-prep-notice">
+                                    {change.reason}
+                                </li>
+                            ) : (
+                                <li key={`${change.label}-${index}`} className="break-words rounded-lg border border-white/10 px-2.5 py-1.5 text-xs" data-applied={change.applied} data-refused={Boolean(change.refused)} data-testid="combat-prep-change">
+                                    <p className="flex flex-wrap items-center gap-1.5 text-white/85">
+                                        <span className="font-semibold text-white">{change.label}</span>
+                                        <span className="text-white/50 line-through">{change.before}</span>
+                                        <ArrowRight className="h-3 w-3 text-white/40" aria-hidden />
+                                        <span>{change.after}</span>
+                                        {!change.applied && <RarityChip color={rarityColors.artifact}>{change.refused ? "recusada" : "não aplicada: a ficha mudou"}</RarityChip>}
+                                    </p>
+                                    <p className="mt-0.5 whitespace-pre-wrap break-words text-white/60">{change.reason}</p>
+                                    {change.refused && (
+                                        <p className="mt-0.5 whitespace-pre-wrap break-words font-semibold" style={{ color: rarityColors.artifact }} data-testid="combat-prep-refused">
+                                            {change.refused}
+                                        </p>
+                                    )}
+                                </li>
+                            ),
+                        )}
                     </ul>
                 )}
             </div>

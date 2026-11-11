@@ -85,6 +85,8 @@ export interface ICharacterSheet extends Document {
     size: string
     armorTraining: { light: boolean; medium: boolean; heavy: boolean; shields: boolean }
     weaponProficiencies: string
+    /** DND-49: armas cuja maestria o personagem usa (item do catálogo + chave da maestria), no limite da classe. */
+    weaponMasteries: { catalogItemId: mongoose.Types.ObjectId; mastery: string }[]
     toolProficiencies: string
     createdAt: Date
     updatedAt: Date
@@ -234,6 +236,7 @@ const CharacterSheetSchema = new Schema<ICharacterSheet>(
             default: () => ({ light: false, medium: false, heavy: false, shields: false }),
         },
         weaponProficiencies: { type: String, default: "" },
+        weaponMasteries: { type: [{ _id: false, catalogItemId: { type: Schema.Types.ObjectId, required: true }, mastery: { type: String, required: true } }], default: () => [] },
         toolProficiencies: { type: String, default: "" },
     },
     { timestamps: true }
