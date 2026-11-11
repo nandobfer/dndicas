@@ -9,7 +9,8 @@ import {
     OWLBEAR_TOKEN_METADATA_KEY,
     OWLBEAR_TOKEN_METADATA_VERSION,
 } from "./config"
-import { DICE_TYPES, type DiceRollMode, type DiceRollResponse, type DiceRollTermResult, type DiceType } from "@/features/dice-roller/types"
+import { DICE_MODIFIER_PART_COLORS } from "@/features/dice-roller/dice-breakdown"
+import { DICE_TYPES, type DiceModifierPartColor, type DiceRollMode, type DiceRollResponse, type DiceRollTermResult, type DiceType } from "@/features/dice-roller/types"
 import type {
     OwlbearDiceHistoryEntry,
     OwlbearOverlayMetadata,
@@ -85,6 +86,18 @@ function parseDiceRollTermResult(value: unknown): DiceRollTermResult | null {
     }
 }
 
+/** DND-47: parcelas do modificador recebidas da sala (só as válidas; sem nenhuma, o campo nem aparece). */
+function parseModifierParts(value: unknown): Pick<DiceRollResponse, "modifierParts"> {
+    if (!Array.isArray(value)) return {}
+    const parts = value.flatMap((part) => {
+        if (!part || typeof part !== "object") return []
+        const { label, value: amount, color } = part as { label?: unknown; value?: unknown; color?: unknown }
+        if (typeof label !== "string" || !label.trim() || typeof amount !== "number" || !Number.isInteger(amount)) return []
+        return [{ label, value: amount, ...(DICE_MODIFIER_PART_COLORS.includes(color as DiceModifierPartColor) ? { color: color as DiceModifierPartColor } : {}) }]
+    })
+    return parts.length ? { modifierParts: parts } : {}
+}
+
 function parseDiceRollResponse(value: unknown): DiceRollResponse | null {
     if (!value || typeof value !== "object") return null
 
@@ -118,6 +131,7 @@ function parseDiceRollResponse(value: unknown): DiceRollResponse | null {
             : undefined,
         diceTotal: parsed.diceTotal,
         modifier: parsed.modifier,
+        ...parseModifierParts(parsed.modifierParts),
         total: parsed.total,
         createdAt: parsed.createdAt,
     }

@@ -1,4 +1,5 @@
 import crypto from "node:crypto"
+import { alignModifierParts } from "../dice-breakdown"
 import { clampDiceValue, getDiceFaces } from "../dice-utils"
 import type {
     DiceRollMode,
@@ -108,6 +109,8 @@ export function rollDice(
     }
 
     const diceTotal = terms.reduce((sum, term) => sum + term.results.reduce((inner, value) => inner + value, 0), 0)
+    // DND-47: parcelas nomeadas só quando quem pediu as mandou; a soma sempre fecha no modificador.
+    const modifierParts = input.modifierParts?.length ? alignModifierParts(input.modifierParts, modifier) : null
 
     return {
         rollId: options.rollId ?? crypto.randomUUID(),
@@ -117,6 +120,7 @@ export function rollDice(
         selectedD20,
         diceTotal,
         modifier,
+        ...(modifierParts?.length ? { modifierParts } : {}),
         total: diceTotal + modifier,
         createdAt: now.toISOString(),
     }

@@ -30,6 +30,7 @@ function getInitialState(preset?: DiceRollPreset | null) {
         mode: preset?.mode ?? "normal" as DiceRollMode,
         label: preset?.label ?? "Rolagem",
         source: preset?.source ?? "manual",
+        modifierParts: preset?.modifierParts,
     }
 }
 
@@ -65,6 +66,8 @@ interface DiceRollerPanelProps {
     onRollSettled?: (result: DiceRollResponse) => void
     /** Com `stageVisibility="roll"` e `stageHideDelayMs`: o palco daquele resultado terminou de sair da tela. */
     onStageHidden?: (result: DiceRollResponse) => void
+    /** DND-47: o tooltip do resultado marca o menor dado como descartado (atributos 4d6). */
+    resultDropLowest?: boolean
 }
 
 export function DiceRollerPanel({
@@ -89,6 +92,7 @@ export function DiceRollerPanel({
     rollButtonClassName,
     onRollSettled,
     onStageHidden,
+    resultDropLowest = false,
 }: DiceRollerPanelProps) {
     const inline = appearance === "inline"
     const [hiddenStageRollId, setHiddenStageRollId] = React.useState<string | null>(null)
@@ -109,6 +113,7 @@ export function DiceRollerPanel({
     const [mode, setMode] = React.useState<DiceRollMode>(() => getInitialState(preset).mode)
     const labelRef = React.useRef(getInitialState(preset).label)
     const sourceRef = React.useRef(getInitialState(preset).source)
+    const modifierPartsRef = React.useRef(getInitialState(preset).modifierParts)
     const [result, setResult] = React.useState<DiceRollResponse | null>(null)
     const [isRolling, setIsRolling] = React.useState(false)
     // Só a espera da resposta do servidor (sem a folga do botão): é o que o palco mostra como "preparando".
@@ -177,6 +182,7 @@ export function DiceRollerPanel({
         setMode(next.mode)
         labelRef.current = next.label
         sourceRef.current = next.source
+        modifierPartsRef.current = next.modifierParts
         setResult(null)
         setIsAnimatingDice(false)
         setShowResults(false)
@@ -245,6 +251,8 @@ export function DiceRollerPanel({
 
     const handleModifierChange = (nextModifier: number | "") => {
         markDirty()
+        // O modificador digitado à mão não tem mais as parcelas do preset.
+        modifierPartsRef.current = undefined
         setModifier(nextModifier)
     }
 
@@ -258,6 +266,7 @@ export function DiceRollerPanel({
         setMode("normal")
         labelRef.current = "Rolagem"
         sourceRef.current = "manual"
+        modifierPartsRef.current = undefined
         setResult(null)
         setIsAnimatingDice(false)
         setShowResults(false)
@@ -310,9 +319,11 @@ export function DiceRollerPanel({
         setShowResults(false)
         setErrorMessage(null)
         try {
+            const nextModifier = modifier === "" ? 0 : modifier
             const nextResult = await (rollRequest ?? requestDiceRoll)({
                 terms: nextTerms,
-                modifier: modifier === "" ? 0 : modifier,
+                modifier: nextModifier,
+                ...(modifierPartsRef.current?.length ? { modifierParts: modifierPartsRef.current } : {}),
                 mode: activeMode,
                 label: labelRef.current,
                 source: requestContext?.source ?? sourceRef.current,
@@ -395,7 +406,7 @@ export function DiceRollerPanel({
                             )}
                         </AnimatePresence>
                     )}
-                    {!inline && <DiceResultSummary result={showResults ? result : null} criticalState={showResults ? criticalState : null} />}
+                    {!inline && <DiceResultSummary result={showResults ? result : null} criticalState={showResults ? criticalState : null} dropLowest={resultDropLowest} />}
                 </div>
 
                 {(!hideConfigurationControls || errorMessage || disabledRollingMessage) && (

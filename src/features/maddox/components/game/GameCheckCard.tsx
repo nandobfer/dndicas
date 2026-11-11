@@ -10,7 +10,9 @@ import { useSheet } from "@/features/character-sheets/api/character-sheets-queri
 import type { CharacterSheet } from "@/features/character-sheets/types/character-sheet.types"
 import { DiceRollerPanel } from "@/features/dice-roller/components/dice-roller-panel"
 import { CRITICAL_STAGE_CONFIG, CriticalHighlight, criticalBoxShadow } from "@/features/dice-roller/components/critical-highlight"
+import { DiceResultTooltip } from "@/features/dice-roller/components/dice-result-tooltip"
 import { getDiceCriticalState } from "@/features/dice-roller/critical-state"
+import { partsFromCalc } from "@/features/dice-roller/dice-breakdown"
 import type { DiceRollPreset, DiceRollResponse } from "@/features/dice-roller/types"
 import { checkKindLabel, checkModeLabel, checkModifier, checkTitle, signed } from "../../check-modifier"
 import { MADDOX_CHECK_DIE_HIDE_MS } from "../../constants"
@@ -161,7 +163,7 @@ export function GameCheckCard({ message, mine, color, replay, onRoll }: Props) {
                     )}
                 </div>
 
-                {resultRoll && <CheckResultLine roll={resultRoll} outcome={outcome} />}
+                {resultRoll && <CheckResultLine roll={resultRoll.modifierParts?.length || !check.modifierParts.length ? resultRoll : { ...resultRoll, modifierParts: partsFromCalc(check.modifierParts) }} outcome={outcome} />}
             </div>
         </motion.div>
     )
@@ -176,7 +178,9 @@ function CheckResultLine({ roll, outcome }: { roll: DiceRollResponse; outcome: "
     return (
         <div className="relative z-10 flex flex-wrap items-center gap-2 text-sm text-white/80" data-testid="check-roll-result">
             <span className="text-2xl font-black text-white" data-testid="check-roll-total">
-                {roll.total}
+                <DiceResultTooltip roll={roll} criticalState={critical}>
+                    {roll.total}
+                </DiceResultTooltip>
             </span>
             <span>
                 d20{" "}

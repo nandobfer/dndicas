@@ -94,3 +94,23 @@ Script de terminal interativo para criar e consultar dice overrides diretamente,
 ## Botão flutuante (DND-20)
 
 O `DiceRollerFab` fica no grupo de botões flutuantes do canto inferior direito (`GlobalFabGroup`), reordenável por arraste junto com o Agente Opex e a Busca; ordem padrão **Dados → Agente Opex → Busca**, salva no `localStorage` (`dndicas:fab-order`). Não aparece no Owlbear (SDK disponível ou catálogo embutido via `useIsOwlbearCatalogEmbed`). Regras completas em [use-componentes-ui.md › Layout do app](../use-componentes-ui.md#layout-do-app-header-translúcido-e-botões-flutuantes-dnd-20).
+
+## Tooltip com a conta da rolagem (DND-47)
+
+Todo total de rolagem exibido no app abre a conta completa em `DiceResultTooltip` (`components/dice-result-tooltip.tsx`). A conta é montada sem React em `dice-breakdown.ts` (`buildDiceBreakdown`):
+
+- **Cabeçalho**: `label`, modo (Normal/Vantagem/Desvantagem), fórmula (`1d20 + 5`) e horário (`createdAt`, pt-BR).
+- **Dados rolados**: uma linha por termo (`2d6 →`) com um chip por dado na cor do tipo (`diceColors`).
+- **Vantagem/desvantagem**: com `selectedD20.discarded`, os dois d20 lado a lado — o mantido em verde ("mantido") e o descartado riscado ("descartado").
+- **Modificadores**: linha `Dados (1d20)` com `diceTotal` e uma linha por parcela de `modifierParts` (nome, sinal e a cor do `CalcPart` da ficha). Sem parcelas, uma linha "Modificador ±N"; com modificador 0, "Sem modificador".
+- **Total**: a conta explícita (`15 + 3 + 2 = 20`) e o total do servidor em destaque. Se `diceTotal + Σ parcelas` não bater com `total` (dado antigo), a diferença vira a linha "Ajuste do servidor": a conta sempre fecha.
+- **Crítico**: selo "Sucesso crítico"/"Falha crítica" (padrão `getDiceCriticalState`; a prop `criticalState` sobrescreve, `null` esconde — ex.: dano).
+- **4d6 dos atributos** (`dropLowest`, via `DiceRollerPanel resultDropLowest` → `DiceResultSummary dropLowest`): o menor dado aparece riscado e o tooltip mostra a pontuação sem ele.
+
+Comportamento: Radix Popover controlado (âncora `span role="button" tabIndex=0`, conteúdo `role="tooltip"` com `aria-describedby` no gatilho enquanto aberto). Abre no hover do mouse (atraso de 120 ms), no foco por teclado e no Enter/Espaço; no toque, o tap alterna (o foco vindo do toque não abre sozinho) e tocar fora fecha; `Esc`, sair o mouse ou perder o foco fecham. Portal com `avoidCollisions` (troca de lado quando falta espaço), `z-[9999]` acima das janelas, largura `min(20rem, 90vw)`. Cada consumidor escolhe o `side` para não cobrir o botão "Rolar".
+
+Onde é usado: `DiceResultSummary` (modal/FAB, Owlbear, PV da ficha e do Owlbear, atributos e PV da entrevista do Maddox, criação assistida), histórico da aba de dados do Owlbear (`history-total-tooltip-<id>`), `GameCheckCard` (`check-roll-total`), `CombatCards` (`combat-step-total` só quando o passo tem `roll` e `step.total === roll.total`; dano fixo sem dado não tem tooltip; `enemy-initiative-total`; `combat-roll-total`) e `LiveNpcRolls` (`live-roll-total`). O `ReplayDie` só anima: o resultado do replay aparece nesses pontos.
+
+### Parcelas do modificador (`modifierParts`)
+
+`DiceRollResponse.modifierParts?: DiceModifierPart[]` (`{ label, value, color? }`) é opcional: sem ele, a resposta é idêntica à anterior e o tooltip mostra "Modificador". Quem rola pode mandar `modifierParts` no `DiceRollRequest` (rota `/api/dice/rolls` valida com `DiceModifierPartSchema`: até 12, rótulo 1–60, inteiro −100…100) ou no `DiceRollPreset` (o painel repassa; o modificador digitado à mão descarta as parcelas do preset). O motor (`rollDice`) grava as parcelas passadas por `alignModifierParts(parts, modifier)`: tira as de valor 0 e, se a soma não bater com o modificador, acrescenta a diferença ("Outros" ou o rótulo do contexto) — a soma das parcelas é sempre igual a `modifier`. `partsFromCalc` converte o `CalcPart` da ficha (`"+3"`, `"−1"`). O parser da sala do Owlbear (`owlbear/sdk.ts`) preserva as parcelas válidas. O `HpDicePanel` aceita `modifierParts` (estabilizadas por conteúdo, para o preset não reiniciar o painel): a ficha manda "Constituição" ao subir de nível e o Owlbear manda "Constituição (pelos dados de vida)" no PV de NPC. As parcelas do Maddox estão em `maddox.md` › "Parcelas das rolagens (DND-47)".

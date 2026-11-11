@@ -228,6 +228,29 @@ describe("DiceRollerPanel", () => {
         expect(screen.queryByRole("button", { name: "JOGAR" })).not.toBeInTheDocument()
     })
 
+    it("DND-47: envia as parcelas do preset e o total do resumo abre o tooltip com a conta; modificador digitado descarta as parcelas", async () => {
+        const parts = [{ label: "Constituição", value: 2, color: "constitution" as const }]
+        const rollRequest = vi.fn(async () => ({ rollId: "hp-1", label: "PV ao subir de nível", terms: [{ dice: "d8" as const, quantity: 1, results: [5] }], mode: "normal" as const, diceTotal: 5, modifier: 2, modifierParts: parts, total: 7, createdAt: "2026-01-01T00:00:00.000Z" }))
+        const preset = { label: "PV ao subir de nível", terms: [{ dice: "d8" as const, quantity: 1 }], modifier: 2, modifierParts: parts, source: "sheet" as const }
+        const { unmount } = render(<DiceRollerPanel preset={preset} hideConfigurationControls rollRequest={rollRequest} />)
+        fireEvent.click(screen.getByRole("button", { name: "JOGAR" }))
+        await waitFor(() => expect(rollRequest).toHaveBeenCalledWith(expect.objectContaining({ modifier: 2, modifierParts: parts })))
+        const summary = await screen.findByTestId("dice-result-summary")
+        act(() => within(summary).getByTestId("dice-result-tooltip-trigger").focus())
+        const tooltip = screen.getByRole("tooltip")
+        expect(within(tooltip).getAllByTestId("dice-tooltip-line").map((line) => line.textContent)).toEqual(["Dados (1d8)5", "Constituição+2"])
+        expect(within(tooltip).getByTestId("dice-tooltip-equation")).toHaveTextContent("5 + 2 = 7")
+        unmount()
+
+        render(<DiceRollerPanel preset={{ ...preset, terms: [{ dice: "d20" as const, quantity: 1 }] }} rollRequest={rollRequest} />)
+        const modifierInput = screen.getByRole("spinbutton")
+        fireEvent.change(modifierInput, { target: { value: "4" } })
+        fireEvent.blur(modifierInput)
+        fireEvent.click(screen.getByRole("button", { name: "JOGAR" }))
+        await waitFor(() => expect(rollRequest).toHaveBeenCalledTimes(2))
+        expect((rollRequest.mock.calls as unknown as [Record<string, unknown>][])[1]![0]).not.toHaveProperty("modifierParts")
+    })
+
     it("by default keeps the framed stage, the full-width roll button and the result summary (unchanged layout)", async () => {
         render(<DiceRollerPanel />)
         const stage = screen.getByTestId("dice-visual-stage")

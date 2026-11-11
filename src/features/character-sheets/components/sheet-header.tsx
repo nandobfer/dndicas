@@ -1095,6 +1095,7 @@ export function useSheetHeaderSections({ sheet, form, items = [], isReadOnly = f
                        label="PV ao subir de nível"
                        terms={[{ dice: hitDieForLevelUp, quantity: 1 }]}
                        modifier={constitutionModifier}
+                       modifierParts={constitutionModifier ? [{ label: "Constituição", value: constitutionModifier, color: "constitution" }] : undefined}
                        sourceRef={{ sheetId: sheet._id, fieldId: "level-up-hp" }}
                        onRollResolved={(total) => {
                          setRolledHpGain(total)

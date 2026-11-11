@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { DiceResultTooltip } from "@/features/dice-roller/components/dice-result-tooltip"
 import { DiceRollerPanel } from "@/features/dice-roller/components/dice-roller-panel"
 import { getDiceCriticalState } from "@/features/dice-roller/critical-state"
 import { useDiceResultConsoleApi } from "@/features/dice-roller/hooks/use-dice-result-console-api"
@@ -156,7 +157,11 @@ function OwlbearDiceHistoryCard({ entry }: { entry: OwlbearDiceHistoryEntry }) {
                                 <span className="h-2 w-2 animate-pulse rounded-full bg-white/45 [animation-delay:240ms]" />
                             </span>
                         ) : (
-                            <p className="text-2xl font-black animate-in fade-in zoom-in-95 duration-300">{entry.result.total}</p>
+                            <p className="text-2xl font-black animate-in fade-in zoom-in-95 duration-300">
+                                <DiceResultTooltip roll={entry.result} side="left" data-testid={`history-total-tooltip-${entry.id}`}>
+                                    {entry.result.total}
+                                </DiceResultTooltip>
+                            </p>
                         )}
                     </div>
                     <p className="text-[11px] text-white/45">{formatRollTime(entry.createdAt)}</p>

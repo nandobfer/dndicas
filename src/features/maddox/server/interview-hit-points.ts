@@ -50,7 +50,7 @@ export async function rollHitPoint(campaignId: string, kind: MaddoxScriptKind, l
     const [{ rollGeneralDice }, { resolveGeneralDiceTarget }] = await Promise.all([import("@/features/dice-roller/server/dice-roll-service"), import("@/features/dice-roller/server/dice-target")])
     const dice = pending.card.hitDie as "d6"
     // Como o "Rolar vida" da ficha: 1 dado de vida + CON (só o dado fica gravado; o CON final entra no total).
-    const roll = await rollGeneralDice({ terms: [{ dice, quantity: 1 }], modifier: constitutionModifier(doc), mode: "normal", label: `PV do nível ${level}`, source: "sheet" }, resolveGeneralDiceTarget({ userId: subject.member.userId })!)
+    const roll = await rollGeneralDice({ terms: [{ dice, quantity: 1 }], modifier: constitutionModifier(doc), modifierParts: [{ label: "Constituição", value: constitutionModifier(doc), color: "constitution" }], mode: "normal", label: `PV do nível ${level}`, source: "sheet" }, resolveGeneralDiceTarget({ userId: subject.member.userId })!)
     const die = roll.terms.find((term) => term.dice === dice)?.results?.[0]
     if (typeof die !== "number") throw new DomainError(502, "A rolagem não voltou com o dado de vida. Tente de novo.", "ROLL_FAILED")
     // Troca condicional pelo tamanho atual: dois cliques ao mesmo tempo gravam uma rolagem só.

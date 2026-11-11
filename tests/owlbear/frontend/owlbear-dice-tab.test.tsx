@@ -187,6 +187,17 @@ describe("OwlbearDiceTab", () => {
         expect(screen.queryByText("Desvantagem")).not.toBeInTheDocument()
     })
 
+    it("DND-47: o total do histórico abre o tooltip com os dois d20 e o modificador", () => {
+        owlbearDiceHistoryMock.history = [createHistoryEntry({ id: "roll-tip" })]
+        renderDiceTab()
+        act(() => screen.getByTestId("history-total-tooltip-roll-tip").focus())
+        const tooltip = screen.getByRole("tooltip")
+        expect(within(tooltip).getByTestId("dice-tooltip-d20-kept")).toHaveTextContent("d20 20")
+        expect(within(tooltip).getByTestId("dice-tooltip-d20-discarded")).toHaveTextContent("d20 5")
+        expect(within(tooltip).getAllByTestId("dice-tooltip-line").map((line) => line.textContent)).toEqual(["Dados (1d20)20", "Modificador+2"])
+        expect(within(tooltip).getByTestId("dice-tooltip-critical")).toHaveTextContent("Sucesso crítico")
+    })
+
     it("keeps advantage and disadvantage labels visible when the roll mode requires it", () => {
         owlbearDiceHistoryMock.history = [
             createHistoryEntry({

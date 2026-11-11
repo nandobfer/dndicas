@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto"
+import { partsFromCalc } from "@/features/dice-roller/dice-breakdown"
+import { initiativeParts } from "../roll-parts"
 import { Types } from "mongoose"
 import { DomainError } from "@/lib/api/route"
 import { loggerFor } from "@/lib/logger"
-import type { DiceRollResponse } from "@/features/dice-roller/types"
+import type { DiceModifierPart, DiceRollResponse } from "@/features/dice-roller/types"
 import { MADDOX_COMBAT_OFFLINE_GRACE_MS, MADDOX_COMBAT_ROLL_CLAIM_STALE_MS, MADDOX_ENEMY_INITIATIVE_REVEAL_MS, MADDOX_NPC_BLOCK_PAUSE_MS, MADDOX_TACTICAL_COMBAT_RIGORS, type MaddoxRigorLevel } from "../constants"
 import { normalizeCatalogName } from "../catalog-markup"
 import { canAct, freshEconomy, formatDiceExpression, parseDiceExpression, sortInitiative, type RollMode } from "../combat-rules"
@@ -110,9 +112,13 @@ export async function mutateTactical<T>(campaignId: Types.ObjectId, mutate: (com
 // ── Dados ─────────────────────────────────────────────────────────────────────
 
 /** Rola uma expressão: do jogador (motor com as regras de dado dele) ou do servidor (adversários, sem regras de dado). */
-export async function rollExpression(expression: string, options: { mode?: RollMode; label: string; userId?: string | null }): Promise<DiceRollResponse> {
+/**
+ * Rola uma expressão ("1d20+5", "2d6+3") no servidor. `modifierParts` (DND-47) nomeia as parcelas do modificador; o
+ * motor alinha a soma ao modificador da expressão, então o tooltip do resultado sempre fecha no total.
+ */
+export async function rollExpression(expression: string, options: { mode?: RollMode; label: string; userId?: string | null; modifierParts?: readonly DiceModifierPart[] | null }): Promise<DiceRollResponse> {
     const parsed = parseDiceExpression(expression) ?? { terms: [], modifier: Number.parseInt(expression, 10) || 0 }
-    const input = { terms: parsed.terms, modifier: parsed.modifier, mode: options.mode ?? "normal", label: options.label, source: "sheet" as const }
+    const input = { terms: parsed.terms, modifier: parsed.modifier, mode: options.mode ?? "normal", label: options.label, source: "sheet" as const, ...(options.modifierParts?.length ? { modifierParts: [...options.modifierParts] } : {}) }
     if (options.userId) {
         const [{ rollGeneralDice }, { resolveGeneralDiceTarget }] = await Promise.all([import("@/features/dice-roller/server/dice-roll-service"), import("@/features/dice-roller/server/dice-target")])
         return rollGeneralDice(input, resolveGeneralDiceTarget({ userId: options.userId })!)
@@ -174,7 +180,7 @@ export async function rollMonsterInitiative(entries: readonly { actorKey: string
     for (const [index, entry] of entries.entries()) {
         let rolled = known.get(entry.groupKey)
         if (!rolled) {
-            const roll = await rollExpression(d20Expression(entry.stats.initiativeBonus), { mode, label: `Iniciativa · ${entry.name}` })
+            const roll = await rollExpression(d20Expression(entry.stats.initiativeBonus), { mode, label: `Iniciativa · ${entry.name}`, modifierParts: initiativeParts(entry.stats.initiativeBonus) })
             rolled = { total: roll.total, d20: keptD20Of(roll) }
             known.set(entry.groupKey, rolled)
         }
@@ -308,6 +314,7 @@ export async function createTacticalCombat(
                 dc: null,
                 mode: event.surprise === "personagens" ? "disadvantage" : "normal",
                 dice: d20Expression(modifier),
+                modifierParts: partsFromCalc(sheet?.initiative.parts),
                 roll: null,
                 total: null,
                 success: null,
@@ -337,6 +344,7 @@ export async function createTacticalCombat(
             dc: null,
             mode: event.surprise === "adversarios" ? "disadvantage" : "normal",
             dice: d20Expression(group.modifier),
+            modifierParts: initiativeParts(group.modifier),
             roll: null,
             total: null,
             success: null,
@@ -428,7 +436,7 @@ export async function rollEnemyInitiativeIfReady(campaignId: Types.ObjectId, tur
             )
             if (claimed.modifiedCount === 0) continue
             const request = message.combatRoll
-            const roll = await rollExpression(request.dice, { mode: request.mode, label: request.reason })
+            const roll = await rollExpression(request.dice, { mode: request.mode, label: request.reason, modifierParts: request.modifierParts })
             rolled.push({ id: message._id, groupKey: request.groupKey ?? "", roll })
         }
         if (!rolled.length) return 0

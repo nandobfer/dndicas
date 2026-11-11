@@ -168,6 +168,7 @@ function PendingCard({ card, rolls, color, disabled, onRoll, onReset, resetting,
                             preset={ROLL_PRESET}
                             hideConfigurationControls
                             rollButtonLabel="Rolar 4d6"
+                            resultDropLowest
                             disableRolling={disabled || rollsDone || Boolean(rolls?.invalid)}
                             disabledRollingMessage={rollsDone ? "As cinco rolagens foram feitas." : null}
                             rollRequest={async () => {

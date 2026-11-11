@@ -10,6 +10,7 @@ import {
 } from "./constants"
 import { abilityModifier, canAct, type CombatCondition, type CombatEconomy } from "./combat-rules"
 import type { MaddoxMasteryKey } from "./weapon-mastery"
+import type { DiceModifierPart } from "@/features/dice-roller/types"
 
 /**
  * Opções PURAS do personagem no combate tático (Maddox 7): o que ele PODE usar agora, por Ação, Ação bônus e reação.
@@ -104,9 +105,10 @@ export interface CombatOption {
     multiTarget: boolean
     resolution: CombatOptionResolution
     /** `mastery`/`modifier` (DND-49): maestria da arma dominada e o modificador de atributo usado (Garantido, Derrubar). */
-    attack?: { bonus: number; damage: string; damageType: string | null; ranged: boolean; light: boolean; finesse?: boolean; riders?: CombatRider[]; mastery?: MaddoxMasteryKey | null; modifier?: number }
+    /** `bonusParts`/`damageParts` (DND-47): parcelas nomeadas do bônus de ataque e do modificador do dano (tooltip). */
+    attack?: { bonus: number; damage: string; damageType: string | null; ranged: boolean; light: boolean; finesse?: boolean; riders?: CombatRider[]; mastery?: MaddoxMasteryKey | null; modifier?: number; bonusParts?: DiceModifierPart[]; damageParts?: DiceModifierPart[] }
     save?: { ability: AttributeType; dc: number; halfOnSave: boolean; damage: string | null; damageType: string | null }
-    heal?: { dice: string }
+    heal?: { dice: string; parts?: DiceModifierPart[] }
     spell?: { circle: number; levels: number[]; concentration: boolean; verbal?: boolean }
     charges?: { chargeId: string; used: number; total: number }
     /** Ações comuns com teste: perícias que o jogador escolhe. */
@@ -278,17 +280,29 @@ export function weaponItemId(optionId: string): string | null {
 
 /** Modificador do ataque com a arma: Acuidade = o maior entre Força e Destreza; à distância = Destreza; senão Força. */
 export function weaponModifier(weapon: OptionWeapon, sheet: OptionSheet): number {
+    return abilityModifier(sheet.abilities[weaponAbility(weapon, sheet)])
+}
+
+/** Atributo do ataque com a arma (o mesmo de `weaponModifier`; no empate da Acuidade, Destreza). */
+export function weaponAbility(weapon: OptionWeapon, sheet: OptionSheet): "strength" | "dexterity" {
     const str = abilityModifier(sheet.abilities.strength)
     const dex = abilityModifier(sheet.abilities.dexterity)
-    if (isFinesse(weapon)) return Math.max(str, dex)
-    return isRanged(weapon) ? dex : str
+    if (isFinesse(weapon)) return dex >= str ? "dexterity" : "strength"
+    return isRanged(weapon) ? "dexterity" : "strength"
 }
+
+const ABILITY_PART_LABELS: Record<AttributeType, string> = { strength: "Força", dexterity: "Destreza", constitution: "Constituição", intelligence: "Inteligência", wisdom: "Sabedoria", charisma: "Carisma" }
+
+/** Parcela de atributo para o tooltip da rolagem (DND-47). */
+export const abilityPart = (ability: AttributeType, value: number): DiceModifierPart => ({ label: ABILITY_PART_LABELS[ability], value, color: ability })
+export const proficiencyPart = (value: number): DiceModifierPart => ({ label: "Proficiência", value, color: "prof" })
 
 type WeaponVariant = "main" | "offhand" | "two-handed" | "thrown"
 
 function weaponOption(weapon: OptionWeapon, sheet: OptionSheet, economy: CombatEconomySlot, variant: WeaponVariant | boolean): CombatOption {
     const kind: WeaponVariant = variant === true ? "offhand" : variant === false ? "main" : variant
     const offhand = kind === "offhand"
+    const ability = weaponAbility(weapon, sheet)
     const modifier = weaponModifier(weapon, sheet)
     const bonus = sheet.proficiencyBonus + modifier
     const damageModifier = offhand ? Math.min(0, modifier) : modifier
@@ -306,7 +320,18 @@ function weaponOption(weapon: OptionWeapon, sheet: OptionSheet, economy: CombatE
         target: "enemy",
         multiTarget: false,
         resolution: "attack",
-        attack: { bonus, damage, damageType: weapon.damageType, ranged, light: isLight(weapon), finesse: isFinesse(weapon), mastery: weapon.mastery ?? null, modifier },
+        attack: {
+            bonus,
+            damage,
+            damageType: weapon.damageType,
+            ranged,
+            light: isLight(weapon),
+            finesse: isFinesse(weapon),
+            mastery: weapon.mastery ?? null,
+            modifier,
+            bonusParts: [abilityPart(ability, modifier), proficiencyPart(sheet.proficiencyBonus)],
+            damageParts: damageModifier ? [abilityPart(ability, damageModifier)] : [],
+        },
     }
 }
 
@@ -345,7 +370,7 @@ function unarmedOption(sheet: OptionSheet): CombatOption {
         target: "enemy",
         multiTarget: false,
         resolution: "attack",
-        attack: { bonus, damage, damageType: "contundente", ranged: false, light: false },
+        attack: { bonus, damage, damageType: "contundente", ranged: false, light: false, bonusParts: [abilityPart("strength", modifier), proficiencyPart(sheet.proficiencyBonus)] },
     }
 }
 
@@ -371,6 +396,14 @@ export function spellDice(spell: Pick<OptionSpell, "circle" | "baseDice" | "extr
     return spell.extraDicePerLevel.tipo === spell.baseDice.tipo ? dice(spell.baseDice, spell.baseDice.quantidade + spell.extraDicePerLevel.quantidade * extra) : `${base}+${extraDice}`
 }
 
+/** Bônus de ataque mágico: atributo de conjuração + proficiência; o que sobrar da ficha (itens, talentos) vira "Bônus mágico". */
+function spellAttackParts(sheet: OptionSheet): DiceModifierPart[] {
+    if (!sheet.spellAttribute) return [{ label: "Ataque mágico", value: sheet.spellAttackBonus, color: "bonus" }]
+    const ability = abilityModifier(sheet.abilities[sheet.spellAttribute])
+    const rest = sheet.spellAttackBonus - ability - sheet.proficiencyBonus
+    return [abilityPart(sheet.spellAttribute, ability), proficiencyPart(sheet.proficiencyBonus), ...(rest ? [{ label: "Bônus mágico", value: rest, color: "bonus" as const }] : [])]
+}
+
 function spellOption(spell: OptionSpell, sheet: OptionSheet, economy: CombatEconomySlot, levels: number[]): CombatOption {
     const resolution = spellResolution(spell)
     const level = spell.circle === 0 ? 0 : (levels[0] ?? spell.circle)
@@ -389,14 +422,14 @@ function spellOption(spell: OptionSpell, sheet: OptionSheet, economy: CombatEcon
         spell: { circle: spell.circle, levels: spell.circle === 0 ? [] : levels, concentration: spell.concentration, ...(spell.verbal ? { verbal: true } : {}) },
     }
     if (resolution === "attack") {
-        option.attack = { bonus: sheet.spellAttackBonus, damage: amount || "0", damageType: spell.damageType, ranged: true, light: false }
+        option.attack = { bonus: sheet.spellAttackBonus, damage: amount || "0", damageType: spell.damageType, ranged: true, light: false, bonusParts: spellAttackParts(sheet) }
         option.detail = `${circleLabel} · ${signed(sheet.spellAttackBonus)} para acertar${amount ? ` · ${amount}${spell.damageType ? ` ${spell.damageType}` : ""}` : ""}`
     } else if (resolution === "save" && spell.saveAttribute) {
         const halfOnSave = spell.profile?.halfOnSave ?? /metade (do|desse|deste|de) dano/.test(fold(spell.description))
         option.save = { ability: spell.saveAttribute, dc: sheet.spellSaveDc, halfOnSave, damage: amount || null, damageType: spell.damageType }
         option.detail = `${circleLabel} · salvaguarda CD ${sheet.spellSaveDc}${amount ? ` · ${amount}${spell.damageType ? ` ${spell.damageType}` : ""}${halfOnSave ? " (metade no sucesso)" : ""}` : ""}`
     } else if (resolution === "heal") {
-        option.heal = { dice: withModifier(amount, spellMod) }
+        option.heal = { dice: withModifier(amount, spellMod), ...(sheet.spellAttribute && spellMod ? { parts: [abilityPart(sheet.spellAttribute, spellMod)] } : {}) }
         option.detail = `${circleLabel} · cura ${option.heal.dice}`
     } else if (resolution === "auto") {
         option.attack = { bonus: 0, damage: amount, damageType: spell.damageType, ranged: true, light: false }

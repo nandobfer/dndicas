@@ -230,6 +230,35 @@ describe("combate tático — cards na conversa", () => {
         expect(screen.getByTestId("dice-replay")).toHaveTextContent("6")
     })
 
+    it("DND-47: o total de cada passo abre o tooltip com os dois d20 e as parcelas; total sem dado (Garantido) não tem tooltip", () => {
+        const advantageRoll: DiceRollResponse = { ...rollOf("roll-adv", 12), mode: "advantage", terms: [{ dice: "d20", quantity: 1, results: [12] }], selectedD20: { kept: 12, discarded: 5, reason: "advantage" }, diceTotal: 12, modifier: 6, modifierParts: [{ label: "Destreza", value: 3, color: "dexterity" }, { label: "Proficiência", value: 3, color: "prof" }], total: 18 }
+        const graze = { ...baseStep, kind: "damage" as const, status: "done" as const, roller: "server" as const, dice: "3", total: 3, amount: 3, note: "Maestria Garantido" }
+        const message = { ...hitAttack, combatAction: { ...hitAttack.combatAction!, status: "resolved" as const, steps: [{ ...baseStep, kind: "attack" as const, status: "done" as const, dice: "1d20+6", mode: "advantage" as const, roll: advantageRoll, total: 18, hit: true }, graze] } }
+        render(<CombatActionCard message={message} mine={false} replay={null} onRoll={vi.fn()} onCancel={vi.fn()} />)
+        const [attackTotal, grazeTotal] = screen.getAllByTestId("combat-step-total")
+        expect(within(grazeTotal!).queryByTestId("dice-result-tooltip-trigger")).not.toBeInTheDocument()
+        act(() => within(attackTotal!).getByTestId("dice-result-tooltip-trigger").focus())
+        const tooltip = screen.getByRole("tooltip")
+        expect(within(tooltip).getByTestId("dice-tooltip-d20-kept")).toHaveTextContent("d20 12")
+        expect(within(tooltip).getByTestId("dice-tooltip-d20-discarded")).toHaveTextContent("d20 5")
+        expect(within(tooltip).getAllByTestId("dice-tooltip-line").map((line) => line.textContent)).toEqual(["Dados (1d20)12", "Destreza+3", "Proficiência+3"])
+        expect(within(tooltip).getByTestId("dice-tooltip-equation")).toHaveTextContent("12 + 3 + 3 = 18")
+    })
+
+    it("DND-47: iniciativa dos inimigos e rolagem avulsa também abrem a conta no total", () => {
+        const initiative = { ...rollOf("roll-init", 11), modifier: 2, modifierParts: [{ label: "Iniciativa", value: 2, color: "dexterity" as const }], total: 13 }
+        const enemy = baseMessage({ kind: "combat-roll", phase: "master", combatRoll: { kind: "enemy-initiative", status: "rolled", reason: "Iniciativa · Goblin", dice: "1d20+2", mode: "normal", dc: null, roll: initiative, total: 13, success: null, outcome: "d20 11 + 2 = 13", rolledByName: null, groupName: "Goblin" } })
+        const { unmount } = render(<CombatRollCard message={enemy} mine={false} replay={null} onRoll={vi.fn()} />)
+        act(() => within(screen.getByTestId("enemy-initiative-total")).getByTestId("dice-result-tooltip-trigger").focus())
+        expect(within(screen.getByRole("tooltip")).getAllByTestId("dice-tooltip-line").map((line) => line.textContent)).toEqual(["Dados (1d20)11", "Iniciativa+2"])
+        unmount()
+        const save = { ...rollOf("roll-save", 8), modifier: 1, total: 9 }
+        const player = baseMessage({ kind: "combat-roll", phase: "master", characterName: "Kael", combatRoll: { kind: "save", status: "rolled", reason: "Salvaguarda", dice: "1d20+1", mode: "normal", dc: 12, roll: save, total: 9, success: false, outcome: "Falhou", rolledByName: null, groupName: null } })
+        render(<CombatRollCard message={player} mine={false} replay={null} onRoll={vi.fn()} />)
+        act(() => within(screen.getByTestId("combat-roll-total")).getByTestId("dice-result-tooltip-trigger").focus())
+        expect(within(screen.getByRole("tooltip")).getAllByTestId("dice-tooltip-line").map((line) => line.textContent)).toEqual(["Dados (1d20)8", "Modificador+1"])
+    })
+
     it("reação: contagem e opções só para quem reage; o dono só pode recusar no lugar", () => {
         vi.useFakeTimers()
         try {

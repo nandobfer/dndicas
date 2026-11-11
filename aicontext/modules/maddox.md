@@ -1819,6 +1819,29 @@ card de combate, no slot da iniciativa e no autor do card de ação (`knownOpexN
 
 **Memórias**: ver `aicontext/modules/engramind.md` › NPCs Opex.
 
+## Parcelas das rolagens (DND-47)
+
+Toda rolagem do Maddox leva as parcelas nomeadas do modificador dentro do próprio `roll` (`DiceRollResponse.modifierParts`), então o card gravado, o replay do stream (`combat-rolled`, `live-roll`) e a recarga mostram a mesma conta no tooltip do total (`DiceResultTooltip`, ver `dice-roller.md` › "Tooltip com a conta da rolagem"). O motor alinha a soma ao modificador da expressão (`alignModifierParts`): a conta sempre fecha no total do servidor. Helpers em `src/features/maddox/roll-parts.ts`.
+
+| Rolagem | Parcelas |
+|---|---|
+| Teste pedido pelo Maddox (`game-checks.ts`) | `partsFromCalc(checkModifier(...).parts)` (atributo, Prof., especialização); rolagens antigas sem parcelas usam `check.modifierParts` no card |
+| Ataque com arma do personagem | `attack.bonusParts` da opção (`combat-options.ts`: atributo usado — Força, Destreza ou o maior na Acuidade — e "Proficiência") + "Exaustão" |
+| Dano da arma | `attack.damageParts` (o atributo; na outra mão, só se negativo) |
+| Ataque desarmado | Força + Proficiência |
+| Ataque mágico | atributo de conjuração + Proficiência + "Bônus mágico" (o que sobrar de `spellAttackBonus`) |
+| Cura de magia | atributo de conjuração (`heal.parts`) |
+| Opção alterada pela preparação (`applyCombatPrep`) | as parcelas da lista base + "Ajuste da preparação do Maddox" com a diferença do bônus/dano |
+| Teste de perícia no combate | partes de `sheetSkill` + Exaustão |
+| Iniciativa do personagem | partes de `sheet.initiative` (gravadas no `combatRoll.modifierParts` pendente) |
+| Concentração | partes de `sheetSave(constituição)`; sem ficha, "Salvaguarda de Constituição" |
+| Salvaguarda de personagem pedida pelo adversário | "Salvaguarda de <Atributo>" |
+| Ataque / dano / salvaguarda / iniciativa de adversário | "Bônus de ataque" / "Modificador de dano" / "Salvaguarda de <Atributo>" / "Iniciativa" |
+| Dano ou cura livres do Maddox (`apply_effect`, dano pedido) | "Modificador de dano" / "Modificador de cura" |
+| PV por nível na entrevista | "Constituição" |
+
+Os passos guardam as parcelas em `CombatActionStep.modifierParts` e as rolagens avulsas em `IMaddoxCombatRoll.modifierParts` (campos `Mixed`, sem migração); `rollExpression(expr, { modifierParts })` as repassa ao motor. Dano crítico e ataque furtivo só acrescentam dados: as parcelas não mudam.
+
 ## Testes
 
 `tests/backend/maddox/*` (configuração, roteiros, avatar, sessões, rotas, `campaigns.test.ts` com MongoDB em

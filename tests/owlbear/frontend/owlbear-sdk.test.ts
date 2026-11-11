@@ -152,4 +152,17 @@ describe("Owlbear SDK - Dice History Limit", () => {
         )
         expect(Object.keys(currentMetadata).filter((key) => key.includes("/dice-history-"))).toHaveLength(13)
     })
+
+    it("DND-47: o histórico preserva as parcelas válidas do modificador e descarta as inválidas", async () => {
+        let currentMetadata: Record<string, unknown> = {}
+        sdkMock.room.getMetadata.mockImplementation(async () => currentMetadata)
+        sdkMock.room.setMetadata.mockImplementation(async (metadata) => {
+            currentMetadata = { ...currentMetadata, ...metadata }
+        })
+        const entry = createDummyEntry("parts", "2026-01-01T00:00:00.000Z")
+        entry.result = { ...entry.result, modifier: 3, total: 13, modifierParts: [{ label: "Força", value: 3, color: "strength" }, { label: "", value: 1 }, { label: "Cor", value: 1, color: "rosa" }] } as unknown as DiceRollResponse
+        await appendRoomDiceHistoryEntry(entry)
+        const state = await getRoomMetadataState()
+        expect(state.diceHistory[0]!.result.modifierParts).toEqual([{ label: "Força", value: 3, color: "strength" }, { label: "Cor", value: 1 }])
+    })
 })

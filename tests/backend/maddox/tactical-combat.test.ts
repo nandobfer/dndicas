@@ -747,6 +747,8 @@ describe("DND-25 — iniciativa dos inimigos depois dos personagens", () => {
             ["rolled", 13, "d20 11 + 2 = 13"],
             ["rolled", 7, "d20 6 + 1 = 7"],
         ])
+        // DND-47: a iniciativa dos inimigos chega com a parcela nomeada (tooltip do total).
+        expect(enemies.map((card) => card.combatRoll!.roll!.modifierParts)).toEqual([[{ label: "Iniciativa", value: 2, color: "dexterity" }], [{ label: "Iniciativa", value: 1, color: "dexterity" }]])
         expect(rolled).toEqual(expect.arrayContaining(enemies.map((card) => String(card._id))))
         // Os dados ainda estão na tela: a ordem não fechou e o Maddox não narrou.
         let combat = (await MaddoxCombatModel.findOne({ campaignId: id }).lean())!
@@ -842,7 +844,7 @@ describe("DND-25 — um bloco por adversário", () => {
     it("narração da vez de Kael, depois o bloco de cada goblin na ordem, com os dados ao vivo antes do texto e a pausa entre eles", async () => {
         const { id, kael, lyra } = await scene()
         await addSecondGoblin(id)
-        const lines: { type: string; roll?: { step: string; verdict: string | null; actorName: string } }[] = []
+        const lines: { type: string; roll?: { step: string; verdict: string | null; actorName: string; roll: import("@/features/dice-roller/types").DiceRollResponse } }[] = []
         const unsubscribe = subscribeGameLive(id, (line) => lines.push(line as never))
         dice.server.push([15], [3], [2])
         script.push(
@@ -885,6 +887,10 @@ describe("DND-25 — um bloco por adversário", () => {
             ["Goblin", "damage", null],
             ["Goblin 2", "attack", "miss"],
         ])
+        // DND-47: o ataque do NPC chega com "Bônus de ataque" e a soma do modificador fecha.
+        const npcAttack = lines.find((line) => line.type === "live-roll" && line.roll!.step === "attack")!.roll!.roll
+        expect(npcAttack.modifierParts!.map((part) => part.label)).toEqual(["Bônus de ataque"])
+        expect(npcAttack.modifierParts!.reduce((sum, part) => sum + part.value, 0)).toBe(npcAttack.modifier)
         // Depois do último goblin, abre a vez da Lyra; a fila e o bloco ficam limpos.
         const campaign = (await MaddoxCampaignModel.findById(id).lean())!
         expect(campaign.turn).toMatchObject({ phase: "players", pauseUntil: null })
@@ -1470,6 +1476,9 @@ describe("DND-49 — maestrias de arma e Esconder-se", () => {
         const step = (await actionOf(id)).combatAction!.steps[0]!
         expect(step).toMatchObject({ mode: "advantage", modeReasons: ["atacante invisível"] })
         expect(step.roll!.selectedD20).toMatchObject({ kept: 15, discarded: 3 })
+        // DND-47: o ataque leva as parcelas nomeadas (atributo e proficiência) somando exatamente o modificador.
+        expect(step.modifierParts!.map((part) => part.label)).toEqual([expect.stringMatching(/^(Força|Destreza)$/), "Proficiência"])
+        expect(step.roll!.modifierParts!.reduce((sum, part) => sum + part.value, 0)).toBe(step.roll!.modifier)
         expect((await stateOf(id, kael.actorKey)).conditions).toEqual([])
     })
 

@@ -1,4 +1,5 @@
 import { Types } from "mongoose"
+import { monsterSaveParts } from "../roll-parts"
 import { AcaoAuditoria, recordAudit } from "@/lib/db"
 import { DomainError } from "@/lib/api/route"
 import { loggerFor } from "@/lib/logger"
@@ -118,7 +119,7 @@ async function settleReaction(campaignId: Types.ObjectId, message: MessageDoc, s
                 const { loadCombatSheets } = await import("./combat-sheet")
                 const sheet = sheetId ? (await loadCombatSheets([sheetId])).get(sheetId) : null
                 const dc = sheet?.option.spellSaveDc ?? 13
-                const save = await rollExpression(d20ExpressionOf(source.state.stats.saves.constitution ?? 0), { label: `${source.name} · salvaguarda contra Contramágica` })
+                const save = await rollExpression(d20ExpressionOf(source.state.stats.saves.constitution ?? 0), { label: `${source.name} · salvaguarda contra Contramágica`, modifierParts: monsterSaveParts("constitution", source.state.stats.saves.constitution ?? 0) })
                 counterResult = save.total >= dc ? `${source.name} passou na salvaguarda de Constituição (${save.total} contra CD ${dc}): a magia acontece.` : `${source.name} falhou na salvaguarda de Constituição (${save.total} contra CD ${dc}): a magia é anulada.`
             }
         }

@@ -1,5 +1,5 @@
 import type { AttributeType } from "@/features/character-sheets/types/character-sheet.types"
-import type { DiceRollResponse } from "@/features/dice-roller/types"
+import type { DiceModifierPart, DiceRollResponse } from "@/features/dice-roller/types"
 import type { MaddoxReactionTrigger } from "./constants"
 import type { CombatCondition, CombatEconomy, CombatFlags, RollMode } from "./combat-rules"
 import type { CombatEconomySlot, CombatOption, CombatOptionCategory } from "./combat-options"
@@ -166,6 +166,8 @@ export interface CombatActionStep {
     skill: string | null
     /** DND-49: motivos da vantagem/desvantagem do ataque ("atacante invisível"); os dois juntos = rolagem normal. */
     modeReasons?: string[]
+    /** DND-47: parcelas nomeadas do modificador da expressão (vão para a rolagem e aparecem no tooltip do resultado). */
+    modifierParts?: DiceModifierPart[]
 }
 
 export interface IMaddoxCombatAction {
@@ -215,6 +217,8 @@ export interface IMaddoxCombatRoll {
     mode: RollMode
     /** Expressão rolada ("1d20+3", "2d6"). */
     dice: string
+    /** DND-47: parcelas nomeadas do modificador da expressão (tooltip do resultado). */
+    modifierParts?: DiceModifierPart[]
     roll: DiceRollResponse | null
     total: number | null
     success: boolean | null

@@ -860,6 +860,19 @@ describe("mesa Maddox — testes pedidos pelo Maddox (Maddox 5)", () => {
         expect(within(card).queryByTestId("critical-highlight")).not.toBeInTheDocument()
     })
 
+    it("DND-47: o total do teste abre o tooltip com os dois d20 da vantagem e as parcelas da ficha (também em rolagens antigas)", async () => {
+        await renderGame(gameState({ rigor: "fiel-dnd", messages: [checkMessage({ status: "rolled", roll: roll17, modifierParts: [{ label: "Destreza", value: "+3", color: "dexterity" }, { label: "Prof.", value: "+2", color: "prof" }] })] }))
+        act(() => within(screen.getByTestId("check-roll-total")).getByTestId("dice-result-tooltip-trigger").focus())
+        const tooltip = screen.getByRole("tooltip")
+        expect(within(tooltip).getByTestId("dice-tooltip-mode")).toHaveTextContent("Vantagem")
+        expect(within(tooltip).getByTestId("dice-tooltip-d20-kept")).toHaveTextContent("d20 12")
+        expect(within(tooltip).getByTestId("dice-tooltip-d20-discarded")).toHaveTextContent("d20 7")
+        expect(within(tooltip).getAllByTestId("dice-tooltip-line").map((line) => line.textContent)).toEqual(["Dados (1d20)12", "Destreza+3", "Prof.+2"])
+        expect(within(tooltip).getByTestId("dice-tooltip-equation")).toHaveTextContent("12 + 3 + 2 = 17")
+        fireEvent.keyDown(document.activeElement!, { key: "Escape" })
+        expect(screen.queryByRole("tooltip")).not.toBeInTheDocument()
+    })
+
     it("falha com a CD visível: bolha 'Falha' na linha do total e card vermelho", async () => {
         const roll9 = { ...roll17, rollId: "r9", mode: "normal" as const, terms: [{ dice: "d20" as const, quantity: 1, results: [4] }], selectedD20: { kept: 4, reason: "normal" as const }, diceTotal: 4, total: 9 }
         await renderGame(gameState({ rigor: "fiel-dnd", showCheckDc: true, messages: [checkMessage({ status: "rolled", mode: "normal", roll: roll9, dc: 15, success: false })] }))

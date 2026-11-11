@@ -232,6 +232,10 @@ describe("Maddox 5 — teste de perícia em campanha fiel (critério de aceite)"
         const rolled = after.messages.find((message) => message.kind === "check")!
         expect(rolled.check).toMatchObject({ status: "rolled", roll: expect.objectContaining({ total: 17 }), rolledByName: null, dc: null, success: null })
         expect(rolled.check!.modifierParts.map((part) => part.label)).toEqual(["Destreza", "Prof."])
+        // DND-47: a própria rolagem leva as parcelas nomeadas, somando exatamente o modificador (tooltip do total).
+        const parts = rolled.check!.roll!.modifierParts!
+        expect(parts.map((part) => part.label)).toEqual(["Destreza", "Prof."])
+        expect(parts.reduce((sum, part) => sum + part.value, 0)).toBe(rolled.check!.roll!.modifier)
         // Override consumido pelo motor.
         expect(await DiceRollOverride.countDocuments({})).toBe(0)
     })

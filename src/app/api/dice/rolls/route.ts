@@ -2,7 +2,7 @@ import { auth } from "@/core/auth/server"
 import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import type { ApiResponse } from "@/core/types/common"
-import { DiceRollRequestSchema, type DiceRollRequestInput } from "@/features/dice-roller/schemas"
+import { DiceModifierPartSchema, DiceRollRequestSchema, type DiceRollRequestInput } from "@/features/dice-roller/schemas"
 import { resolveGeneralDiceTarget } from "@/features/dice-roller/server/dice-target"
 import { rollGeneralDice } from "@/features/dice-roller/server/dice-roll-service"
 import { DICE_TYPES, type DiceRollMode, type DiceRollRequest, type DiceRollResponse, type DiceRollSource, type DiceTerm, type DiceType } from "@/features/dice-roller/types"
@@ -61,6 +61,11 @@ function getOptionalSource(value: unknown): DiceRollSource | undefined {
     throw new Error("Expected dice roll source in dice roll payload.")
 }
 
+function getOptionalModifierParts(value: unknown): Pick<DiceRollRequest, "modifierParts"> {
+    const parsed = z.array(DiceModifierPartSchema).safeParse(value)
+    return parsed.success && parsed.data.length ? { modifierParts: parsed.data } : {}
+}
+
 function toDiceRollRequest(input: DiceRollRequestInput): DiceRollRequest {
     const modifier = input.modifier
 
@@ -70,6 +75,7 @@ function toDiceRollRequest(input: DiceRollRequestInput): DiceRollRequest {
         mode: getRequiredMode(input.mode),
         label: getOptionalString(input.label),
         source: getOptionalSource(input.source),
+        ...getOptionalModifierParts(input.modifierParts),
         diceSessionId: getOptionalString(input.diceSessionId),
         playerName: getOptionalString(input.playerName),
         owlbearRoomId: getOptionalString(input.owlbearRoomId),
