@@ -228,6 +228,8 @@ export type MaddoxSheetRestoreStatus = (typeof MADDOX_SHEET_RESTORE_STATUSES)[nu
 export const MADDOX_SHEET_RESTORE_STALE_MS = 10 * 60 * 1000
 /** Teto de uma geração do ajuste da ficha. */
 export const MADDOX_SHEET_RESTORE_TIMEOUT_MS = 4 * 60 * 1000
+/** Folga para o job interrompido pelo reinício terminar (o que ele ainda gravar sai na limpeza que vem depois na fila). */
+export const MADDOX_JOB_ABORT_GRACE_MS = 15_000
 /** Espera máxima pelas execuções vivas dos Personagens Opex antes da limpeza do reinício. */
 export const MADDOX_RESET_OPEX_WAIT_MS = 5_000
 

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto"
 import { loggerFor } from "@/lib/logger"
 import type { DiceRollResponse } from "@/features/dice-roller/types"
 import type { MaddoxGameStreamLine, MaddoxLiveGenerationDto, MaddoxLiveRollDto } from "../game-types"
+import { MADDOX_JOB_ABORT_GRACE_MS } from "../constants"
 import type { TacticalDraftCombatant } from "./tactical-combat"
 
 /**
@@ -219,7 +220,15 @@ export function enqueueMaddoxJob(campaignId: string, label: string, run: (job: M
             // O job que segue rodando depois da interrupção não derruba o processo com uma rejeição solta.
             work.catch(() => undefined)
             const outcome = await Promise.race([work, whenAborted(controller.signal)])
-            if (outcome === "aborted") log.info({ campaignId, job: label }, "[maddox] geração da mesa interrompida: a campanha foi reiniciada")
+            if (outcome === "aborted") {
+                // A vaga só é liberada quando o job interrompido termina (o que ele gravar no meio sai na limpeza que vem
+                // depois na fila), com uma folga curta de teto para um job que ignore o sinal.
+                let timer: ReturnType<typeof setTimeout> | null = null
+                const settled = await Promise.race([work.then(() => true, () => true), new Promise<false>((resolve) => (timer = setTimeout(() => resolve(false), MADDOX_JOB_ABORT_GRACE_MS)))])
+                if (timer) clearTimeout(timer)
+                if (settled) log.info({ campaignId, job: label }, "[maddox] geração da mesa interrompida: a campanha foi reiniciada")
+                else log.warn({ campaignId, job: label, graceMs: MADDOX_JOB_ABORT_GRACE_MS }, "[maddox] geração interrompida não terminou dentro da folga: a fila segue sem ela")
+            }
         } catch (error) {
             log.error({ err: error instanceof Error ? error.message : String(error), campaignId, job: label }, "[maddox] falha numa geração da mesa")
         } finally {

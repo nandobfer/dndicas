@@ -64,19 +64,37 @@ export async function opexPromptContext(campaign: IMaddoxCampaign, member: IMadd
     }
 }
 
-async function withTimeout<T>(run: (signal: AbortSignal) => Promise<T>, ms: number, message = "o Personagem Opex demorou demais para decidir"): Promise<T> {
+async function withTimeout<T>(run: (signal: AbortSignal) => Promise<T>, ms: number, message = "o Personagem Opex demorou demais para decidir", outer?: AbortSignal): Promise<T> {
     const controller = new AbortController()
     let timer: ReturnType<typeof setTimeout> | null = null
+    let onAbort: (() => void) | null = null
     const timeout = new Promise<never>((_, reject) => {
         timer = setTimeout(() => {
             controller.abort()
             reject(new Error(message))
         }, ms)
+        // Reinício da campanha (DND-50): a decisão para na hora, mesmo que o provedor ignore o sinal.
+        if (outer) {
+            onAbort = () => {
+                controller.abort()
+                reject(new OpexDecisionInterruptedError())
+            }
+            if (outer.aborted) onAbort()
+            else outer.addEventListener("abort", onAbort, { once: true })
+        }
     })
     try {
         return await Promise.race([run(controller.signal), timeout])
     } finally {
         if (timer) clearTimeout(timer)
+        if (outer && onAbort) outer.removeEventListener("abort", onAbort)
+    }
+}
+
+/** A decisão do Opex foi interrompida pelo reinício da campanha (DND-50). */
+export class OpexDecisionInterruptedError extends Error {
+    constructor() {
+        super("decisão interrompida: a campanha foi reiniciada")
     }
 }
 
@@ -94,6 +112,8 @@ export interface OpexDecisionInput<T> {
     attempts?: number
     /** Quem decide, nas mensagens de erro e no log (padrão "Personagem Opex"). */
     actorLabel?: string
+    /** Sinal do job da fila (reinício da campanha, DND-50): interrompe a decisão sem nova tentativa. */
+    signal?: AbortSignal | null
 }
 
 /** Decisão do Opex: JSON validado, com uma nova tentativa. Falha das duas = erro com o motivo (pt-BR). */
@@ -119,11 +139,13 @@ export async function decideOpex<T>(input: OpexDecisionInput<T>): Promise<T> {
                     }),
                 input.timeoutMs ?? MADDOX_OPEX_GENERATION_TIMEOUT_MS,
                 `o ${label} demorou demais para decidir`,
+                input.signal ?? undefined,
             )
             const parsed = input.schema.safeParse(parseJsonObject(text))
             if (parsed.success) return parsed.data
             lastError = "resposta fora do formato"
         } catch (error) {
+            if (error instanceof OpexDecisionInterruptedError) throw error
             lastError = error instanceof Error ? error.message : String(error)
         }
         log.warn({ attempt, err: lastError, subject: input.subject, title: input.title }, `[maddox] decisão do ${label} inválida`)

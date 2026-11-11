@@ -363,6 +363,56 @@ describe("interrupção da mesa", () => {
         expect(live.isCampaignBusy(id)).toBe(false)
     })
 
+    it("a narração que já está gravando no momento do reinício: a limpeza espera o job e nada sobra depois", async () => {
+        const { id, owner } = await table(2)
+        // A gravação das mensagens da narração fica segurada até depois de o dono confirmar o reinício.
+        let releaseWrite!: () => void
+        const writeGate = new Promise<void>((resolve) => (releaseWrite = resolve))
+        let writing!: () => void
+        const writeStarted = new Promise<void>((resolve) => (writing = resolve))
+        const original = MaddoxCampaignMessageModel.insertMany.bind(MaddoxCampaignMessageModel)
+        const spy = vi.spyOn(MaddoxCampaignMessageModel, "insertMany").mockImplementationOnce((async (...args: Parameters<typeof original>) => {
+            writing()
+            await writeGate
+            return original(...args)
+        }) as never)
+        await game.startCampaign(id, owner)
+        await writeStarted
+
+        const resetting = reset.resetCampaign(id, owner)
+        let finished = false
+        void resetting.then(() => (finished = true))
+        await new Promise((resolve) => setTimeout(resolve, 100))
+        // A limpeza não roda antes de o job interrompido terminar a gravação.
+        expect(finished).toBe(false)
+        releaseWrite()
+        await resetting
+        await live.waitForCampaignIdle(id)
+        spy.mockRestore()
+
+        expect(await allMessages(id)).toHaveLength(0)
+        expect(await MaddoxCampaignSnapshotModel.countDocuments({ campaignId: id, kind: "turn" })).toBe(0)
+        const campaign = await campaignOf(id)
+        expect(campaign!.status).toBe("lobby")
+        expect(campaign!.turn).toMatchObject({ number: 0, phase: "master", generating: null })
+        expect(campaign!.reset).toMatchObject({ status: "done" })
+    })
+
+    it("execução viva de um Personagem Opex que não termina: a limpeza segue depois do teto de espera", async () => {
+        const { id, owner } = await playTo(2)
+        const { runOpexOnce } = await import("@/features/maddox/server/opex-runtime")
+        let releaseRun!: () => void
+        const stuck = new Promise<void>((resolve) => (releaseRun = resolve))
+        void runOpexOnce(`combat:${id}`, () => stuck)
+        const startedAt = Date.now()
+        await reset.resetCampaign(id, owner)
+        expect(Date.now() - startedAt).toBeGreaterThanOrEqual(4_000)
+        expect(await allMessages(id)).toHaveLength(0)
+        expect((await campaignOf(id))!.reset).toMatchObject({ status: "done" })
+        releaseRun()
+        await waitForOpexIdle()
+    })
+
     it("a mesa aberta recebe o reinício pelo estado (status lobby com resetAt)", async () => {
         const { id, owner, seats } = await playTo(2)
         expect((await game.getGameState(id, seats[1]!.userId)).resetAt ?? null).toBeNull()

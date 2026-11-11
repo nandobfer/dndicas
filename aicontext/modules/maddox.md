@@ -1877,8 +1877,11 @@ turno e estado zerados) — o motor só anda com `status: "active"`, então nenh
 a mesa (`cancelCampaignJobs`: aborta o sinal do job em andamento, que deixa de ser job ativo — o token de turno do MCP e as
 ferramentas param de valer, e `runMaddoxTool` recusa gravações de um job interrompido —, descarta os jobs que esperavam a vez e
 encerra as gerações ao vivo com `live-end`; `cancelCampaignTimers`; espera até 5 s as execuções vivas dos Personagens Opex) e
-roda a limpeza na fila da campanha, depois do job interrompido. A narração e a resposta interrompidas não gravam nada
-(`withGenerationTimeout` corre contra o sinal do job e confere `isActiveMaddoxJob` antes de gravar). Campanha **arquivada**
+roda a limpeza na fila da campanha, depois do job interrompido: a fila só libera a vaga quando o job interrompido termina
+(o que ele ainda gravava sai na limpeza), com folga de teto `MADDOX_JOB_ABORT_GRACE_MS` (15 s, aviso no log) para um job que
+ignore o sinal. A narração e a resposta interrompidas não gravam nada (`withGenerationTimeout` corre contra o sinal do job e
+confere `isActiveMaddoxJob` antes de gravar); a decisão do Personagem Opex recebe o mesmo sinal (`decideOpex({ signal })`) e
+para na hora, sem declaração, pergunta, memória nem falha registrada. Campanha **arquivada**
 restaura os canais das memórias antes de apagar os NPCs. No fim: `reset.status: "done"`, auditoria `CampanhaMaddox`
 (`depois: { reset: "lobby", fichas: { <personagem>: "copia" | "maddox" | "sem-ficha" } }`), aviso `maddox.campaign.changed`
 a todos os membros e `notifyJournalChanged`.
@@ -1921,7 +1924,8 @@ memória, `campaign-routes.test.ts`, `grant-maddox-play.test.ts`; Personagens Op
 (`maddox-tab.test.tsx`, `maddox-campaigns.test.tsx`, `maddox-campaigns-realtime.test.tsx`, `maddox-opex.test.tsx`, `maddox-opex-npc.test.tsx`; happy-dom).
 Reiniciar campanha (DND-50): `campaign-reset.test.ts` (reinício completo — o que apaga e o que preserva —, só o dono, fases aceitas,
 duas vezes seguidas, limpeza interrompida retomada, Engramind fora com início recusado e rotina, narração em andamento interrompida
-sem gravar e job da fila descartado, `resetAt` no estado da mesa), `sheet-restore.test.ts` (as três fontes da ficha, cópia de quem
+sem gravar e job da fila descartado, narração interrompida no meio da gravação, teto da espera pelos Opex, `resetAt` no estado da
+mesa), `opex-table.test.ts` (Personagem Opex decidindo no momento do reinício), `sheet-restore.test.ts` (as três fontes da ficha, cópia de quem
 entra depois, bloqueio do início durante o ajuste, falha num personagem com "Tentar de novo" só dele e sem o motivo no DTO, ajuste
 preso, personagem sem ficha), `campaign-routes.test.ts` (rotas), `tests/backend/engramind/campaign-rewind.test.ts` (exclusão de todas
 as memórias) e, na tela, `maddox-campaign-reset.test.tsx` (botão, diálogo, bloqueio, aviso de falha, aviso da mesa) e
