@@ -1,5 +1,6 @@
 import { availableSlotLevels, plainText, type CombatOption, type CombatOptions, type CombatRider, type OptionSheet } from "./combat-options"
-import type { CombatEconomy } from "./combat-rules"
+import { alignModifierParts } from "@/features/dice-roller/dice-breakdown"
+import { parseDiceExpression, type CombatEconomy } from "./combat-rules"
 import type { CombatOptionPatch, CombatPrepOverlay, CombatPrepRider, PreparedCombatOption } from "./combat-types"
 
 /**
@@ -47,12 +48,23 @@ function insertOption(list: CombatOption[], option: CombatOption) {
     else list.splice(tail, 0, option)
 }
 
+/** Parcela do tooltip da rolagem quando a preparação muda o bônus ou o dano (DND-47). */
+export const PREP_ADJUSTMENT_LABEL = "Ajuste da preparação do Maddox"
+
+const damageModifier = (damage: string | null | undefined) => parseDiceExpression(damage)?.modifier ?? 0
+
 function patchOption(option: CombatOption, patch: CombatOptionPatch, reason: string): CombatOption {
     const next: CombatOption = { ...option, adjusted: { reason } }
     if (patch.label?.trim()) next.label = patch.label.trim()
     if (patch.detail?.trim()) next.detail = patch.detail.trim()
     if (patch.economy) next.economy = patch.economy
-    if (patch.attack) next.attack = { ...option.attack, ...patch.attack }
+    if (patch.attack) {
+        next.attack = { ...option.attack, ...patch.attack }
+        // DND-47: as parcelas da lista base continuam; o que a preparação mudou no número vira a parcela do ajuste.
+        // O modificador que a opção base já tinha (sem parcela nomeada) fica com o rótulo genérico; só a diferença é do ajuste.
+        next.attack.bonusParts = alignModifierParts(alignModifierParts(option.attack?.bonusParts, option.attack?.bonus ?? 0), next.attack.bonus, PREP_ADJUSTMENT_LABEL)
+        next.attack.damageParts = alignModifierParts(alignModifierParts(option.attack?.damageParts, damageModifier(option.attack?.damage)), damageModifier(next.attack.damage), PREP_ADJUSTMENT_LABEL)
+    }
     if (patch.save) next.save = { ...patch.save }
     if (patch.heal) next.heal = { ...patch.heal }
     return next

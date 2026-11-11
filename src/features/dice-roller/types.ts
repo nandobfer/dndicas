@@ -8,6 +8,16 @@ export type DiceCriticalState = "critical-success" | "critical-failure"
 
 export type DiceRollSource = "manual" | "sheet" | "owlbear"
 
+/** Cor da parcela do modificador: as mesmas do `CalcPart` da ficha (atributos, proficiência, bônus, base, manual). */
+export type DiceModifierPartColor = "strength" | "dexterity" | "constitution" | "intelligence" | "wisdom" | "charisma" | "prof" | "bonus" | "base" | "manual"
+
+/** Parcela nomeada do modificador de uma rolagem (DND-47): "Destreza +3", "Proficiência +2". */
+export interface DiceModifierPart {
+    label: string
+    value: number
+    color?: DiceModifierPartColor
+}
+
 export interface DiceTerm {
     dice: DiceType
     quantity: number
@@ -19,6 +29,8 @@ export interface DiceRollRequest {
     mode: DiceRollMode
     label?: string
     source?: DiceRollSource
+    /** DND-47: parcelas do modificador; o servidor alinha a soma ao `modifier`. */
+    modifierParts?: DiceModifierPart[]
     diceSessionId?: string
     playerName?: string
     owlbearRoomId?: string
@@ -59,6 +71,8 @@ export interface DiceRollResponse {
     }
     diceTotal: number
     modifier: number
+    /** DND-47: parcelas do modificador, sempre somando exatamente `modifier`. Ausente = só "Modificador". */
+    modifierParts?: DiceModifierPart[]
     total: number
     createdAt: string
 }
@@ -67,6 +81,8 @@ export interface DiceRollPreset {
     label: string
     terms: DiceTerm[]
     modifier?: number
+    /** DND-47: parcelas nomeadas do modificador (vão na rolagem e aparecem no tooltip do resultado). */
+    modifierParts?: DiceModifierPart[]
     mode?: DiceRollMode
     source: DiceRollSource
     sourceRef?: {

@@ -2,6 +2,7 @@
 
 import { rarityColors } from "@/lib/config/colors"
 import { CRITICAL_STAGE_CONFIG } from "@/features/dice-roller/components/critical-highlight"
+import { DiceResultTooltip } from "@/features/dice-roller/components/dice-result-tooltip"
 import type { MaddoxLiveRollDto } from "../../../game-types"
 import { RarityChip } from "../../campaigns/campaign-visuals"
 import { ReplayDie } from "./ReplayDie"
@@ -22,7 +23,11 @@ function RollResult({ item }: { item: MaddoxLiveRollDto }) {
             <span className="font-semibold text-white/60">{item.actorName}</span>
             <span className="text-white/70">{item.label}</span>
             {item.targetName && <span className="text-white/60">→ {item.targetName}</span>}
-            <span className="text-base font-black text-white">{item.roll.total}</span>
+            <span className="text-base font-black text-white" data-testid="live-roll-total">
+                <DiceResultTooltip roll={item.roll} criticalState={item.step === "attack" ? undefined : null}>
+                    {item.roll.total}
+                </DiceResultTooltip>
+            </span>
             {verdict && (
                 <RarityChip color={verdict.color} className="text-[11px] font-semibold">
                     {verdict.label}

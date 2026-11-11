@@ -2,6 +2,7 @@
 
 import { cn } from "@/core/utils"
 import type { DiceCriticalState, DiceRollResponse } from "../types"
+import { DiceResultTooltip } from "./dice-result-tooltip"
 
 const CRITICAL_SUMMARY_CONFIG: Record<DiceCriticalState, { badge: string, cardClassName: string, totalClassName: string }> = {
     "critical-success": {
@@ -19,9 +20,11 @@ const CRITICAL_SUMMARY_CONFIG: Record<DiceCriticalState, { badge: string, cardCl
 interface DiceResultSummaryProps {
     result: DiceRollResponse | null
     criticalState: DiceCriticalState | null
+    /** Atributos 4d6: o tooltip mostra o menor dado descartado. */
+    dropLowest?: boolean
 }
 
-export function DiceResultSummary({ result, criticalState }: DiceResultSummaryProps) {
+export function DiceResultSummary({ result, criticalState, dropLowest = false }: DiceResultSummaryProps) {
     if (!result) {
         return null
     }
@@ -41,7 +44,11 @@ export function DiceResultSummary({ result, criticalState }: DiceResultSummaryPr
                 <div>
                     <p className="text-xs font-black uppercase tracking-[0.28em] text-white/35">Total</p>
                     <div className="flex flex-wrap items-center gap-3">
-                        <p className={cn("text-5xl font-black text-white", criticalConfig?.totalClassName)}>{result.total}</p>
+                        <p className={cn("text-5xl font-black text-white", criticalConfig?.totalClassName)}>
+                            <DiceResultTooltip roll={result} criticalState={criticalState} dropLowest={dropLowest} side="bottom" align="start">
+                                {result.total}
+                            </DiceResultTooltip>
+                        </p>
                         {criticalConfig && (
                             <span
                                 data-testid="dice-critical-summary-badge"

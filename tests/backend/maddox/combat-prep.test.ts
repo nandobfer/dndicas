@@ -63,6 +63,33 @@ describe("DND-41 — lista do turno com a preparação por cima", () => {
         expect(result.action.at(-1)!.id).toBe("free")
     })
 
+    it("DND-47: o que a preparação muda no bônus e no dano vira a parcela 'Ajuste da preparação do Maddox' (a soma fecha)", () => {
+        const base = buildCombatOptions(input())
+        const overlay: CombatPrepOverlay = { ...emptyOverlay(), modify: [{ optionId: "weapon:maca", patch: { attack: { bonus: 4, damage: "1d6+1", damageType: "contundente", ranged: false, light: false } }, reason: "Arma mágica +2." }] }
+        const maca = applyCombatPrep(base, live(overlay)).action.find((option) => option.id === "weapon:maca")!
+        expect(maca.attack!.bonusParts).toEqual([
+            { label: "Força", value: -1, color: "strength" },
+            { label: "Proficiência", value: 2, color: "prof" },
+            { label: "Ajuste da preparação do Maddox", value: 3, color: "manual" },
+        ])
+        expect(maca.attack!.damageParts).toEqual([
+            { label: "Força", value: -1, color: "strength" },
+            { label: "Ajuste da preparação do Maddox", value: 2, color: "manual" },
+        ])
+        // Opção sem parcelas nomeadas (magia automática "3d4+3"): o +3 que já existia fica como "Modificador"; só a diferença é ajuste.
+        const withAuto = buildCombatOptions(input())
+        withAuto.action.unshift({ id: "spell:dardos", category: "spells", economy: "action", label: "Dardos", detail: "", target: "enemy", multiTarget: true, resolution: "auto", attack: { bonus: 0, damage: "3d4+3", damageType: "força", ranged: true, light: false } })
+        const patchDardos = (damage: string): CombatPrepOverlay => ({ ...emptyOverlay(), modify: [{ optionId: "spell:dardos", patch: { attack: { bonus: 0, damage, damageType: "força", ranged: true, light: false } }, reason: "x" }] })
+        expect(applyCombatPrep(withAuto, live(patchDardos("3d4+5"))).action.find((option) => option.id === "spell:dardos")!.attack!.damageParts).toEqual([
+            { label: "Modificador", value: 3, color: "manual" },
+            { label: "Ajuste da preparação do Maddox", value: 2, color: "manual" },
+        ])
+        expect(applyCombatPrep(withAuto, live(patchDardos("3d4+3"))).action.find((option) => option.id === "spell:dardos")!.attack!.damageParts).toEqual([{ label: "Modificador", value: 3, color: "manual" }])
+        // Sem mudança no número, as parcelas da lista base ficam como estavam.
+        const same: CombatPrepOverlay = { ...emptyOverlay(), modify: [{ optionId: "weapon:maca", patch: { attack: { bonus: 1, damage: "1d6-1", damageType: "contundente", ranged: false, light: false } }, reason: "Força 8." }] }
+        expect(applyCombatPrep(base, live(same)).action.find((option) => option.id === "weapon:maca")!.attack!.bonusParts!.map((part) => part.label)).toEqual(["Força", "Proficiência"])
+    })
+
     it("a disponibilidade continua do servidor: Ação bônus gasta, carga esgotada e espaço de magia esgotado tiram o acréscimo", () => {
         const overlay = emptyOverlay()
         overlay.add.push(

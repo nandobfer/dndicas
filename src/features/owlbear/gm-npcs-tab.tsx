@@ -474,6 +474,7 @@ function InitialHpModal({
                                 label={`PV inicial de ${monster.name}`}
                                 terms={parsedDice.terms}
                                 modifier={parsedDice.modifier}
+                                modifierParts={parsedDice.modifier ? [{ label: "Constituição (pelos dados de vida)", value: parsedDice.modifier, color: "constitution" }] : undefined}
                                 sourceRef={{ fieldId: "owlbear-npc-hp" }}
                                 onRollResolved={(total) => {
                                     void onConfirm(sourceKind, monster, Math.max(0, total))

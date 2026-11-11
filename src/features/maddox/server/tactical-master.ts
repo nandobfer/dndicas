@@ -1,9 +1,10 @@
 import { Types } from "mongoose"
 import { loggerFor } from "@/lib/logger"
 import type { AttributeType } from "@/features/character-sheets/types/character-sheet.types"
-import type { DiceRollResponse } from "@/features/dice-roller/types"
+import type { DiceModifierPart, DiceRollResponse } from "@/features/dice-roller/types"
 import { MADDOX_COMBAT_MASTER_ROUNDS_MAX, MADDOX_COMBAT_WAIT_ROUNDS_MAX, MADDOX_REACTION_TIMEOUT_MS, MADDOX_CONDITION_LABELS, MADDOX_CONDITIONS, type MaddoxConditionKey, type MaddoxReactionTrigger } from "../constants"
 import { MADDOX_ABILITY_LABELS } from "../check-modifier"
+import { monsterAttackParts, monsterDamageParts, monsterSaveParts, namedPart } from "../roll-parts"
 import { normalizeCatalogName } from "../catalog-markup"
 import {
     adjustDamage,
@@ -197,8 +198,8 @@ export function characterHealing(state: TacticalCharacterState, hp: CharacterHp,
 }
 
 /** Card de salvaguarda de concentração para o personagem (espera do turno do mestre ou na hora). */
-export function concentrationRollDoc(combatId: string, state: TacticalCharacterState, dc: number, saveBonus: number, waitRound: number | null): IMaddoxCombatRoll {
-    return { combatId, kind: "concentration", waitRound, status: "pending", ability: "constitution", dc, mode: "normal", dice: d20Expression(saveBonus), roll: null, total: null, success: null, reason: `Manter a concentração em ${state.concentration?.spell ?? "magia"} (CD ${dc})`, effect: null, targetKey: state.actorKey, outcome: null, rolledBy: null }
+export function concentrationRollDoc(combatId: string, state: TacticalCharacterState, dc: number, saveBonus: number, waitRound: number | null, modifierParts?: DiceModifierPart[]): IMaddoxCombatRoll {
+    return { combatId, kind: "concentration", waitRound, status: "pending", ability: "constitution", dc, mode: "normal", dice: d20Expression(saveBonus), modifierParts: modifierParts?.length ? modifierParts : monsterSaveParts("constitution", saveBonus), roll: null, total: null, success: null, reason: `Manter a concentração em ${state.concentration?.spell ?? "magia"} (CD ${dc})`, effect: null, targetKey: state.actorKey, outcome: null, rolledBy: null }
 }
 
 /** Dano num personagem na cópia de trabalho (com a salvaguarda de concentração como espera). */
@@ -229,8 +230,8 @@ export function damageCombatant(actor: Extract<CombatActor, { kind: "combatant" 
     return ""
 }
 
-function rollDoc(workspace: TacticalWorkspace, input: { kind: IMaddoxCombatRoll["kind"]; ability: AttributeType | null; dc: number | null; dice: string; reason: string; targetKey: string | null; mode?: RollMode; effect?: IMaddoxCombatRoll["effect"] }): IMaddoxCombatRoll {
-    return { combatId: String(workspace.combat._id), kind: input.kind, waitRound: workspace.round, status: "pending", ability: input.ability, dc: input.dc, mode: input.mode ?? "normal", dice: input.dice, roll: null, total: null, success: null, reason: input.reason, effect: input.effect ?? null, targetKey: input.targetKey, outcome: null, rolledBy: null }
+function rollDoc(workspace: TacticalWorkspace, input: { kind: IMaddoxCombatRoll["kind"]; ability: AttributeType | null; dc: number | null; dice: string; reason: string; targetKey: string | null; mode?: RollMode; effect?: IMaddoxCombatRoll["effect"]; modifierParts?: DiceModifierPart[] }): IMaddoxCombatRoll {
+    return { combatId: String(workspace.combat._id), kind: input.kind, waitRound: workspace.round, status: "pending", ability: input.ability, dc: input.dc, mode: input.mode ?? "normal", dice: input.dice, ...(input.modifierParts?.length ? { modifierParts: input.modifierParts } : {}), roll: null, total: null, success: null, reason: input.reason, effect: input.effect ?? null, targetKey: input.targetKey, outcome: null, rolledBy: null }
 }
 
 const step = (input: Partial<CombatActionStep> & Pick<CombatActionStep, "kind">): CombatActionStep => ({
@@ -375,7 +376,7 @@ export async function monsterAction(campaignId: Types.ObjectId, jobId: string, t
         const computed = attackMode({ attacker: attacker.state, target: target.state, ranged, helped: Boolean(attacker.state.flags.helped) })
         const mode = combineModes(computed.mode === "advantage" || asked === "advantage", computed.mode === "disadvantage" || asked === "disadvantage")
         const ac = target.kind === "character" ? (workspace.sheets[target.key]?.armorClass ?? 10) + (target.state.flags.shield ? 5 : 0) : target.state.stats.ac
-        const attackRoll = await rollExpression(d20Expression(action.bonus ?? 0), { mode, label: `${attacker.name} · ${action.name}` })
+        const attackRoll = await rollExpression(d20Expression(action.bonus ?? 0), { mode, label: `${attacker.name} · ${action.name}`, modifierParts: monsterAttackParts(action.bonus ?? 0) })
         // DND-49: a Maestria Drenar vale para a PRÓXIMA jogada de ataque do adversário.
         if (attacker.state.flags.sapped) attacker.state.flags.sapped = null
         const d20 = keptD20Of(attackRoll)
@@ -386,7 +387,7 @@ export async function monsterAction(campaignId: Types.ObjectId, jobId: string, t
         const result: Record<string, unknown> = { ataque: { total: attackRoll.total, d20, ca: ac, acertou: outcome.hit, critico: outcome.critical, modo: mode } }
         if (outcome.hit && action.damage) {
             const expression = parseDiceExpression(action.damage)!
-            const damageRoll = await rollExpression(formatDiceExpression(outcome.critical ? criticalExpression(expression) : expression), { label: `${attacker.name} · dano` })
+            const damageRoll = await rollExpression(formatDiceExpression(outcome.critical ? criticalExpression(expression) : expression), { label: `${attacker.name} · dano`, modifierParts: monsterDamageParts(expression.modifier) })
             if (target.kind === "character") {
                 const hit = reactionsFor(workspace, target, "hit")
                 if (hit.length && canWait(workspace)) {
@@ -427,7 +428,7 @@ export async function monsterAction(campaignId: Types.ObjectId, jobId: string, t
     if (action.kind === "save") {
         if (!targets.length) throw new TacticalToolError("Informe os alvos da salvaguarda em `alvos`.")
         const ability = action.ability ?? "dexterity"
-        const damageRoll = action.damage ? await rollExpression(action.damage, { label: `${attacker.name} · ${action.name}` }) : null
+        const damageRoll = action.damage ? await rollExpression(action.damage, { label: `${attacker.name} · ${action.name}`, modifierParts: monsterDamageParts(parseDiceExpression(action.damage)?.modifier ?? 0) }) : null
         if (damageRoll) showRoll(campaignId, jobId, damageRoll, { actorName: attacker.name, label: `${action.name} · dano`, step: "damage", amount: damageRoll.total, damageType: action.damageType })
         const steps: CombatActionStep[] = []
         const waits: string[] = []
@@ -448,6 +449,7 @@ export async function monsterAction(campaignId: Types.ObjectId, jobId: string, t
                             ability,
                             dc: action.dc ?? 10,
                             dice: d20Expression(workspace.sheets[target.key]?.saves[ability] ?? 0),
+                            modifierParts: monsterSaveParts(ability, workspace.sheets[target.key]?.saves[ability] ?? 0),
                             mode: forced,
                             reason: `${attacker.name} · ${action.name}: salvaguarda de ${MADDOX_ABILITY_LABELS[ability]} CD ${action.dc ?? 10}`,
                             targetKey: target.key,
@@ -459,7 +461,7 @@ export async function monsterAction(campaignId: Types.ObjectId, jobId: string, t
                 steps.push(step({ kind: "save", targetKey: target.key, targetName: target.name, status: "pending", roller: "player", note: "o jogador rola" }))
             } else {
                 const forced = saveMode(target.state, ability)
-                const saveRoll = forced === "fail" ? null : await rollExpression(d20Expression(target.state.stats.saves[ability] ?? 0), { mode: forced, label: `${target.name} · salvaguarda` })
+                const saveRoll = forced === "fail" ? null : await rollExpression(d20Expression(target.state.stats.saves[ability] ?? 0), { mode: forced, label: `${target.name} · salvaguarda`, modifierParts: monsterSaveParts(ability, target.state.stats.saves[ability] ?? 0) })
                 const success = saveRoll ? saveRoll.total >= (action.dc ?? 10) : false
                 if (saveRoll) showRoll(campaignId, jobId, saveRoll, { actorName: target.name, label: `Salvaguarda contra ${action.name}`, step: "save", targetName: target.name, verdict: success ? "success" : "fail" })
                 const base = damageRoll?.total ?? 0
@@ -514,7 +516,7 @@ export async function applyEffect(campaignId: Types.ObjectId, jobId: string, tur
         if (!raw) continue
         const expression = parseDiceExpression(raw)
         if (!expression) throw new TacticalToolError(`"${raw}" não é uma expressão de dados (ex.: 2d6+3).`)
-        const roll = await rollExpression(formatDiceExpression(expression), { label: input.descricao.slice(0, 60) })
+        const roll = await rollExpression(formatDiceExpression(expression), { label: input.descricao.slice(0, 60), modifierParts: kind === "heal" ? namedPart("Modificador de cura", expression.modifier) : monsterDamageParts(expression.modifier) })
         showRoll(campaignId, jobId, roll, { actorName: "Maddox", label: input.descricao.slice(0, 60), step: kind === "heal" ? "heal" : "damage", targetName: target.name, amount: roll.total, damageType: kind === "heal" ? null : (input.tipoDano ?? null) })
         if (kind === "heal") {
             const healed = healActor(workspace, target, roll.total)
@@ -589,7 +591,7 @@ export async function requestDamageRoll(campaignId: Types.ObjectId, jobId: strin
     workspace.messages.push(
         baseMessage(workspace, "combat-roll", {
             ...characterMessage(roller.state),
-            combatRoll: { ...rollDoc(workspace, { kind: "damage", ability: null, dc: null, dice: formatDiceExpression(expression), reason: input.motivo.slice(0, 200), targetKey: target.key }), effect: { sourceName: roller.name, damage: null, damageType: input.tipoDano ?? null, halfOnSave: false, condition: null } },
+            combatRoll: { ...rollDoc(workspace, { kind: "damage", ability: null, dc: null, dice: formatDiceExpression(expression), reason: input.motivo.slice(0, 200), targetKey: target.key, modifierParts: monsterDamageParts(expression.modifier) }), effect: { sourceName: roller.name, damage: null, damageType: input.tipoDano ?? null, halfOnSave: false, condition: null } },
         }),
     )
     return { status: "aguardando_rolagem", nota: `${roller.name} rola ${formatDiceExpression(expression)} de dano em ${target.name}. Narre até o momento do golpe e PARE.` }

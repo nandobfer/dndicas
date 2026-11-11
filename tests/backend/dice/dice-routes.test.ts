@@ -59,6 +59,21 @@ describe("dice routes", () => {
         })
     })
 
+    it("POST /api/dice/rolls repassa as parcelas do modificador do preset ao serviço (DND-47)", async () => {
+        const rollGeneralDice = vi.fn(async (input: { modifierParts?: unknown }) => ({ rollId: "roll-2", terms: [{ dice: "d20", quantity: 1, results: [10] }], mode: "normal", diceTotal: 10, modifier: 2, modifierParts: input.modifierParts, total: 12, createdAt: "2026-01-01T00:00:00.000Z" }))
+        vi.doMock("@/features/dice-roller/server/dice-roll-service", () => ({ rollGeneralDice }))
+        const mod = await importFresh<typeof import("@/app/api/dice/rolls/route")>("@/app/api/dice/rolls/route")
+        const parts = [{ label: "Constituição", value: 2, color: "constitution" }]
+        const response = await mod.POST(new Request("http://localhost/api/dice/rolls", {
+            method: "POST",
+            body: JSON.stringify({ terms: [{ dice: "d20", quantity: 1 }], mode: "normal", modifier: 2, modifierParts: parts, diceSessionId: "session-123" }),
+        }) as never)
+
+        expect(response.status).toBe(200)
+        expect(rollGeneralDice.mock.calls[0]![0]).toMatchObject({ modifierParts: parts })
+        await expect(response.json()).resolves.toMatchObject({ data: { modifierParts: parts } })
+    })
+
     it("POST /api/dice/rolls resolves Owlbear target by player id without publishing a live visual event", async () => {
         const rollGeneralDice = vi.fn(async () => ({
             rollId: "roll-1",

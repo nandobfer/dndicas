@@ -8,6 +8,7 @@ import { ConfirmDialog } from "@/components/ui/opex/confirm-dialog"
 import { rarityColors } from "@/lib/config/colors"
 import { DiceRollerPanel } from "@/features/dice-roller/components/dice-roller-panel"
 import { CRITICAL_STAGE_CONFIG, CriticalHighlight, criticalBoxShadow } from "@/features/dice-roller/components/critical-highlight"
+import { DiceResultTooltip } from "@/features/dice-roller/components/dice-result-tooltip"
 import { getDiceCriticalState } from "@/features/dice-roller/critical-state"
 import type { DiceRollPreset, DiceRollResponse } from "@/features/dice-roller/types"
 import { modeReasonText, parseDiceExpression } from "../../../combat-rules"
@@ -158,7 +159,14 @@ export function StepResult({ step }: { step: CombatActionStep }) {
             {step.status === "skipped" && <span className="text-white/40">não se aplica</span>}
             {step.total !== null && step.status === "done" && (
                 <span className="text-base font-black text-white" data-testid="combat-step-total">
-                    {step.total}
+                    {/* Total fixo sem dado (Maestria Garantido, desarmado) não tem conta a abrir. */}
+                    {step.roll && step.roll.total === step.total ? (
+                        <DiceResultTooltip roll={step.roll} criticalState={step.kind === "attack" ? critical : null}>
+                            {step.total}
+                        </DiceResultTooltip>
+                    ) : (
+                        step.total
+                    )}
                 </span>
             )}
             {step.kind === "attack" && step.status === "done" && <KeptDice roll={step.roll} />}
@@ -292,7 +300,11 @@ export function EnemyInitiativeCard({ message, replay }: { message: MaddoxGameMe
                         {roll.status === "pending" && !replay && <p className="text-xs text-white/50" data-testid="enemy-initiative-waiting">Aguardando os personagens</p>}
                         {result && !rolling && (
                             <p className="flex flex-wrap items-center gap-2 text-sm text-white/80" data-testid="enemy-initiative-result">
-                                <span className="text-2xl font-black text-white">{result.total}</span>
+                                <span className="text-2xl font-black text-white" data-testid="enemy-initiative-total">
+                                    <DiceResultTooltip roll={result} criticalState={null}>
+                                        {result.total}
+                                    </DiceResultTooltip>
+                                </span>
                                 <span>
                                     d20 {d20 ?? "?"}
                                     {discarded !== null ? ` (descartado ${discarded})` : ""} {modifier >= 0 ? "+" : "−"} {Math.abs(modifier)}
@@ -349,7 +361,15 @@ function PlayerRollCard({ message, mine, replay, onRoll }: { message: MaddoxGame
                         </div>
                         {roll.status === "rolled" && shown && (
                             <p className="flex flex-wrap items-center gap-2 text-sm text-white/80" data-testid="combat-roll-outcome">
-                                <span className="text-2xl font-black text-white">{roll.total}</span>
+                                <span className="text-2xl font-black text-white" data-testid="combat-roll-total">
+                                    {roll.roll && roll.roll.total === roll.total ? (
+                                        <DiceResultTooltip roll={roll.roll} criticalState={roll.kind === "damage" ? null : undefined}>
+                                            {roll.total}
+                                        </DiceResultTooltip>
+                                    ) : (
+                                        roll.total
+                                    )}
+                                </span>
                                 {roll.outcome && <span>{roll.outcome}</span>}
                             </p>
                         )}

@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto"
+import { partsFromCalc } from "@/features/dice-roller/dice-breakdown"
 import { Types } from "mongoose"
 import { AcaoAuditoria, recordAudit } from "@/lib/db"
 import { DomainError } from "@/lib/api/route"
@@ -81,7 +82,7 @@ export async function rollCheck(campaignId: string, checkId: string, userId: str
     const modifier = checkModifier(sheet, spec)
     const [{ rollGeneralDice }, { resolveGeneralDiceTarget }] = await Promise.all([import("@/features/dice-roller/server/dice-roll-service"), import("@/features/dice-roller/server/dice-target")])
     const roll = await rollGeneralDice(
-        { terms: [{ dice: "d20", quantity: 1 }], modifier: modifier.value, mode: check.mode, label: checkTitle(spec), source: "sheet" },
+        { terms: [{ dice: "d20", quantity: 1 }], modifier: modifier.value, modifierParts: partsFromCalc(modifier.parts), mode: check.mode, label: checkTitle(spec), source: "sheet" },
         resolveGeneralDiceTarget({ userId: message.userId })!,
     )
     const saved = await MaddoxCampaignMessageModel.updateOne(

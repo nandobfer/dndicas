@@ -1,4 +1,6 @@
 import { Types } from "mongoose"
+import { partsFromCalc } from "@/features/dice-roller/dice-breakdown"
+import { exhaustionParts, monsterAttackParts, monsterSaveParts } from "../roll-parts"
 import { AcaoAuditoria, recordAudit } from "@/lib/db"
 import { DomainError } from "@/lib/api/route"
 import { loggerFor } from "@/lib/logger"
@@ -154,19 +156,20 @@ export async function submitCombatAction(campaignId: string, input: MaddoxCombat
     if (option.resolution === "attack") {
         // DND-49: prévia do modo (o rolador já mostra os dois d20 com o motivo); a rolagem recalcula e é a que vale.
         const preview = attackMode({ attacker: actor.state, target: targets[0]!.state, ranged: Boolean(option.attack!.ranged), helped: Boolean(actor.state.flags.helped), targetKey: targets[0]!.key })
-        steps.push(newStep({ kind: "attack", targetKey: targets[0]!.key, targetName: targets[0]!.name, dice: d20Expression(option.attack!.bonus + exhaustionPenalty(actor.state)), mode: preview.mode, modeReasons: preview.reasons }))
+        const attackParts = [...(option.attack!.bonusParts ?? monsterAttackParts(option.attack!.bonus)), ...exhaustionParts(exhaustionPenalty(actor.state))]
+        steps.push(newStep({ kind: "attack", targetKey: targets[0]!.key, targetName: targets[0]!.name, dice: d20Expression(option.attack!.bonus + exhaustionPenalty(actor.state)), mode: preview.mode, modeReasons: preview.reasons, modifierParts: attackParts }))
         // O dano já fica no card: rolado só se o ataque acertar (o erro o marca como pulado).
-        if (option.attack!.damage && option.attack!.damage !== "0") steps.push(newStep({ kind: "damage", targetKey: targets[0]!.key, targetName: targets[0]!.name, dice: option.attack!.damage, damageType: option.attack!.damageType }))
+        if (option.attack!.damage && option.attack!.damage !== "0") steps.push(newStep({ kind: "damage", targetKey: targets[0]!.key, targetName: targets[0]!.name, dice: option.attack!.damage, damageType: option.attack!.damageType, ...(option.attack!.damageParts?.length ? { modifierParts: option.attack!.damageParts } : {}) }))
     }
-    else if (option.resolution === "auto") steps.push(newStep({ kind: "damage", targetKey: targets[0]?.key ?? null, targetName: targets[0]?.name ?? null, dice: option.attack!.damage, damageType: option.attack!.damageType }))
-    else if (option.resolution === "heal") steps.push(newStep({ kind: "heal", targetKey: targets[0]!.key, targetName: targets[0]!.name, dice: option.heal!.dice }))
+    else if (option.resolution === "auto") steps.push(newStep({ kind: "damage", targetKey: targets[0]?.key ?? null, targetName: targets[0]?.name ?? null, dice: option.attack!.damage, damageType: option.attack!.damageType, ...(option.attack!.damageParts?.length ? { modifierParts: option.attack!.damageParts } : {}) }))
+    else if (option.resolution === "heal") steps.push(newStep({ kind: "heal", targetKey: targets[0]!.key, targetName: targets[0]!.name, dice: option.heal!.dice, ...(option.heal!.parts?.length ? { modifierParts: option.heal!.parts } : {}) }))
     else if (option.resolution === "save" && option.save) {
         if (option.save.damage) steps.push(newStep({ kind: "damage", dice: option.save.damage, damageType: option.save.damageType, note: `salvaguarda de ${MADDOX_ABILITY_LABELS[option.save.ability]} CD ${option.save.dc}` }))
         else {
             for (const target of targets) {
                 if (target.kind !== "combatant") continue
                 const forced = saveMode(target.state, option.save.ability)
-                const roll = forced === "fail" ? null : await rollExpression(d20Expression(target.state.stats.saves[option.save.ability] ?? 0), { mode: forced, label: `${target.name} · salvaguarda` })
+                const roll = forced === "fail" ? null : await rollExpression(d20Expression(target.state.stats.saves[option.save.ability] ?? 0), { mode: forced, label: `${target.name} · salvaguarda`, modifierParts: monsterSaveParts(option.save.ability, target.state.stats.saves[option.save.ability] ?? 0) })
                 steps.push(newStep({ kind: "save", targetKey: target.key, targetName: target.name, status: "done", roller: "server", roll, total: roll?.total ?? null, success: roll ? roll.total >= option.save.dc : false, note: roll ? null : "falha automática" }))
             }
             status = "resolved"
@@ -439,7 +442,7 @@ async function rollClaimedStep(
         modeReasons = computed.reasons
         vexUsed = computed.reasons.includes("Maestria Afligir")
         helpedUsed = helped
-        roll = await rollExpression(current.dice, { mode, label: `${action.label} · ataque`, userId: message.userId })
+        roll = await rollExpression(current.dice, { mode, label: `${action.label} · ataque`, userId: message.userId, modifierParts: current.modifierParts })
         const ac = target.kind === "combatant" ? target.state.stats.ac : 10
         const hit = attackOutcome(keptD20Of(roll), roll.total, ac, autoCritical(target.state, ranged)).hit
         // DND-49: furtivo perguntado depois do acerto — uma vez por turno, nunca com desvantagem; com vantagem vale direto,
@@ -450,17 +453,19 @@ async function rollClaimedStep(
         // DND-49 — Maestria Derrubar: o alvo atingido faz salvaguarda de Constituição (o servidor rola UMA vez, aqui).
         if (hit && mastery?.key === "topple" && target.kind === "combatant" && !hasCondition(target.state, "prone")) {
             const forced = saveMode(target.state, "constitution")
-            toppleRoll = forced === "fail" ? null : await rollExpression(d20Expression(target.state.stats.saves.constitution ?? 0), { mode: forced, label: `${target.name} · salvaguarda (Maestria Derrubar)` })
+            toppleRoll = forced === "fail" ? null : await rollExpression(d20Expression(target.state.stats.saves.constitution ?? 0), { mode: forced, label: `${target.name} · salvaguarda (Maestria Derrubar)`, modifierParts: monsterSaveParts("constitution", target.state.stats.saves.constitution ?? 0) })
         }
     } else if (current.kind === "check") {
         const skill = (current.skill ?? "Furtividade") as SkillName
-        const modifier = view ? sheetSkill(view.sheet, skill).value + exhaustionPenalty(actor.state) : 0
-        roll = await rollExpression(d20Expression(modifier), { label: `Teste de ${skill}`, userId: message.userId })
+        const skillBonus = view ? sheetSkill(view.sheet, skill) : null
+        const modifier = skillBonus ? skillBonus.value + exhaustionPenalty(actor.state) : 0
+        const parts = skillBonus ? [...partsFromCalc(skillBonus.parts), ...exhaustionParts(exhaustionPenalty(actor.state))] : []
+        roll = await rollExpression(d20Expression(modifier), { label: `Teste de ${skill}`, userId: message.userId, modifierParts: parts })
     } else {
         const previous = attackBefore(action.steps, index)
         const expression = parseDiceExpression(current.dice)
         const critical = Boolean(previous?.critical)
-        roll = await rollExpression(expression ? formatDiceExpression(critical ? criticalExpression(expression) : expression) : current.dice, { label: `${action.label} · ${current.kind === "heal" ? "cura" : "dano"}`, userId: message.userId })
+        roll = await rollExpression(expression ? formatDiceExpression(critical ? criticalExpression(expression) : expression) : current.dice, { label: `${action.label} · ${current.kind === "heal" ? "cura" : "dano"}`, userId: message.userId, modifierParts: current.modifierParts })
     }
 
     // Magia de salvaguarda: as salvaguardas dos adversários são roladas UMA vez, aqui (o callback abaixo pode rodar de novo).
@@ -471,7 +476,7 @@ async function rollClaimedStep(
             const each = findActor(combat, ref.actorKey)
             if (each?.kind !== "combatant") continue
             const forced = saveMode(each.state, action.save.ability)
-            saveRolls.set(each.key, forced === "fail" ? null : await rollExpression(d20Expression(each.state.stats.saves[action.save.ability] ?? 0), { mode: forced, label: `${each.name} · salvaguarda` }))
+            saveRolls.set(each.key, forced === "fail" ? null : await rollExpression(d20Expression(each.state.stats.saves[action.save.ability] ?? 0), { mode: forced, label: `${each.name} · salvaguarda`, modifierParts: monsterSaveParts(action.save.ability, each.state.stats.saves[action.save.ability] ?? 0) }))
         }
     }
 
@@ -546,7 +551,7 @@ async function rollClaimedStep(
                         if (amount) applyDamageTo(live, each, saveStep, amount, false, hpWrites, extraRolls)
                         steps.push(saveStep)
                     } else {
-                        const hitStep = newStep({ kind: "damage", targetKey: each.key, targetName: each.name, status: "done", roller: "server", total: roll.total, damageType: done.damageType })
+                        const hitStep = newStep({ kind: "damage", targetKey: each.key, targetName: each.name, status: "done", roller: "server", roll, total: roll.total, damageType: done.damageType })
                         applyDamageTo(live, each, hitStep, roll.total, false, hpWrites, extraRolls)
                         steps.push(hitStep)
                     }
@@ -833,7 +838,7 @@ async function performClaimedRoll(campaign: CampaignDoc, message: MessageDoc, re
     const combat = await findActiveTactical(campaign._id)
     const actor = combat && request.targetKey ? findActor(combat, request.targetKey) : null
     const character = actor?.kind === "character" ? actor : combat?.tactical.characters.find((state) => state.memberId === String(message.memberId)) ? (findActor(combat!, combat!.tactical.characters.find((state) => state.memberId === String(message.memberId))!.actorKey) as Extract<CombatActor, { kind: "character" }>) : null
-    const roll = await rollExpression(request.dice, { mode: request.mode, label: request.reason, userId: rollerUserId })
+    const roll = await rollExpression(request.dice, { mode: request.mode, label: request.reason, userId: rollerUserId, modifierParts: request.modifierParts })
     const d20 = keptD20Of(roll)
     let outcome = ""
     let success: boolean | null = null
@@ -896,7 +901,7 @@ async function performClaimedRoll(campaign: CampaignDoc, message: MessageDoc, re
                             if (result.concentrationDc !== null) {
                                 const { loadCombatSheets, sheetSave } = await import("./combat-sheet")
                                 const sheet = me.state.sheetId ? (await loadCombatSheets([me.state.sheetId])).get(me.state.sheetId) : null
-                                extra.push({ kind: "combat-roll", memberId: message.memberId, userId: message.userId, characterId: message.characterId, characterName: message.characterName, content: "", segment: message.segment, combatRoll: concentrationRollDoc(String(live._id), me.state, result.concentrationDc, sheet ? sheetSave(sheet, "constitution").value : 0, request.waitRound) })
+                                extra.push({ kind: "combat-roll", memberId: message.memberId, userId: message.userId, characterId: message.characterId, characterName: message.characterName, content: "", segment: message.segment, combatRoll: concentrationRollDoc(String(live._id), me.state, result.concentrationDc, sheet ? sheetSave(sheet, "constitution").value : 0, request.waitRound, sheet ? partsFromCalc(sheetSave(sheet, "constitution").parts) : undefined) })
                             }
                         }
                     }

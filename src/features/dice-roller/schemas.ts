@@ -39,6 +39,12 @@ function validateOptionalOwlbearDisplayContext(value: { playerName?: string; owl
 
 export const DiceRollModeSchema = z.enum(["disadvantage", "normal", "advantage"])
 
+export const DiceModifierPartSchema = z.object({
+    label: z.string().trim().min(1).max(60),
+    value: z.number().int().min(-100).max(100),
+    color: z.enum(["strength", "dexterity", "constitution", "intelligence", "wisdom", "charisma", "prof", "bonus", "base", "manual"]).optional(),
+})
+
 export const DiceTermSchema = z.object({
     dice: DiceTypeSchema,
     quantity: z.number().int().positive(),
@@ -51,6 +57,7 @@ export const DiceRollRequestSchema = extendWithOptionalOwlbearPlayerTarget(
         mode: DiceRollModeSchema.default("normal"),
         label: z.string().trim().min(1).max(120).optional(),
         source: z.enum(["manual", "sheet", "owlbear"]).optional().default("manual"),
+        modifierParts: z.array(DiceModifierPartSchema).max(12).optional(),
         diceSessionId: z.string().trim().min(8).max(120).optional(),
     }))
 ).superRefine(validateOptionalOwlbearDisplayContext)

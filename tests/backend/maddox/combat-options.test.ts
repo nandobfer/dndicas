@@ -57,6 +57,24 @@ describe("combate tático — opções do personagem (Maddox 7): só o que ele p
         expect(weapons.find((option) => option.label === "Arco Curto")!.attack!.ranged).toBe(true)
     })
 
+    it("DND-47: cada arma leva as parcelas nomeadas do bônus e do dano, somando exatamente os números da opção", () => {
+        const options = buildCombatOptions(base())
+        const weapons = options.action.filter((option) => option.category === "weapons")
+        const sum = (parts: { value: number }[] | undefined) => (parts ?? []).reduce((acc, part) => acc + part.value, 0)
+        for (const option of weapons) {
+            expect(sum(option.attack!.bonusParts)).toBe(option.attack!.bonus)
+            const damageModifier = /([+-]\d+)$/.exec(option.attack!.damage)?.[1]
+            if (option.id !== "unarmed") expect(sum(option.attack!.damageParts)).toBe(damageModifier ? Number(damageModifier) : 0)
+        }
+        expect(weapons.find((option) => option.label === "Espada Longa")!.attack!.bonusParts).toEqual([{ label: "Força", value: 3, color: "strength" }, { label: "Proficiência", value: 3, color: "prof" }])
+        expect(weapons.find((option) => option.label === "Arco Curto")!.attack!.bonusParts!.map((part) => part.label)).toEqual(["Destreza", "Proficiência"])
+        expect(weapons.find((option) => option.label === "Arco Curto")!.attack!.damageParts).toEqual([{ label: "Destreza", value: 2, color: "dexterity" }])
+        // Truque de ataque mágico: atributo de conjuração + proficiência + o que sobrar da ficha.
+        const withAttackSpell = buildCombatOptions(base({ spells: [{ id: "s9", name: "Raio de Fogo", circle: 0, prepared: false, castingTime: "Ação", concentration: false, saveAttribute: null, baseDice: { quantidade: 1, tipo: "d10" }, extraDicePerLevel: null, damageType: "fogo", description: "Faça um ataque mágico à distância.", profile: { cost: "action", trigger: null, resolution: "attack", halfOnSave: false } }] }))
+        const spell = withAttackSpell.action.find((option) => option.id === "spell:s9")!
+        expect(spell.attack!.bonusParts).toEqual([{ label: "Sabedoria", value: 1, color: "wisdom" }, { label: "Proficiência", value: 3, color: "prof" }])
+    })
+
     it("magias: preparadas (ou truques) com espaço livre no círculo ou acima e o custo do tempo de conjuração", () => {
         const options = buildCombatOptions(base())
         const action = options.action.filter((option) => option.category === "spells")

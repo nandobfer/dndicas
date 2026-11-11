@@ -753,6 +753,7 @@ export function AssistedSheetCreationModal({ open, onOpenChange, onCreated }: As
                                             preset={{ label: "Atributo", terms: [{ dice: "d6", quantity: 4 }], modifier: 0, mode: "normal", source: "manual" }}
                                             onRollResolved={handleDiceRollResolved}
                                             hideConfigurationControls
+                                            resultDropLowest
                                         />
                                         <div className="rounded-lg border border-white/10 bg-white/[0.03] p-3">
                                             <div className="mb-3 flex items-center justify-between">
