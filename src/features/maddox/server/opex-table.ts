@@ -257,15 +257,21 @@ function situationOf(state: MaddoxGameStateDto, actorKey: string | null): { text
 
 /** Ação de combate ainda pendente do Opex (a que acabou de declarar ou o ataque de oportunidade de uma reação). */
 async function pendingActionOf(campaignId: Types.ObjectId, memberId: Types.ObjectId) {
-    return MaddoxCampaignMessageModel.findOne({ campaignId, memberId, kind: "combat-action", "combatAction.status": "pending" }).sort({ _id: -1 }).select("_id").lean<{ _id: Types.ObjectId }>()
+    return MaddoxCampaignMessageModel.findOne({ campaignId, memberId, kind: "combat-action", "combatAction.status": "pending" })
+        .sort({ _id: -1 })
+        .select("_id combatAction.steps.kind combatAction.steps.status")
+        .lean<{ _id: Types.ObjectId; combatAction?: { steps: { kind: string; status: string }[] } }>()
 }
 
+/** Rola os passos pendentes. DND-49: o Opex soma o ataque furtivo sozinho sempre que o servidor o oferece. */
 async function resolvePendingAction(campaignId: Types.ObjectId, memberId: Types.ObjectId, userId: string): Promise<void> {
-    const { rollCombatAction } = await import("./tactical-actions")
-    for (let step = 0; step < 8; step++) {
+    const { rollCombatAction, chooseSneakAttack } = await import("./tactical-actions")
+    for (let step = 0; step < 10; step++) {
         const pending = await pendingActionOf(campaignId, memberId)
         if (!pending) return
-        await rollCombatAction(String(campaignId), String(pending._id), userId)
+        const next = pending.combatAction?.steps?.find((item) => item.status === "pending")
+        if (next?.kind === "sneak-choice") await chooseSneakAttack(String(campaignId), String(pending._id), true, userId)
+        else await rollCombatAction(String(campaignId), String(pending._id), userId)
     }
 }
 
@@ -309,7 +315,6 @@ async function runOpexCombatTurn(campaign: CampaignDoc, member: MemberDoc, chara
                             ...(choice.circulo ? { spellLevel: choice.circulo } : {}),
                             ...(choice.pericia ? { skill: choice.pericia } : {}),
                             ...(choice.texto?.trim() ? { freeText: choice.texto.trim().slice(0, 1_000) } : {}),
-                            ...(choice.ataqueFurtivo ? { sneakAttack: true } : {}),
                         },
                         userId,
                     )
@@ -325,8 +330,21 @@ async function runOpexCombatTurn(campaign: CampaignDoc, member: MemberDoc, chara
             state = await getGameState(String(campaignId), userId)
             if (!state.me.combat?.myTurn) return
         }
-        const fresh = await getGameState(String(campaignId), userId)
+        let fresh = await getGameState(String(campaignId), userId)
         if (!fresh.me.combat?.myTurn) return
+        // DND-49 — Maestria Ágil: o ataque extra da arma Leve entra na ação Atacar; o Opex o faz sozinho, no mesmo alvo.
+        const nick = fresh.me.combat.options?.action.find((option) => option.id.startsWith("offhand:"))
+        const lastTarget = [...plan.acoes].reverse().find((choice) => choice.alvos.length)?.alvos[0]
+        if (nick && lastTarget) {
+            try {
+                await tactical.submitCombatAction(String(campaignId), { economy: "action", optionId: nick.id, targets: [lastTarget] }, userId)
+                await resolvePendingAction(campaignId, member._id, userId)
+            } catch (error) {
+                if (!(error as { code?: string }).code) throw error
+            }
+            fresh = await getGameState(String(campaignId), userId)
+            if (!fresh.me.combat?.myTurn) return
+        }
         await tactical.endCombatTurn(String(campaignId), plan.movimento.trim() ? { movimento: plan.movimento.trim().slice(0, 1_000) } : {}, userId)
         if (member.opex?.run?.stage === "table") await setTableFailure(campaignId, member._id, null)
     } catch (error) {

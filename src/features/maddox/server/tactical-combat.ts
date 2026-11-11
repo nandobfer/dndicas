@@ -496,8 +496,10 @@ export async function startActorTurn(combat: TacticalCombat, key: string): Promi
     if (!actor) return notes
     const round = combat.tactical.round
     actor.state.economy = freshEconomy()
-    const { helped } = actor.state.flags
-    actor.state.flags = helped ? { helped } : {}
+    // Ficam: "Ajudar" (até o começo do turno de quem ajudou), Drenar e Lentidão (até o começo do turno de quem as impôs) e
+    // Afligir marcada na rodada anterior (vale até o fim deste turno).
+    const { helped, sapped, slowed, vex } = actor.state.flags
+    actor.state.flags = { ...(helped ? { helped } : {}), ...(sapped ? { sapped } : {}), ...(slowed ? { slowed } : {}), ...(vex && vex.round >= round - 1 ? { vex } : {}) }
     actor.state.conditions = actor.state.conditions.filter((condition) => {
         const expired = condition.untilRound !== null && condition.untilRound <= round
         if (expired) notes.push(`${actor.name} não está mais ${condition.key}`)
@@ -506,6 +508,8 @@ export async function startActorTurn(combat: TacticalCombat, key: string): Promi
     // "Ajudar" vale até o começo do próximo turno de quem ajudou.
     for (const other of [...combat.tactical.characters, ...combat.combatants.map((item) => item.tactical).filter((item): item is TacticalCombatantState => Boolean(item))]) {
         if (other.flags.helped?.byKey === key) other.flags.helped = null
+        if (other.flags.sapped?.byKey === key) other.flags.sapped = null
+        if (other.flags.slowed?.byKey === key) other.flags.slowed = null
     }
     if (actor.kind === "combatant") {
         for (const action of actor.state.stats.actions) {

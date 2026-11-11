@@ -7,7 +7,8 @@ import { jsonContent } from "@/features/mcp/server/mcp-response"
 import { MADDOX_MCP_SERVER_NAME } from "../constants"
 import { isActiveMaddoxJob } from "./game-live"
 import { MADDOX_NARRATOR_TOOLS, MaddoxToolError, runMaddoxTool, type MaddoxMasterTool } from "./master-tools"
-import { verifyMaddoxInterviewToken, verifyMaddoxTurnToken } from "./master-turn-token"
+import { verifyMaddoxCatalogToken, verifyMaddoxInterviewToken, verifyMaddoxTurnToken } from "./master-turn-token"
+import { catalogRunLog, recordCatalogToolResult } from "./catalog-reads"
 import { MADDOX_ALL_INTERVIEW_TOOLS, MaddoxInterviewToolError, runInterviewTool, type MaddoxInterviewTool } from "./interview-tools"
 import { MADDOX_CATALOG_TOOLS, MaddoxCatalogToolError, runCatalogTool, type MaddoxCatalogTool } from "./catalog-tools"
 import { MaddoxInterviewModel } from "../models"
@@ -57,8 +58,12 @@ async function handleCatalog(tool: MaddoxCatalogTool, args: Record<string, unkno
     const raw = typeof token === "string" ? token : null
     const turn = verifyMaddoxTurnToken(raw)
     const interview = turn ? null : verifyMaddoxInterviewToken(raw)
+    // DND-49: token da preparação do combate / do pedido de ajuste (só catálogo; as leituras entram no registro da execução).
+    const catalog = turn || interview ? null : verifyMaddoxCatalogToken(raw)
+    const runLog = catalog ? catalogRunLog(catalog.runId) : null
     let active = false
     if (turn && Types.ObjectId.isValid(turn.campaignId)) active = isActiveMaddoxJob(turn.campaignId, turn.jobId)
+    else if (catalog && Types.ObjectId.isValid(catalog.campaignId)) active = Boolean(runLog) && isActiveMaddoxJob(catalog.campaignId, catalog.jobId)
     else if (interview && Types.ObjectId.isValid(interview.interviewId)) {
         await dbConnect()
         active = Boolean(await MaddoxInterviewModel.exists({ _id: interview.interviewId, "generating.token": interview.lockToken }))
@@ -66,8 +71,11 @@ async function handleCatalog(tool: MaddoxCatalogTool, args: Record<string, unkno
     if (!active) return errorContent("Esta resposta do Maddox já terminou: as ferramentas só funcionam durante a geração.")
     try {
         await dbConnect()
-        return jsonContent((await runCatalogTool(tool, input)) as Record<string, unknown>)
+        const output = await runCatalogTool(tool, input)
+        if (runLog) recordCatalogToolResult(runLog, output)
+        return jsonContent(output as Record<string, unknown>)
     } catch (error) {
+        if (runLog) runLog.failures += 1
         return errorContent(error instanceof MaddoxCatalogToolError ? error.message : "Falha ao consultar o catálogo.")
     }
 }
@@ -103,7 +111,7 @@ export function createMaddoxMcpServer() {
             tool.name,
             {
                 title: tool.name,
-                description: `${tool.description} Sempre envie \`${TURN_FIELD}\` com o token de turno das instruções (da narração ou da entrevista).`,
+                description: `${tool.description} Sempre envie \`${TURN_FIELD}\` com o token de turno das instruções (da narração, da entrevista ou da preparação do combate).`,
                 inputSchema: { [TURN_FIELD]: z.string().describe("Token de turno informado nas instruções"), ...tool.input.shape },
                 annotations: { readOnlyHint: true, openWorldHint: false },
             },

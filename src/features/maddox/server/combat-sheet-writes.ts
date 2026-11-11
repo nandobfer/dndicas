@@ -9,6 +9,7 @@ import { plainText } from "../combat-options"
 import type { CombatSheetChange } from "../combat-prep-schemas"
 import type { CombatPrepChange } from "../combat-types"
 import { MADDOX_COMBAT_PREP_TRAIT_TEXT_MAX, MADDOX_SHEET_AUDIT_ENTITY } from "../constants"
+import { masteryLabel } from "../weapon-mastery"
 
 /**
  * Gravação das correções do Maddox na ficha (DND-41) — SOMENTE servidor. Só as operações da lista fechada
@@ -115,7 +116,7 @@ export async function applySheetChanges(changes: readonly CombatSheetChange[], c
             outcome = await applyOne(change, sheetObjectId, m, result.created)
         } catch (error) {
             log.warn({ err: error instanceof Error ? error.message : String(error), sheetId: context.sheetId, type: change.type }, "[maddox] falha ao gravar uma correção na ficha")
-            outcome = { label: describe(change), before: "—", after: "—", applied: false }
+            outcome = { label: describeSheetChange(change), before: "—", after: "—", applied: false }
         }
         if (!outcome) continue
         result.changes.push({ area: "ficha", label: outcome.label, before: outcome.before, after: outcome.after, reason: change.reason, applied: outcome.applied })
@@ -135,7 +136,7 @@ export async function applySheetChanges(changes: readonly CombatSheetChange[], c
     return result
 }
 
-function describe(change: CombatSheetChange): string {
+export function describeSheetChange(change: CombatSheetChange): string {
     switch (change.type) {
         case "ability":
             return abilityLabel(change.attribute)
@@ -163,13 +164,15 @@ function describe(change: CombatSheetChange): string {
             return "Item equipado"
         case "text-append":
             return "Anotação da ficha"
+        case "weapon-mastery":
+            return `Maestria de arma (${masteryLabel(change.mastery)})`
     }
 }
 
 type Models = Awaited<ReturnType<typeof models>>
 
 async function applyOne(change: CombatSheetChange, sheetId: Types.ObjectId, m: Models, created: Map<string, string>): Promise<Outcome> {
-    const label = describe(change)
+    const label = describeSheetChange(change)
     const sheet = await m.CharacterSheet.findById(sheetId).lean<Record<string, unknown> & { _id: Types.ObjectId }>()
     if (!sheet) return { label, before: "—", after: "—", applied: false }
     const setIf = async (path: string, before: unknown, after: unknown) => {
@@ -294,6 +297,14 @@ async function applyOne(change: CombatSheetChange, sheetId: Types.ObjectId, m: M
             if (Boolean(current.equipped) === change.equipped) return null
             const updated = await m.CharacterItem.updateOne({ _id: current._id, equipped: current.equipped }, { $set: { equipped: change.equipped } })
             return { label: `Item ${plainText(current.name)} equipado`, before: yesNo(current.equipped), after: yesNo(change.equipped), applied: updated.modifiedCount > 0, collection: { name: "items", action: "updated", recordId: String(current._id) } }
+        }
+        case "weapon-mastery": {
+            // DND-49: limite da classe, item de catálogo e a maestria do item já foram conferidos em `interpretPrep`.
+            if (!Types.ObjectId.isValid(change.catalogItemId)) return { label, before: "—", after: "—", applied: false }
+            const list = (sheet.weaponMasteries as { catalogItemId: Types.ObjectId | string; mastery: string }[] | undefined) ?? []
+            if (list.some((entry) => String(entry.catalogItemId) === change.catalogItemId)) return null
+            const updated = await m.CharacterSheet.updateOne({ _id: sheetId, "weaponMasteries.catalogItemId": { $ne: new Types.ObjectId(change.catalogItemId) } }, { $push: { weaponMasteries: { catalogItemId: new Types.ObjectId(change.catalogItemId), mastery: change.mastery } } })
+            return { label, before: list.length ? `${list.length} maestria(s)` : "nenhuma", after: `${masteryLabel(change.mastery)} na arma`, applied: updated.modifiedCount > 0, sheet: true }
         }
         case "text-append": {
             const before = (sheet[change.field] as string | undefined) ?? ""

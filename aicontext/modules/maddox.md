@@ -961,7 +961,7 @@ ela fecha e o turno do mestre segue. Mesa toda offline não avança sozinha (reg
 | Rota | Comportamento |
 | --- | --- |
 | `POST …/game/combat/actions` `{ economy, optionId, targets?, spellLevel?, skill?, freeText?, readyOptionId?, readyTrigger?, sneakAttack? }` | A opção precisa estar na lista recalculada da ficha (`OPTION_UNAVAILABLE`); alvo validado; opção sem os dados para resolver = 409 `OPTION_UNRESOLVABLE` antes de qualquer gasto; a economia é reservada primeiro (`ACTION_ALREADY_USED`) e só então espaço de magia, carga e item são gastos (gasto recusado devolve a economia); uma ação pendente por vez (`ACTION_PENDING`). "Outra ação" (ou habilidade de custo não identificado) passa pelo `validateDeclaration` com o contexto do combate: inválida = 409 `ACTION_INVALID` com o motivo, nada gasto |
-| `POST …/combat/actions/[id]/roll` `{}` | Reivindica o passo antes de rolar (`combatAction.rollingStep`/`rollingAt`, troca condicional; a chamada concorrente recebe 409 `ACTION_RESOLVED`; trava mais velha que `MADDOX_COMBAT_ROLL_CLAIM_STALE_MS` (30 s) é tida como abandonada e a próxima tentativa assume; só o dono da reivindicação grava). Rola o próximo passo: ataque (vantagem/desvantagem pelas condições; acerto contra a CA do alvo, que não aparece; 20 natural = crítico com dados dobrados), dano (resistências; adversário a 0 PV = `defeated`), cura (sai dos 0 PV), magia de salvaguarda (o servidor rola a salvaguarda de cada alvo; metade no sucesso pelo texto/perfil), teste (Esconder = Furtividade CD 15 → Invisível) |
+| `POST …/combat/actions/[id]/roll` `{}` | Reivindica o passo antes de rolar (`combatAction.rollingStep`/`rollingAt`, troca condicional; a chamada concorrente recebe 409 `ACTION_RESOLVED`; trava mais velha que `MADDOX_COMBAT_ROLL_CLAIM_STALE_MS` (30 s) é tida como abandonada e a próxima tentativa assume; só o dono da reivindicação grava). Rola o próximo passo: ataque (vantagem/desvantagem pelas condições; acerto contra a CA do alvo, que não aparece; 20 natural = crítico com dados dobrados), dano (resistências; adversário a 0 PV = `defeated`), cura (sai dos 0 PV), magia de salvaguarda (o servidor rola a salvaguarda de cada alvo; metade no sucesso pelo texto/perfil), teste (Esconder = Furtividade CD 15 → Invisível; DND-49: sai depois do ataque ou de magia Verbal) |
 | `DELETE …/combat/actions/[id]` | Cancela a ação sem rolagem e sem recurso gasto; a economia volta (`ACTION_NOT_CANCELLABLE`) |
 | `POST …/combat/rolls/[id]/roll` `{}` | Reivindicada antes de rolar (`combatRoll.rolling`/`rollingAt`, mesma expiração; concorrente = 409 `ROLL_NOT_PENDING`). Iniciativa, teste contra a morte (encerra a vez), concentração, salvaguarda contra um adversário (aplica o dano pré-rolado), dano pedido pelo Maddox. O dono pode rolar no lugar (auditado) |
 | `POST …/combat/reactions/[id]` `{ escolha }` | A reação escolhida ou `none`; o dono só pode recusar no lugar (auditado) |
@@ -1118,13 +1118,9 @@ aplicável (id errado, valor fora da faixa) vira falha, com a mensagem genérica
 genérica para o jogador; o motivo técnico só para o dono da campanha.
 
 **Ataque furtivo.** Detectado pelo servidor pela classe (Ladino/Rogue) ou pela característica "Ataque Furtivo" (menção ou registro),
-⌈nível/2⌉d6; a preparação pode corrigir os dados com motivo. Vira `attack.riders` nas opções de arma com Acuidade ou à distância (a
-arremessada só com Acuidade; reações ficam fora). `POST …/combat/actions { sneakAttack: true }`: sem o rider = `SNEAK_ATTACK_UNAVAILABLE`;
-já usado = `SNEAK_ATTACK_USED`; condição conferida **antes de qualquer gasto** — desvantagem recusa, vantagem aceita, sem nenhuma das duas o
-JEV "Condição do ataque furtivo" (com a chave ligada) ou uma geração curta do narrador confere o aliado a até 1,5 m do alvo
-(`SNEAK_ATTACK_DENIED` com o motivo); falha da conferência aceita (log). Os dados entram no passo de dano (o crítico dobra também) e
-`economy.sneakAttackUsed` só é marcado quando esse dano é rolado (o ataque que erra não gasta). O Personagem Opex pode marcar
-(`ataqueFurtivo`).
+⌈nível/2⌉d6; a preparação só corrige os dados com fonte confirmada no catálogo (DND-49). Vira `attack.riders` nas opções de arma com
+Acuidade ou à distância (a arremessada só com Acuidade; reações ficam fora). Desde a DND-49 o furtivo é **perguntado depois do acerto**
+(seção DND-49 abaixo); a marcação antes do ataque (`sneakAttack` em `POST …/combat/actions`, `ataqueFurtivo` do Opex) saiu.
 
 **Configuração.** Mesma feature `maddox` do narrador: `combatPrepInstructions` e `combatAdjustInstructions` (aba Agente Maddox → Geral →
 "Combate tático", com "Restaurar padrão"); o formato da resposta é fixo no código. Origens de consumo `maddox-combat-prep`,
@@ -1132,16 +1128,117 @@ JEV "Condição do ataque furtivo" (com a chave ligada) ou uma geração curta d
 
 **Tela.** `CombatWaitBar` ("O mestre está preparando o combate"; travada: "Aguardando o dono da campanha"), `InitiativeTracker` (selos
 "Aguardando", "Preparando…", "Pronto", "Falhou", também na faixa compacta), `CombatPrepBlockedNotice` (dono: motivo, "Tentar de novo" e
-"Seguir sem preparação" com confirmação), `CombatPrepCard`, e no `CombatActionMenu` o "Ajustado pelo Maddox", a marcação "Ataque furtivo
-(+Xd6)" (desabilitada depois de usada), o pedido de ajuste com o resultado e os avisos de falta (`combatMenuNotices`: sem armas, sem
+"Seguir sem preparação" com confirmação), `CombatPrepCard`, e no `CombatActionMenu` o "Ajustado pelo Maddox", o aviso "Ataque furtivo
+(+Xd6): se o ataque acertar e a regra permitir, você escolhe somar antes do dano" (ou "já usado neste turno"), o pedido de ajuste com o resultado e os avisos de falta (`combatMenuNotices`: sem armas, sem
 habilidades, só "Outra ação" na Ação bônus). Hooks `useRetryCombatPrep`, `useSkipCombatPrep`, `useRequestCombatAdjustment`.
 
 Fora do escopo: personagem que entra no combate depois que ele começou (hoje a lista de personagens é montada na abertura).
 
 **Testes.** `tests/backend/maddox/combat-prep.test.ts` (parte pura), os blocos DND-41 de `tests/backend/maddox/tactical-combat.test.ts`
 (espera, falha e decisões, gravação, card, conflito, descarte, ajuste, furtivo) e `tests/frontend/maddox/maddox-combat-prep.test.tsx`.
+Alteração de regra simulada na resposta mockada precisa de fonte: no mock, chame `readCatalog(input, tipo, id, entidade)`
+(`tests/helpers/combat-prep-mock.ts`) e mande `source: { ref: "Tipo:id", quote }` com um trecho dessa entidade.
 Testes que abrem combate tático mockam `@/features/maddox/server/combat-prep-ai` com `combatPrepAiModule`
 (`tests/helpers/combat-prep-mock.ts`, padrão "sem mudanças") e esperam `waitForCombatPreps()` (o `settleCampaign` já espera).
+
+## Catálogo como fonte, maestrias, furtivo depois do acerto, Esconder-se e PV (DND-49)
+
+Em todos os graus com combate tático (`MADDOX_TACTICAL_COMBAT_RIGORS`). Sem permissão nova (`maddox.play` e ser membro cobrem a rota do
+furtivo).
+
+**Preparação e "Pedir ajuste" consultam o catálogo por ferramentas.** `reviewCombatSheet` e `reviewAdjustment` (`server/combat-prep-ai.ts`)
+rodam com `search_catalog`/`get_catalog_entity`: na AI SDK, `buildCatalogAiTools({ onResult, onError })` no laço `generateText` (até
+`MADDOX_COMBAT_PREP_MAX_STEPS`/`MADDOX_COMBAT_ADJUST_MAX_STEPS`; vale o texto do último passo); no OpenCode, pelo MCP `dndicas-maddox` com o
+**token de catálogo** (`createMaddoxCatalogToken`, domínio de assinatura `maddox-catalog:` em `master-turn-token.ts`): só abre as duas
+ferramentas de catálogo, vale enquanto o job da fila roda e a execução (`runId`) está aberta (`openCatalogRun`/`closeCatalogRun`). Tetos:
+`MADDOX_COMBAT_PREP_TIMEOUT_MS` 6 min e `MADDOX_COMBAT_ADJUST_TIMEOUT_MS` 4 min. Nenhum texto de regra entra no prompt: o `sheetText` ganha
+a seção **"Referências do catálogo"** (`server/catalog-references.ts`) com tipo + id + nome de tudo que a ficha cita (menções de classe,
+subclasse, espécie, origem, características, notas, proficiências com armas; ids de catálogo de características, talentos e magias; o
+`catalogItemId` dos itens e a Regra da maestria de cada item), só entre documentos `status: "active"`; o resto sai como "sem
+correspondência no catálogo".
+
+**Registro das consultas** (`server/catalog-reads.ts`): cada `get_catalog_entity` da execução guarda `Tipo:id` e o texto normalizado da
+entidade compacta que o modelo viu (sem acento, caixa e pontuação). **Fonte obrigatória** (`source: {"ref":"Tipo:id","quote":"trecho"}`,
+`requiresCatalogSource` em `combat-prep-schemas.ts`) em: `sheetChanges` de atributo, proficiência de salvaguarda ou perícia, atributo de
+conjuração, espaços de magia, cargas, `attack-upsert`, `weapon-mastery`, `trait-upsert`, `feat-upsert` e `spell-update` que muda o círculo; `modify` com `attack`, `save`, `heal` ou `economy`; `add` com
+ataque, salvaguarda ou cura; e `sneakAttack`. Rótulo, detalhe, alvo, remoção, texto acrescentado e equipar não exigem. Sem `source`, com
+`ref` não lido nesta execução, com `quote` fora do texto ou com `quote` curto demais (menos de 3 palavras e de 15 caracteres normalizados) = recusada (`dropped`), e o card mostra a linha com "recusada" e o motivo ("Não
+confirmada no catálogo do DnDicas: …"). Modelo que não consultou nada e teve alteração recusada = aviso no topo do card ("O Maddox não
+consultou o catálogo…"; falha da ferramenta: "A consulta ao catálogo do DnDicas falhou…"). O `sneakAttack: { dice: null }` sem fonte não
+apaga mais o furtivo do servidor.
+
+**Decisão do dono D2 (economia e ações padrão).** A troca de economia (Ação ↔ Ação bônus) exige fonte. As opções do servidor
+`standard:*` (Esconder-se, Esquivar…), `unarmed`, `opportunity`, `free` e `ready` não aceitam `modify` nem `remove` na preparação nem no
+ajuste ("Recusada: esta opção segue a regra fixa do servidor…"), e um `add` que repete o ataque de maestria (Ágil, Trespassar, "outra
+mão") é recusado: o servidor resolve.
+
+**Pedido de ajuste.** Mesmas ferramentas e mesma exigência. Recusa sem nenhuma consulta ao catálogo (nem leitura nem busca; buscar e não achar a regra conta como consulta, `searches` no registro) não vale: o servidor pede de novo exigindo a consulta (`mustConsult`); recusando outra vez sem ler, o pedido fica `error` ("não examinado": o jogador vê a mensagem genérica para tentar de novo; o dono vê o motivo) e o log registra. Aceito com tudo recusado por falta de fonte = o pedido fica `refused` com o
+motivo do catálogo ("…A opção continua como está."). Cada ajuste guarda `catalogRefs` e `droppedWithoutSource`.
+
+**Registro e auditoria.** `maddox_combat_preps` grava `catalogRefs` (as refs lidas) e `droppedWithoutSource`; os logs `[maddox] mesa do
+personagem preparada` e `[maddox] pedido de ajuste aceito/recusado` trazem `refs`, `refsCount`, `catalogFailures` e `droppedWithoutSource`.
+
+**Maestrias de arma** (`weapon-mastery.ts`: chaves `nick | vex | sap | topple | graze | push | slow | cleave`, `masteryKeyFromName`,
+`masteryLimit`). A ficha guarda `weaponMasteries: [{ catalogItemId, mastery }]` (sem edição no editor da ficha nesta etapa). A arma só tem
+maestria nas opções quando o item do catálogo tem a menção "Maestria: …" e o item está em `weaponMasteries` (`combat-sheet.ts`).
+Preenchimento: a consolidação da entrevista (`initialWeaponMasteries` em `sheet-builder.ts`, só catálogo: característica "Maestria em/com
+Arma(s)" até o nível; armas do equipamento com maestria, em ordem; o catálogo não marca arma simples/marcial, então vale o equipamento
+escolhido) e a preparação, que propõe `{"type":"weapon-mastery", catalogItemId, mastery, source}` quando a ficha não tem nenhuma.
+**Decisão do dono D1 (limite):** a coluna de maestria da tabela de progressão da classe; sem ela, o número escrito no trecho da
+característica lida ("dois tipos de armas"); sem número, a proposta é recusada ("limite de maestrias não encontrado no catálogo"). Acima
+do limite, ou maestria diferente da do item, também.
+
+Regras no combate (`combat-options.ts`, `combat-rules.ts`, `tactical-actions.ts`; efeitos em `masteryNotes` e no resumo da ação):
+- **Ágil (Nick):** depois do ataque com arma Leve na ação Atacar, o ataque extra da propriedade Leve com a arma que tem Ágil aparece na
+  lista de **Ação** (`offhand:<id>`, "outra mão · Maestria Ágil") e não gasta a Ação bônus; uma vez por turno (`economy.lightExtraUsed`),
+  acertando ou errando o primeiro. Sem Ágil, o ataque extra segue na Ação bônus. Uma só arma Leve com quantidade 1: nada. O Opex faz o
+  ataque Ágil sozinho, no último alvo, antes de encerrar a vez.
+- **Afligir (Vex):** acerto com dano > 0 grava `flags.vex { targetKey, round }` no atacante; o próximo ataque contra aquele alvo tem
+  vantagem ("Maestria Afligir"), até o fim do próximo turno; o uso gasta.
+- **Drenar (Sap):** acerto grava `flags.sapped` no adversário; a próxima jogada de ataque dele (`monster_action`) tem desvantagem; sai
+  no início do próximo turno de quem drenou.
+- **Derrubar (Topple):** acerto → o servidor rola a salvaguarda de Constituição do alvo, CD 8 + modificador usado + proficiência (passo
+  `save` no card); falha = Caído. Alvo já Caído: nada.
+- **Garantido (Graze):** erro → o passo de dano vira dano igual ao modificador usado, do mesmo tipo; modificador ≤ 0, nada.
+- **Empurrar, Lentidão, Trespassar:** Empurrar fica registrado no resumo (o Maddox narra); Lentidão grava `flags.slowed` (não acumula,
+  aparece em `get_combat`); Trespassar libera `economy.cleave` depois de um acerto corpo a corpo e a opção `cleave:<id>` na Ação, uma vez
+  por turno, contra **outro** inimigo (`CLEAVE_SAME_TARGET`), sem somar o modificador ao dano (salvo negativo); o resumo diz que o
+  jogador declara o alvo a 1,5 m e o Maddox pode recusar pela cena.
+Cancelar a ação devolve `lightExtraUsed`/`cleaveUsed`; voltar um turno restaura o combate do snapshot (economia e flags juntos).
+
+**Ataque furtivo depois do acerto.** Ao acertar com a opção que tem o rider (`combatAction.sneakRider`), sem o furtivo usado no turno e
+sem desvantagem (vantagem vale direto; sem vantagem, a conferência do aliado a 1,5 m), o servidor insere o passo `sneak-choice` antes do
+dano. O humano vê "Somar ataque furtivo (+Xd6)" e "Não somar" (`POST …/combat/actions/[actionId]/sneak { add }`, só o dono da ação,
+`chooseSneakAttack`); rolar antes de responder = 409 `SNEAK_CHOICE_PENDING`. Somar põe os dados no passo de dano; `sneakAttackUsed`
+continua marcado quando esse dano é rolado. O Opex soma sozinho (`resolvePendingAction`). Sair do turno sem responder segue o fluxo de
+ausência (a ação pendente é cancelada).
+
+**Esconder-se e a vantagem na tela.** A condição `invisible` com `source: "Esconder"` sai depois de uma jogada de ataque (a vantagem vale
+para o ataque que revela) ou ao conjurar magia com componente Verbal (`OptionSpell.verbal`, do catálogo). Invisível de outra origem
+fica. "Fazer barulho" e "ser encontrado" ficam com o Maddox (`apply_effect`). O passo de ataque grava `modeReasons` (prévia ao declarar e
+o valor da rolagem); o card mostra "Vantagem: atacante invisível" (ou "Normal: vantagem e desvantagem se anulam (…)") e os dois d20 com o
+mantido em destaque, e o rolador já vem no modo certo.
+
+**PV fora do combate.** Ferramenta do narrador `update_character_hit_points` (`server/hit-points.ts`, regra pura em `hit-points-ops.ts`),
+nos graus `MADDOX_SHEET_RIGORS`, recusada com combate tático ativo (usar `apply_effect`): `curar` (`dados` que o servidor rola ou `valor`),
+`definir`, `estabilizar`, `acordar` (estabilizado → 1 PV), `descanso-curto` (`dadosDeVida`, cada dado + modificador de Constituição) e
+`descanso-longo` (PV máximos, PV temporários e testes contra a morte zerados; os dados de vida gastos não mudam). Motivo obrigatório; personagem
+morto recusa; PV limitado ao máximo. Grava na ficha (auditoria `FichaPersonagem`, `origin: "narrator-hit-points"`, tempo real) e põe na
+mesa a mensagem `kind: "hit-points"` ("PV de X: 0 → 1 (motivo)", na transcrição como "ficha"). A instrução `MADDOX_HIT_POINTS_RULE` do
+narrador manda chamar a ferramenta antes de narrar alguém a 0 PV acordando, agindo ou se recuperando.
+
+**Decisão do dono D3 (checagem ao abrir o combate).** Roda no job da preparação do próprio personagem, antes da revisão da ficha (a ordem
+de iniciativa já espera esse job): personagem com `hpCurrent = 0` e vivo → `reviewDownedCharacter` lê o `currentState` e a narração
+recente e devolve `{decisao: "manter" | "aplicar", operacao, motivo}`. "aplicar" usa o mesmo serviço da ferramenta (`origin:
+"combat-open"`, atualiza `hpZero`/`stable` no combate); "manter" põe "X segue caído com 0 PV (motivo)". Uma vez por preparação
+(`downedCheckedAt`). Sem ninguém a 0 PV, não há IA; falha ou fim do prazo (`MADDOX_COMBAT_DOWNED_CHECK_TIMEOUT_MS`) = o combate segue sem
+mudança, só log.
+
+**Testes.** `tests/backend/maddox/combat-prep-catalog.test.ts` (fontes, D1/D2, Ladino 1 + Adaga, maestrias nas opções, PV puros),
+`tests/backend/maddox/combat-prep-ai.test.ts` (ferramentas na AI SDK e token no OpenCode), o bloco DND-49 de
+`tests/backend/maddox/maddox-mcp.test.ts` (token de catálogo), os blocos DND-49 de `tests/backend/maddox/tactical-combat.test.ts`
+(furtivo, maestrias, Esconder-se, PV, checagem ao abrir, Referências do catálogo, consolidação) e
+`tests/frontend/maddox/maddox-dnd49-combat.test.tsx` (escolha do furtivo, motivo da vantagem).
 
 ## Injetar Lembrança (DND-25)
 

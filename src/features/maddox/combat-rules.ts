@@ -29,6 +29,12 @@ export interface CombatFlags {
     shield?: boolean
     /** Ajudado por um aliado: vantagem no próximo ataque (contra `targetKey`, se houver) ou teste. */
     helped?: { byName: string; byKey: string; targetKey: string | null } | null
+    /** DND-49 — Maestria Afligir: vantagem no próximo ataque contra `targetKey` até o fim do próximo turno (rodada em que foi marcada). */
+    vex?: { targetKey: string; round: number } | null
+    /** DND-49 — Maestria Drenar: desvantagem na próxima jogada de ataque até o início do próximo turno de `byKey`. */
+    sapped?: { byKey: string; byName: string } | null
+    /** DND-49 — Maestria Lentidão: −3 m de deslocamento até o início do próximo turno de `byKey` (não acumula). */
+    slowed?: { byKey: string; byName: string } | null
 }
 
 /** Economia de ações do turno (true = ainda disponível). */
@@ -48,9 +54,14 @@ export interface CombatEconomy {
     lightWeaponId?: string | null
     /** Ataque furtivo já somado a um dano neste turno (DND-41: uma vez por turno). */
     sneakAttackUsed?: boolean
+    /** DND-49: o ataque extra da propriedade Leve já foi feito neste turno (pela Ação bônus ou pela Maestria Ágil). */
+    lightExtraUsed?: boolean
+    /** DND-49 — Maestria Trespassar: liberada por um acerto corpo a corpo (outro alvo, uma vez por turno). */
+    cleave?: { weaponId: string; targetKey: string } | null
+    cleaveUsed?: boolean
 }
 
-export const freshEconomy = (): CombatEconomy => ({ action: true, bonus: true, reaction: true, attacksLeft: 0, attackAction: false, slotSpellCast: false, lightAttack: false, lightWeaponId: null, sneakAttackUsed: false })
+export const freshEconomy = (): CombatEconomy => ({ action: true, bonus: true, reaction: true, attacksLeft: 0, attackAction: false, slotSpellCast: false, lightAttack: false, lightWeaponId: null, sneakAttackUsed: false, lightExtraUsed: false, cleave: null, cleaveUsed: false })
 
 export interface CombatSubject {
     conditions: readonly CombatCondition[]
@@ -80,21 +91,25 @@ export interface AttackModeInput {
     ranged: boolean
     /** O atacante foi ajudado (Ajudar) contra este alvo. */
     helped?: boolean
+    /** DND-49: chave do alvo (Maestria Afligir do atacante contra ele). */
+    targetKey?: string | null
 }
 
 /** Vantagem/desvantagem de uma jogada de ataque pelas condições e flags dos dois lados (PHB 2024). */
-export function attackMode(input: AttackModeInput): { mode: RollMode; reasons: string[] } {
+export function attackMode(input: AttackModeInput): { mode: RollMode; reasons: string[]; advantage: boolean; disadvantage: boolean } {
     const { attacker, target, ranged } = input
     const adv: string[] = []
     const dis: string[] = []
     if (hasCondition(attacker, "invisible")) adv.push("atacante invisível")
     if (input.helped) adv.push("ajudado por um aliado")
+    if (input.targetKey && attacker.flags?.vex?.targetKey === input.targetKey) adv.push("Maestria Afligir")
+    if (attacker.flags?.sapped) dis.push("atacante sob a Maestria Drenar")
     for (const key of ["poisoned", "blinded", "frightened", "restrained", "prone"] as const) if (hasCondition(attacker, key)) dis.push(`atacante ${conditionLabel(key).toLowerCase()}`)
     for (const key of ["blinded", "paralyzed", "petrified", "restrained", "stunned", "unconscious"] as const) if (hasCondition(target, key)) adv.push(`alvo ${conditionLabel(key).toLowerCase()}`)
     if (hasCondition(target, "prone")) (ranged ? dis : adv).push(ranged ? "alvo caído (à distância)" : "alvo caído")
     if (hasCondition(target, "invisible") && !hasCondition(attacker, "invisible")) dis.push("alvo invisível")
     if (target.flags?.dodging && canAct(target)) dis.push("alvo esquivando")
-    return { mode: combineModes(adv.length > 0, dis.length > 0), reasons: [...adv, ...dis] }
+    return { mode: combineModes(adv.length > 0, dis.length > 0), reasons: [...adv, ...dis], advantage: adv.length > 0, disadvantage: dis.length > 0 }
 }
 
 /** Golpe corpo a corpo contra Paralisado ou Inconsciente que acerta é crítico. */
@@ -314,3 +329,11 @@ export const criticalExpression = (expression: DiceExpression): DiceExpression =
 export const averageOf = (expression: DiceExpression) => Math.floor(expression.terms.reduce((sum, term) => sum + term.quantity * ((Number(term.dice.slice(1)) + 1) / 2), 0) + expression.modifier)
 
 export const abilityModifier = (score: number) => Math.floor((score - 10) / 2)
+
+/** DND-49: texto dos motivos da rolagem ("Vantagem: atacante invisível"; os dois juntos se anulam). */
+export function modeReasonText(mode: RollMode, reasons: readonly string[]): string | null {
+    if (!reasons.length) return null
+    if (mode === "advantage") return `Vantagem: ${reasons.join(", ")}`
+    if (mode === "disadvantage") return `Desvantagem: ${reasons.join(", ")}`
+    return `Normal: vantagem e desvantagem se anulam (${reasons.join(", ")})`
+}

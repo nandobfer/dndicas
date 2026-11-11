@@ -15,10 +15,12 @@ export const maddoxCombatActionSchema = z.strictObject({
     freeText: freeText.optional(),
     readyOptionId: z.string().trim().max(200).optional(),
     readyTrigger: freeText.optional(),
-    /** DND-41: soma o ataque furtivo ao dano (uma vez por turno, arma de Acuidade ou à distância). */
-    sneakAttack: z.boolean().optional(),
 })
 export type MaddoxCombatActionInput = z.infer<typeof maddoxCombatActionSchema>
+
+/** DND-49: depois do acerto, somar (ou não) o ataque furtivo ao dano. */
+export const maddoxSneakChoiceSchema = z.strictObject({ add: z.boolean({ error: "Escolha se soma o ataque furtivo" }) })
+export type MaddoxSneakChoiceInput = z.infer<typeof maddoxSneakChoiceSchema>
 
 /** "Encerrar turno": o movimento e a posição, em texto (sem grid). */
 export const maddoxEndCombatTurnSchema = z.strictObject({ movimento: freeText.optional() })

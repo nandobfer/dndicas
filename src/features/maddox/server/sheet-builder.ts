@@ -30,6 +30,8 @@ import type { IMaddoxCharacterBuild, IMaddoxInterview } from "../models"
 import { buildFinalScores, effectiveLevel, emptyBuild, loadBuildCatalog, spellSource, subclassRefId, type BuildCatalog, type BuildContext, type CatalogItem, type CatalogSpell } from "./character-build"
 import { submittedHitPointsCard } from "./interview-cards"
 import { linkCatalogMentions } from "./catalog-mentions"
+import { itemMastery } from "./catalog-references"
+import { isWeaponMasteryFeature, masteryLimit, type MaddoxMasteryKey } from "../weapon-mastery"
 
 /**
  * Ficha D&D COMPLETA montada no servidor a partir das escolhas da entrevista (Maddox 5): os mesmos valores que o
@@ -219,6 +221,7 @@ export async function writeCharacterSheet(input: BuildSheetInput): Promise<void>
 
     const items = build.equipment.map((entry) => ({ entry, item: entry.id ? (catalog.items.get(entry.id) ?? null) : null }))
     set.resourceCharges = await resourceCharges(set, featMentions, items.filter((row): row is { entry: typeof row.entry; item: CatalogItem } => Boolean(row.item)).map((row) => row.item), level, prof, mods)
+    set.weaponMasteries = await initialWeaponMasteries(catalog, level, items.map((row) => row.item))
 
     const [{ CharacterSheet }, { CharacterItem }, { CharacterAttack }, { CharacterSpell }] = await Promise.all([
         import("@/features/character-sheets/models/character-sheet"),
@@ -269,6 +272,32 @@ export async function writeCharacterSheet(input: BuildSheetInput): Promise<void>
     }
     if (spellDocs.length) await CharacterSpell.insertMany(spellDocs)
     if (attacks.length) await CharacterAttack.insertMany(attacks)
+}
+
+/**
+ * Maestrias de arma da consolidação (DND-49), só pelo catálogo, sem IA: a classe (ou subclasse) tem até o nível uma
+ * característica "Maestria em/com Arma(s)"; o limite vem da coluna da progressão ou do número no texto dela (decisão do
+ * dono D1); as armas são as do equipamento que têm maestria no catálogo, na ordem do inventário. O catálogo não marca
+ * arma simples/marcial, então vale o equipamento escolhido na entrevista. Sem como decidir, fica vazio e a preparação do
+ * combate propõe (com fonte).
+ */
+export async function initialWeaponMasteries(catalog: Pick<BuildCatalog, "cls" | "subclass">, level: number, items: readonly (CatalogItem | null)[]): Promise<{ catalogItemId: Types.ObjectId; mastery: MaddoxMasteryKey }[]> {
+    const cls = catalog.cls
+    if (!cls) return []
+    const feature = [...collectTraitMentionsUpTo(cls.traits ?? [], level), ...collectTraitMentionsUpTo(catalog.subclass?.traits ?? [], level)].find((mention) => isWeaponMasteryFeature(mention.label))
+    if (!feature) return []
+    const { Trait } = await import("@/features/traits/database/trait")
+    const trait = Types.ObjectId.isValid(feature.id) ? await Trait.findOne({ _id: new Types.ObjectId(feature.id), status: "active" }).select("description").lean<{ description?: string }>() : null
+    const limit = masteryLimit((cls as { progressionTable?: Parameters<typeof masteryLimit>[0] }).progressionTable, level, trait?.description ? plain(trait.description) : "")
+    if (!limit) return []
+    const chosen: { catalogItemId: Types.ObjectId; mastery: MaddoxMasteryKey }[] = []
+    for (const item of items) {
+        if (chosen.length >= limit) break
+        if (!item || resolveCatalogItemType(item) !== "arma" || chosen.some((entry) => String(entry.catalogItemId) === String(item._id))) continue
+        const mastery = itemMastery((item as CatalogItem & { mastery?: unknown }).mastery)?.key
+        if (mastery) chosen.push({ catalogItemId: new Types.ObjectId(String(item._id)), mastery })
+    }
+    return chosen
 }
 
 function spellDoc(sheetId: Types.ObjectId, name: string, spell: CatalogSpell | null) {

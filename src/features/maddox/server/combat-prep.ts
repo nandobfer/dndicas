@@ -1,16 +1,22 @@
 import { randomUUID } from "node:crypto"
 import { Types } from "mongoose"
+import { z } from "zod"
 import { AcaoAuditoria, recordAudit } from "@/lib/db"
 import { DomainError } from "@/lib/api/route"
 import { loggerFor } from "@/lib/logger"
 import { MADDOX_ABILITIES, MADDOX_ABILITY_LABELS } from "../check-modifier"
 import { plainText, type CombatOption, type CombatOptions } from "../combat-options"
 import { detectSneakAttack, riderLabel } from "../combat-prep"
-import { combatAddSchema, combatModifySchema, combatPrepResponseSchema, combatRemoveSchema, combatSheetChangeSchema, parseList, sneakAttackSchema, type CombatSheetChange } from "../combat-prep-schemas"
+import { combatAddSchema, combatModifySchema, combatPrepResponseSchema, combatRemoveSchema, combatSheetChangeSchema, parseList, requiresCatalogSource, sneakAttackSchema, type CombatSheetChange } from "../combat-prep-schemas"
 import { abilityModifier } from "../combat-rules"
 import { emptyOverlay, type CombatOptionPatch, type CombatPrepChange, type CombatPrepOverlay, type CombatPrepRider, type PreparedCombatOption, type TacticalCharacterState } from "../combat-types"
 import { MADDOX_CAMPAIGN_AUDIT_ENTITY, MADDOX_COMBAT_PREP_CONFLICT_RETRIES, MADDOX_COMBAT_PREP_STALE_MS, MADDOX_COMBAT_PREP_TRAIT_TEXT_MAX } from "../constants"
 import { MaddoxCampaignMessageModel, MaddoxCampaignModel, MaddoxCombatPrepModel, type IMaddoxCampaign, type IMaddoxCombatPrep } from "../models"
+import { masteryKeyFromName, masteryLabel, masteryLimit, type MaddoxMasteryKey } from "../weapon-mastery"
+import { MADDOX_HIT_POINT_OPERATIONS } from "../hit-points-ops"
+import { catalogReadText, checkCatalogSource, createCatalogReadLog, type CatalogReadLog, type CatalogSource } from "./catalog-reads"
+import { catalogReferencesText, itemMastery, mentionCandidates, resolveCatalogReferences, type CatalogReference, type CatalogReferenceCandidate } from "./catalog-references"
+import { describeSheetChange } from "./combat-sheet-writes"
 
 /**
  * Preparação da mesa de combate (DND-41) — SOMENTE servidor. Ao abrir o combate tático, cada personagem (inclusive os
@@ -117,6 +123,20 @@ export interface PrepSheetContext {
     stamp: string
     chargeIds: Set<string>
     itemIds: Set<string>
+    /** DND-49: o que a ficha cita, conferido no catálogo (a seção "Referências do catálogo"). */
+    references: CatalogReference[]
+    /** DND-49: maestrias — itens de catálogo da ficha com a maestria deles, as já registradas e a base do limite. */
+    mastery: MasteryContext
+}
+
+export interface MasteryContext {
+    /** `catalogItemId` → maestria do item no catálogo. */
+    items: Map<string, MaddoxMasteryKey>
+    /** `catalogItemId` já registrados em `weaponMasteries`. */
+    current: Set<string>
+    level: number
+    /** Tabela de progressão da classe (coluna de maestria, quando houver). */
+    table: { customColumns?: { label?: string | null; values?: (string | number | null)[] | null }[] | null } | null
 }
 
 const signed = (value: number) => (value >= 0 ? `+${value}` : String(value))
@@ -141,19 +161,21 @@ export async function loadPrepSheet(state: TacticalCharacterState, campaignId?: 
         import("./combat-sheet-writes"),
     ])
     const stamp = await readSheetStamp(state.sheetId)
-    type Sheet = Record<string, unknown> & { level?: number; resourceCharges?: { id: string; name: string; total: number; used: number }[]; spellSlots?: Record<string, { total: number; used: number }>; skills?: Record<string, { proficient?: boolean; expertise?: boolean }>; savingThrows?: Record<string, boolean>; armorTraining?: Record<string, boolean> }
+    type Sheet = Record<string, unknown> & { level?: number; weaponMasteries?: { catalogItemId: Types.ObjectId; mastery: string }[]; resourceCharges?: { id: string; name: string; total: number; used: number }[]; spellSlots?: Record<string, { total: number; used: number }>; skills?: Record<string, { proficient?: boolean; expertise?: boolean }>; savingThrows?: Record<string, boolean>; armorTraining?: Record<string, boolean> }
     const [sheet, attacks, traits, feats, spells, items] = await Promise.all([
         CharacterSheet.findById(sheetId).lean<Sheet>(),
         CharacterAttack.find({ sheetId }).sort({ _id: 1 }).lean<{ _id: Types.ObjectId; name: string; attackBonus: string; damageType: string }[]>(),
-        CharacterTrait.find({ sheetId }).sort({ _id: 1 }).lean<{ _id: Types.ObjectId; name: string; description: string }[]>(),
-        CharacterFeat.find({ sheetId }).sort({ _id: 1 }).lean<{ _id: Types.ObjectId; name: string; description: string }[]>(),
-        CharacterSpell.find({ sheetId }).sort({ _id: 1 }).lean<{ _id: Types.ObjectId; name: string; circle: number | null; prepared: boolean; castingTime: string; concentration: boolean }[]>(),
+        CharacterTrait.find({ sheetId }).sort({ _id: 1 }).lean<{ _id: Types.ObjectId; name: string; description: string; catalogTraitId?: Types.ObjectId | null }[]>(),
+        CharacterFeat.find({ sheetId }).sort({ _id: 1 }).lean<{ _id: Types.ObjectId; name: string; description: string; catalogFeatId?: Types.ObjectId | null }[]>(),
+        CharacterSpell.find({ sheetId }).sort({ _id: 1 }).lean<{ _id: Types.ObjectId; name: string; circle: number | null; prepared: boolean; castingTime: string; concentration: boolean; catalogSpellId?: Types.ObjectId | null }[]>(),
         CharacterItem.find({ sheetId }).sort({ _id: 1 }).lean<{ _id: Types.ObjectId; name: string; quantity: number; equipped: boolean; catalogItemId: Types.ObjectId | null; catalogItemType: string | null }[]>(),
     ])
     if (!sheet) return null
     const catalogIds = items.map((item) => item.catalogItemId).filter((id): id is Types.ObjectId => Boolean(id))
-    const catalog = catalogIds.length ? await ItemModel.find({ _id: { $in: catalogIds } }).select("type damageDice damageType properties mastery").lean<{ _id: Types.ObjectId; type?: string; damageDice?: { quantidade: number; tipo: string }; damageType?: string; properties?: { name?: string; description?: string }[]; mastery?: string }[]>() : []
+    const catalog = catalogIds.length ? await ItemModel.find({ _id: { $in: catalogIds }, status: "active" }).select("name type damageDice damageType properties mastery").lean<{ _id: Types.ObjectId; name?: string; type?: string; damageDice?: { quantidade: number; tipo: string }; damageType?: string; properties?: { name?: string; description?: string }[]; mastery?: unknown }[]>() : []
     const catalogById = new Map(catalog.map((item) => [String(item._id), item]))
+    const mastery = await masteryContextOf(sheet, catalog)
+    const references = await resolveCatalogReferences(referenceCandidates(sheet, { traits, feats, spells, items }, catalog))
     const views = await loadCharacterOptions([state], campaignId, null, { base: true, ignoreResources: true })
     const view = views.get(state.actorKey)
     const options: CombatOptions = view?.options ?? { action: [], bonus: [], reactions: [], attacksPerAction: 1 }
@@ -183,6 +205,7 @@ export async function loadPrepSheet(state: TacticalCharacterState, campaignId?: 
         `- Salvaguardas proficientes: ${saves.join(", ") || "nenhuma"}`,
         `- Perícias: ${skills.join(", ") || "nenhuma"}`,
         `- Proficiências com armas: ${html("weaponProficiencies") || "—"}`,
+        `- Maestrias de arma registradas: ${(sheet.weaponMasteries ?? []).map((entry) => `${plainText(String(catalogById.get(String(entry.catalogItemId))?.name ?? entry.catalogItemId))} (${masteryKeyFromName(entry.mastery) ? masteryLabel(masteryKeyFromName(entry.mastery)!) : entry.mastery})`).join(", ") || "nenhuma"}`,
         `- Treino com armaduras: ${Object.entries(sheet.armorTraining ?? {}).filter(([, value]) => value).map(([key]) => key).join(", ") || "nenhum"}`,
         `- Conjuração: ${sheet.spellcastingAttribute ? MADDOX_ABILITY_LABELS[sheet.spellcastingAttribute as keyof typeof MADDOX_ABILITY_LABELS] ?? String(sheet.spellcastingAttribute) : "nenhum atributo"}${view ? ` · CD ${view.sheet.option.spellSaveDc} · ataque ${signed(view.sheet.option.spellAttackBonus)}` : ""}`,
         `- Espaços de magia: ${slots.map(([circle, slot]) => `${circle}º ${slot.total - slot.used}/${slot.total}`).join(", ") || "nenhum"}`,
@@ -197,12 +220,13 @@ export async function loadPrepSheet(state: TacticalCharacterState, campaignId?: 
                     const entry = item.catalogItemId ? catalogById.get(String(item.catalogItemId)) : undefined
                     const props = (entry?.properties ?? []).map((property) => plainText(property.name?.trim() ? property.name : (property.description ?? ""))).filter(Boolean)
                     const damage = entry?.damageDice ? ` · dano ${entry.damageDice.quantidade}${entry.damageDice.tipo.startsWith("d") ? entry.damageDice.tipo : `d${entry.damageDice.tipo}`} ${entry.damageType ?? ""}`.trimEnd() : ""
-                    return `- [itemId="${item._id}"] ${plainText(item.name)} · ${item.equipped ? "equipado" : "não equipado"} · qtd ${item.quantity ?? 1} · ${entry?.type ?? item.catalogItemType ?? (item.catalogItemId ? "catálogo" : "fora do catálogo")}${damage}${props.length ? ` · propriedades: ${props.join(", ")}` : ""}${entry?.mastery ? ` · ${plainText(entry.mastery)}` : ""}`
+                    return `- [itemId="${item._id}"]${item.catalogItemId ? ` [catalogItemId="${item.catalogItemId}"]` : ""} ${plainText(item.name)} · ${item.equipped ? "equipado" : "não equipado"} · qtd ${item.quantity ?? 1} · ${entry?.type ?? item.catalogItemType ?? (item.catalogItemId ? "catálogo" : "fora do catálogo")}${damage}${props.length ? ` · propriedades: ${props.join(", ")}` : ""}${entry?.mastery ? ` · ${plainText(String(entry.mastery))}` : ""}`
                 })
                 .join("\n") || "(nenhum)"
         }`,
         `## Características registradas\n${traits.map((trait) => `- [id="${trait._id}"] ${plainText(trait.name)} — ${clip(plainText(trait.description ?? ""), MADDOX_COMBAT_PREP_TRAIT_TEXT_MAX)}`).join("\n") || "(nenhuma)"}`,
         `## Talentos registrados\n${feats.map((feat) => `- [id="${feat._id}"] ${plainText(feat.name)} — ${clip(plainText(feat.description ?? ""), MADDOX_COMBAT_PREP_TRAIT_TEXT_MAX)}`).join("\n") || "(nenhum)"}`,
+        `## Referências do catálogo (consulte as regras com as ferramentas de catálogo)\n${catalogReferencesText(references)}`,
         `## Magias\n${spells.map((spell) => `- [spellId="${spell._id}"] ${plainText(spell.name)} · ${spell.circle === 0 ? "truque" : spell.circle ? `${spell.circle}º círculo` : "círculo ?"} · ${spell.prepared ? "preparada" : "não preparada"} · ${spell.castingTime || "—"}${spell.concentration ? " · concentração" : ""}`).join("\n") || "(nenhuma)"}`,
     ]
     return {
@@ -213,7 +237,52 @@ export async function loadPrepSheet(state: TacticalCharacterState, campaignId?: 
         stamp,
         chargeIds: new Set(charges.map((charge) => charge.id)),
         itemIds: new Set(items.map((item) => String(item._id))),
+        references,
+        mastery,
     }
+}
+
+type SheetDoc = Record<string, unknown> & { level?: number; weaponMasteries?: { catalogItemId: Types.ObjectId; mastery: string }[] }
+
+/** O que a ficha cita (menções dos campos, ids de catálogo das listas e a maestria de cada item). */
+function referenceCandidates(
+    sheet: SheetDoc,
+    lists: { traits: { name: string; catalogTraitId?: Types.ObjectId | null }[]; feats: { name: string; catalogFeatId?: Types.ObjectId | null }[]; spells: { name: string; catalogSpellId?: Types.ObjectId | null }[]; items: { name: string; catalogItemId: Types.ObjectId | null }[] },
+    catalog: readonly { _id: Types.ObjectId; mastery?: unknown }[],
+): CatalogReferenceCandidate[] {
+    const fields = ["class", "subclass", "race", "origin", "classFeatures", "speciesTraits", "featuresNotes", "weaponProficiencies"] as const
+    const named = (type: string, name: string, id: Types.ObjectId | null | undefined): CatalogReferenceCandidate[] => {
+        const mention = mentionCandidates(name)[0]
+        if (mention) return [mention]
+        return [{ type, id: id ? String(id) : null, name: plainText(name) }]
+    }
+    return [
+        ...fields.flatMap((field) => mentionCandidates(String(sheet[field] ?? ""))),
+        ...lists.traits.flatMap((trait) => named("Habilidade", trait.name, trait.catalogTraitId)),
+        ...lists.feats.flatMap((feat) => named("Talento", feat.name, feat.catalogFeatId)),
+        ...lists.spells.flatMap((spell) => named("Magia", spell.name, spell.catalogSpellId)),
+        ...lists.items.map((item) => (item.catalogItemId ? { type: "Item", id: String(item.catalogItemId), name: plainText(item.name) } : { type: "Item", id: null, name: plainText(item.name) })),
+        ...catalog.flatMap((item) => {
+            const rule = itemMastery(item.mastery)?.rule
+            return rule ? [rule] : []
+        }),
+    ]
+}
+
+async function masteryContextOf(sheet: SheetDoc, catalog: readonly { _id: Types.ObjectId; mastery?: unknown }[]): Promise<MasteryContext> {
+    const items = new Map<string, MaddoxMasteryKey>()
+    for (const item of catalog) {
+        const found = itemMastery(item.mastery)
+        if (found) items.set(String(item._id), found.key)
+    }
+    const classId = mentionCandidates(String(sheet.class ?? "")).find((mention) => mention.type === "Classe")?.id
+    let table: MasteryContext["table"] = null
+    if (classId && Types.ObjectId.isValid(classId)) {
+        const { CharacterClass } = await import("@/features/classes/models/character-class")
+        const cls = await CharacterClass.findOne({ _id: new Types.ObjectId(classId), status: "active" }).select("progressionTable").lean<{ progressionTable?: MasteryContext["table"] }>()
+        table = cls?.progressionTable ?? null
+    }
+    return { items, current: new Set((sheet.weaponMasteries ?? []).map((entry) => String(entry.catalogItemId))), level: Math.max(1, Number(sheet.level) || 1), table }
 }
 
 // ── Interpretação da resposta ─────────────────────────────────────────────────
@@ -226,6 +295,10 @@ export interface PrepInterpretation {
     optionChanges: CombatPrepChange[]
     rider: { dice: string | null; reason: string } | undefined
     dropped: number
+    /** DND-49: alterações recusadas por não estarem confirmadas no catálogo (aparecem no card com o motivo). */
+    refusals: CombatPrepChange[]
+    /** DND-49: quantas alterações de regra foram descartadas por falta de fonte confirmada. */
+    droppedWithoutSource: number
 }
 
 const attackDetail = (attack: NonNullable<CombatOptionPatch["attack"]>) => `${signed(attack.bonus)} para acertar · ${attack.damage}${attack.damageType ? ` ${attack.damageType}` : ""}${attack.ranged ? " · à distância" : ""}`
@@ -239,23 +312,97 @@ function patchDetail(option: CombatOption, patch: CombatOptionPatch): string {
     return option.detail
 }
 
-/** Confere a resposta da IA contra a lista base e a ficha: ids desconhecidos e valores fora da faixa são descartados. */
-export function interpretPrep(raw: unknown, context: Pick<PrepSheetContext, "options" | "chargeIds" | "itemIds">): PrepInterpretation {
+/**
+ * Opções do servidor que a preparação não altera nem remove (decisão do dono, DND-49 D2): as ações padrão, o desarmado,
+ * o ataque de oportunidade, "Outra ação" e a ação preparada seguem as regras fixas do servidor.
+ */
+export const isFixedServerOption = (optionId: string) => optionId.startsWith("standard:") || ["unarmed", "opportunity", "free", "ready"].includes(optionId)
+
+/** Opção acrescentada que repete um ataque que o servidor resolve pela maestria (Ágil/Nick, Trespassar). */
+const repeatsMasteryAttack = (item: { label: string; detail?: string; reason: string }) => {
+    const text = `${item.label} ${item.detail ?? ""}`
+    const key = masteryKeyFromName(text)
+    return key === "nick" || key === "cleave" || /\bmaestria\b/i.test(text) || /outra m[aã]o/i.test(text)
+}
+
+export const CATALOG_REFUSAL_PREFIX = "Não confirmada no catálogo do DnDicas"
+const FIXED_OPTION_REFUSAL = "esta opção segue a regra fixa do servidor e não é alterada na preparação"
+const MASTERY_ATTACK_REFUSAL = "os ataques das maestrias (Ágil, Trespassar) são resolvidos pelo servidor"
+
+/**
+ * Confere a resposta da IA contra a lista base, a ficha e as consultas ao catálogo desta execução (DND-49): ids
+ * desconhecidos e valores fora da faixa são descartados; alterações de regra sem fonte confirmada (`source` lido e com o
+ * trecho no texto) são recusadas e aparecem no card com o motivo.
+ */
+export function interpretPrep(raw: unknown, context: Pick<PrepSheetContext, "options" | "chargeIds" | "itemIds"> & { mastery?: MasteryContext }, reads: CatalogReadLog = createCatalogReadLog()): PrepInterpretation {
     const response = combatPrepResponseSchema.parse(raw ?? {})
     const all = [...context.options.action, ...context.options.bonus, ...context.options.reactions]
     const byId = new Map(all.map((option) => [option.id, option]))
-    const sheet = parseList(combatSheetChangeSchema, response.sheetChanges)
+    const sheetParsed = parseList(combatSheetChangeSchema, response.sheetChanges)
     const modify = parseList(combatModifySchema, response.modify)
     const remove = parseList(combatRemoveSchema, response.remove)
     const add = parseList(combatAddSchema, response.add)
-    let dropped = sheet.dropped + modify.dropped + remove.dropped + add.dropped
+    let dropped = sheetParsed.dropped + modify.dropped + remove.dropped + add.dropped
+    let droppedWithoutSource = 0
+    const refusals: CombatPrepChange[] = []
+    const refuse = (change: Omit<CombatPrepChange, "applied" | "refused">, why: string, sourced: boolean) => {
+        dropped += 1
+        if (sourced) droppedWithoutSource += 1
+        refusals.push({ ...change, applied: false, refused: sourced ? `${CATALOG_REFUSAL_PREFIX}: ${why}.` : `Recusada: ${why}.` })
+    }
+    const sourceProblem = (source: CatalogSource | undefined) => checkCatalogSource(source, reads)
+
+    const sheetChanges: CombatSheetChange[] = []
+    const masteries = new Set(context.mastery?.current ?? [])
+    for (const change of sheetParsed.valid) {
+        const label = describeSheetChange(change)
+        if (requiresCatalogSource("sheet", change)) {
+            const problem = sourceProblem(change.source)
+            if (problem) {
+                refuse({ area: "ficha", label, before: "—", after: "proposta pelo Maddox", reason: change.reason }, problem, true)
+                continue
+            }
+        }
+        if (change.type === "weapon-mastery") {
+            const itemKey = context.mastery?.items.get(change.catalogItemId)
+            if (!itemKey || itemKey !== change.mastery) {
+                refuse({ area: "ficha", label, before: "—", after: masteryLabel(change.mastery), reason: change.reason }, "a arma não tem essa maestria no catálogo", true)
+                continue
+            }
+            if (masteries.has(change.catalogItemId)) continue
+            // Limite da classe (decisão do dono, DND-49 D1): coluna da progressão; senão, o número no trecho da característica lida.
+            const limit = masteryLimit(context.mastery?.table, context.mastery?.level ?? 1, `${change.source?.quote ?? ""} ${change.source ? (catalogReadText(reads, change.source.ref) ?? "") : ""}`)
+            if (!limit) {
+                refuse({ area: "ficha", label, before: "—", after: masteryLabel(change.mastery), reason: change.reason }, "limite de maestrias não encontrado no catálogo", true)
+                continue
+            }
+            if (masteries.size >= limit) {
+                refuse({ area: "ficha", label, before: `${masteries.size} de ${limit}`, after: masteryLabel(change.mastery), reason: change.reason }, `a classe permite ${limit} maestria(s) neste nível`, true)
+                continue
+            }
+            masteries.add(change.catalogItemId)
+        }
+        sheetChanges.push(change)
+    }
+
     const overlay = emptyOverlay()
     const optionChanges: CombatPrepChange[] = []
     for (const item of modify.valid) {
         const option = byId.get(item.optionId)
-        if (!option || item.optionId === "free") {
+        if (!option) {
             dropped += 1
             continue
+        }
+        if (isFixedServerOption(item.optionId)) {
+            refuse({ area: "opcao", label: option.label, before: option.detail, after: item.detail ?? option.detail, reason: item.reason }, FIXED_OPTION_REFUSAL, false)
+            continue
+        }
+        if (requiresCatalogSource("modify", item)) {
+            const problem = sourceProblem(item.source)
+            if (problem) {
+                refuse({ area: "opcao", label: option.label, before: option.detail, after: item.detail ?? (item.attack ? attackDetail({ ...item.attack, damageType: item.attack.damageType ?? null, ranged: item.attack.ranged ?? false, light: item.attack.light ?? false }) : "proposta pelo Maddox"), reason: item.reason }, problem, true)
+                continue
+            }
         }
         const patch: CombatOptionPatch = {
             ...(item.label ? { label: item.label } : {}),
@@ -282,8 +429,12 @@ export function interpretPrep(raw: unknown, context: Pick<PrepSheetContext, "opt
     }
     for (const item of remove.valid) {
         const option = byId.get(item.optionId)
-        if (!option || item.optionId === "free") {
+        if (!option) {
             dropped += 1
+            continue
+        }
+        if (isFixedServerOption(item.optionId)) {
+            refuse({ area: "opcao", label: option.label, before: option.detail, after: "removida", reason: item.reason }, FIXED_OPTION_REFUSAL, false)
             continue
         }
         overlay.remove.push({ optionId: item.optionId, reason: item.reason })
@@ -298,6 +449,18 @@ export function interpretPrep(raw: unknown, context: Pick<PrepSheetContext, "opt
         if (item.itemId && !context.itemIds.has(item.itemId)) {
             dropped += 1
             continue
+        }
+        const proposed = `${ECONOMY_TEXT[item.economy]}${item.detail ? ` · ${item.detail}` : ""}`
+        if (repeatsMasteryAttack(item)) {
+            refuse({ area: "opcao", label: item.label, before: "não existia", after: proposed, reason: item.reason }, MASTERY_ATTACK_REFUSAL, false)
+            continue
+        }
+        if (requiresCatalogSource("add", item)) {
+            const problem = sourceProblem(item.source)
+            if (problem) {
+                refuse({ area: "opcao", label: item.label, before: "não existia", after: proposed, reason: item.reason }, problem, true)
+                continue
+            }
         }
         const unresolvable = item.resolution === "attack" ? !item.attack : item.resolution === "save" ? !item.save : item.resolution === "heal" ? !item.heal : item.resolution === "auto" ? !item.attack : false
         const id = `prep:${item.id || randomUUID().slice(0, 8)}`
@@ -321,9 +484,21 @@ export function interpretPrep(raw: unknown, context: Pick<PrepSheetContext, "opt
         optionChanges.push({ area: "opcao", label: item.label, before: "não existia", after: `${ECONOMY_TEXT[item.economy]}${option.detail ? ` · ${option.detail}` : ""}`, reason: item.reason, applied: true })
     }
     const sneak = response.sneakAttack === undefined || response.sneakAttack === null ? null : sneakAttackSchema.safeParse(response.sneakAttack)
+    let rider: PrepInterpretation["rider"]
     if (sneak && !sneak.success) dropped += 1
-    return { sheetChanges: sheet.valid, overlay, links, optionChanges, rider: sneak?.success ? sneak.data : undefined, dropped }
+    else if (sneak?.success) {
+        const problem = sourceProblem(sneak.data.source)
+        if (problem) refuse({ area: "dano-adicional", label: "Ataque furtivo", before: "valor do servidor", after: sneak.data.dice ? riderLabel({ dice: sneak.data.dice }) : "sem ataque furtivo", reason: sneak.data.reason || "Ajuste do ataque furtivo." }, problem, true)
+        else rider = { dice: sneak.data.dice, reason: sneak.data.reason }
+    }
+    if (droppedWithoutSource && reads.refs.length === 0) {
+        refusals.unshift({ area: "aviso", label: "Catálogo", before: "", after: "", reason: reads.failures ? CATALOG_FAILED_NOTICE : CATALOG_NOT_CONSULTED_NOTICE, applied: false })
+    }
+    return { sheetChanges, overlay, links, optionChanges, rider, dropped, refusals, droppedWithoutSource }
 }
+
+export const CATALOG_NOT_CONSULTED_NOTICE = "O Maddox não consultou o catálogo do DnDicas: as correções de regra foram descartadas e vale a lista calculada pelo servidor."
+export const CATALOG_FAILED_NOTICE = "A consulta ao catálogo do DnDicas falhou: as correções que dependiam dela foram descartadas e vale a lista calculada pelo servidor."
 
 /** Junta a preparação existente com as mudanças de um pedido de ajuste aceito (a mais nova vence, pelo id da opção). */
 export function mergeOverlay(base: CombatPrepOverlay, next: CombatPrepOverlay): CombatPrepOverlay {
@@ -360,6 +535,12 @@ function riderOf(serverDice: string | null, rider: PrepInterpretation["rider"]):
     const after = rider.dice ? riderLabel({ dice: rider.dice }) : "sem ataque furtivo"
     const reason = rider.reason || "Ajustado pela ficha."
     return { riders: rider.dice ? [{ key: "sneak-attack", dice: rider.dice, source: "maddox", reason }] : [], change: { area: "dano-adicional", label: "Ataque furtivo", before, after, reason, applied: true } }
+}
+
+/** Card: o aviso do catálogo primeiro, depois o que mudou e, por fim, o que foi recusado (com o motivo). */
+export function orderedChanges(interpretation: Pick<PrepInterpretation, "refusals">, applied: readonly CombatPrepChange[]): CombatPrepChange[] {
+    const notices = interpretation.refusals.filter((change) => change.area === "aviso")
+    return [...notices, ...applied, ...interpretation.refusals.filter((change) => change.area !== "aviso")]
 }
 
 // ── Execução ──────────────────────────────────────────────────────────────────
@@ -400,11 +581,14 @@ async function runCombatPrep(campaignId: Types.ObjectId, prepId: Types.ObjectId,
         const { settings } = await loadMaddoxSettings()
         const status = await maddoxAvailability(settings, campaign.rigor)
         if (!status.available) throw new Error(status.reason ?? 'O "Agente Maddox" não está configurado.')
+        // DND-49 (decisão do dono D3): quem está a 0 PV é conferido pela história antes da revisão da ficha, no mesmo job.
+        await checkDownedCharacter(campaign, claimed, active.state)
         for (let attempt = 0; ; attempt += 1) {
             const context = await loadPrepSheet(active.state, campaignId)
             if (!context) throw new Error("A ficha do personagem não foi encontrada.")
-            const raw = await ai.reviewCombatSheet({ campaign, characterName: claimed.characterName, sheetText: context.sheetText, optionsText: context.optionsText, sneakAttack: context.sneakAttack })
-            const interpretation = interpretPrep(raw, context)
+            const reads = createCatalogReadLog()
+            const raw = await ai.reviewCombatSheet({ campaign, characterName: claimed.characterName, sheetText: context.sheetText, optionsText: context.optionsText, sneakAttack: context.sneakAttack, reads, jobId })
+            const interpretation = interpretPrep(raw, context, reads)
             active = await activeStateOf(campaignId, claimed)
             if (!active) {
                 await discard(prepId, "o combate terminou durante a preparação")
@@ -417,12 +601,19 @@ async function runCombatPrep(campaignId: Types.ObjectId, prepId: Types.ObjectId,
             }
             const written = await applyInterpretation(interpretation, { sheetId: active.state.sheetId!, campaign, characterName: claimed.characterName, origin: "combat-prep" })
             const rider = riderOf(context.sneakAttack, interpretation.rider)
-            const changes = [...written.changes, ...interpretation.optionChanges, ...(rider.change ? [rider.change] : [])]
+            const changes = orderedChanges(interpretation, [...written.changes, ...interpretation.optionChanges, ...(rider.change ? [rider.change] : [])])
             const overlay = { ...interpretation.overlay, suppress: written.suppress }
-            const saved = await MaddoxCombatPrepModel.findOneAndUpdate({ _id: prepId, status: "running", jobId }, { $set: { status: "ready", overlay, riders: rider.riders, changes, finishedAt: new Date(), jobId: null, error: null } }, { returnDocument: "after" }).lean<PrepDoc>()
+            const saved = await MaddoxCombatPrepModel.findOneAndUpdate(
+                { _id: prepId, status: "running", jobId },
+                { $set: { status: "ready", overlay, riders: rider.riders, changes, catalogRefs: reads.refs, droppedWithoutSource: interpretation.droppedWithoutSource, finishedAt: new Date(), jobId: null, error: null } },
+                { returnDocument: "after" },
+            ).lean<PrepDoc>()
             if (saved) await postPrepCard(saved)
-            if (interpretation.dropped) log.warn({ campaignId: String(campaignId), prepId: String(prepId), dropped: interpretation.dropped }, "[maddox] itens da preparação descartados na validação")
-            log.info({ campaignId: String(campaignId), prepId: String(prepId), character: claimed.characterName, changes: changes.length }, "[maddox] mesa do personagem preparada")
+            if (interpretation.dropped) log.warn({ campaignId: String(campaignId), prepId: String(prepId), dropped: interpretation.dropped, droppedWithoutSource: interpretation.droppedWithoutSource }, "[maddox] itens da preparação descartados na validação")
+            log.info(
+                { campaignId: String(campaignId), prepId: String(prepId), character: claimed.characterName, changes: changes.length, refs: reads.refs, refsCount: reads.refs.length, catalogFailures: reads.failures, droppedWithoutSource: interpretation.droppedWithoutSource },
+                "[maddox] mesa do personagem preparada",
+            )
             break
         }
     } catch (error) {
@@ -430,6 +621,53 @@ async function runCombatPrep(campaignId: Types.ObjectId, prepId: Types.ObjectId,
         await MaddoxCombatPrepModel.updateOne({ _id: prepId, status: "running" }, { $set: { status: "failed", error: errorText(error), finishedAt: new Date(), jobId: null } })
     }
     await afterPrepSettled(campaignId, claimed)
+}
+
+const downedDecisionSchema = z.object({
+    decisao: z.enum(["manter", "aplicar"]),
+    operacao: z.enum(MADDOX_HIT_POINT_OPERATIONS).optional(),
+    dados: z.string().trim().max(40).optional(),
+    valor: z.number().int().min(0).max(999).optional(),
+    dadosDeVida: z.number().int().min(1).max(30).optional(),
+    motivo: z.string().trim().min(1).max(600),
+})
+
+/**
+ * DND-49 (E3): ao abrir o combate tático, o personagem que está a 0 PV na ficha (e não está morto) é conferido pelo
+ * Maddox contra a condição na história e a narração recente: ou ele aplica a recuperação pela regra (mesmo serviço da
+ * ferramenta de PV, com o motivo e a linha na mesa), ou confirma que segue caído. Sem ninguém a 0 PV, não há IA. Falha ou
+ * fim do prazo: o combate segue sem mudança (só log). Uma vez por preparação.
+ */
+async function checkDownedCharacter(campaign: IMaddoxCampaign, prep: PrepDoc, state: TacticalCharacterState): Promise<void> {
+    if (state.dead || !state.sheetId || prep.downedCheckedAt) return
+    try {
+        const { CharacterSheet } = await import("@/features/character-sheets/models/character-sheet")
+        const sheet = await CharacterSheet.findById(state.sheetId).select("hpCurrent hpMax").lean<{ hpCurrent?: number | null; hpMax?: number | null }>()
+        if (!sheet?.hpMax || (sheet.hpCurrent ?? sheet.hpMax) > 0) return
+        const { MaddoxCharacterModel } = await import("../models")
+        const character = await MaddoxCharacterModel.findById(prep.characterId).select("name currentState status").lean<{ _id: Types.ObjectId; name: string; currentState?: string; status: string }>()
+        if (!character || character.status === "dead") return
+        const claimed = await MaddoxCombatPrepModel.updateOne({ _id: prep._id, downedCheckedAt: null }, { $set: { downedCheckedAt: new Date() } })
+        if (claimed.modifiedCount === 0) return
+        const recent = (await MaddoxCampaignMessageModel.find({ campaignId: campaign._id, kind: { $in: ["narration", "declaration", "hit-points"] } }).sort({ _id: -1 }).limit(8).select("kind characterName content").lean<{ kind: string; characterName?: string | null; content: string }[]>())
+            .reverse()
+            .map((message) => (message.kind === "narration" ? `Maddox: ${message.content}` : `${message.characterName ?? "Personagem"}: ${message.content}`))
+            .join("\n\n")
+        const { reviewDownedCharacter } = await import("./combat-prep-ai")
+        const decision = downedDecisionSchema.parse(await reviewDownedCharacter({ campaign, characterName: character.name, currentState: character.currentState ?? "", recent }))
+        const { changeCharacterHitPoints, postStillDown } = await import("./hit-points")
+        if (decision.decisao === "aplicar" && decision.operacao) {
+            const result = await changeCharacterHitPoints({ campaignId: campaign._id, characterName: character.name, operation: decision.operacao, dice: decision.dados ?? null, value: decision.valor ?? null, hitDice: decision.dadosDeVida ?? null, reason: decision.motivo, turnNumber: prep.turnNumber, origin: "combat-open" })
+            log.info({ campaignId: String(campaign._id), character: character.name, before: result.before, after: result.after }, "[maddox] PV corrigidos pela história antes da iniciativa")
+        } else {
+            await postStillDown(campaign._id, prep.turnNumber, { id: character._id, name: character.name }, decision.motivo)
+            log.info({ campaignId: String(campaign._id), character: character.name }, "[maddox] personagem segue caído ao abrir o combate")
+        }
+        const { publishGameChanged } = await import("./game")
+        await publishGameChanged(campaign._id)
+    } catch (error) {
+        log.warn({ err: errorText(error), campaignId: String(campaign._id), character: prep.characterName }, "[maddox] checagem de quem está a 0 PV falhou; o combate segue sem mudança")
+    }
 }
 
 /** Card privado "Sua mesa está pronta" para o dono do personagem. */

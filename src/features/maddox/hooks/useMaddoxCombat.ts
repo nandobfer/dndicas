@@ -44,6 +44,10 @@ export const useSubmitCombatAction = (campaignId: string) =>
 export const useCancelCombatAction = (campaignId: string) =>
     useCombatMutation<string, MaddoxGameStateDto>(campaignId, async (actionId) => unwrapApi((await api.delete<ApiResponse<MaddoxGameStateDto>>(`${combatPath(campaignId)}/actions/${actionId}`)).data), "Não foi possível cancelar a ação")
 
+/** DND-49: depois do acerto, soma (ou não) o ataque furtivo ao dano. */
+export const useChooseSneakAttack = (campaignId: string) =>
+    useCombatMutation<{ id: string; add: boolean }, MaddoxGameStateDto>(campaignId, async ({ id, add }) => unwrapApi((await api.post<ApiResponse<MaddoxGameStateDto>>(`${combatPath(campaignId)}/actions/${id}/sneak`, { add })).data), "Não foi possível escolher o ataque furtivo")
+
 export const useEndCombatTurn = (campaignId: string) =>
     useCombatMutation<MaddoxEndCombatTurnInput, MaddoxGameStateDto>(campaignId, async (input) => unwrapApi((await api.post<ApiResponse<MaddoxGameStateDto>>(`${combatPath(campaignId)}/end-turn`, input)).data), "Não foi possível encerrar a vez")
 

@@ -10,7 +10,7 @@ import { DiceRollerPanel } from "@/features/dice-roller/components/dice-roller-p
 import { CRITICAL_STAGE_CONFIG, CriticalHighlight, criticalBoxShadow } from "@/features/dice-roller/components/critical-highlight"
 import { getDiceCriticalState } from "@/features/dice-roller/critical-state"
 import type { DiceRollPreset, DiceRollResponse } from "@/features/dice-roller/types"
-import { parseDiceExpression } from "../../../combat-rules"
+import { modeReasonText, parseDiceExpression } from "../../../combat-rules"
 import type { CombatActionStep } from "../../../combat-types"
 import { MADDOX_CHECK_DIE_HIDE_MS } from "../../../constants"
 import type { MaddoxCombatPreparationDto, MaddoxGameCombatEventDto, MaddoxGameMessageDto } from "../../../game-types"
@@ -26,7 +26,32 @@ import { useHeldRoll, type HeldRoll } from "./use-held-roll"
  * de reação (só quem reage vê as opções e a contagem) e a ordem de iniciativa.
  */
 
-const STEP_LABELS: Record<CombatActionStep["kind"], string> = { attack: "Ataque", damage: "Dano", heal: "Cura", save: "Salvaguarda", check: "Teste" }
+const STEP_LABELS: Record<CombatActionStep["kind"], string> = { attack: "Ataque", damage: "Dano", heal: "Cura", save: "Salvaguarda", check: "Teste", "sneak-choice": "Ataque furtivo" }
+
+/** DND-49: "Vantagem: atacante invisível" (ou o motivo que for), para o rolador e o resultado do ataque. */
+function ModeReasons({ step }: { step: Pick<CombatActionStep, "kind" | "mode" | "modeReasons"> }) {
+    const text = step.kind === "attack" ? modeReasonText(step.mode, step.modeReasons ?? []) : null
+    if (!text) return null
+    return (
+        <span data-testid="combat-step-mode">
+            <RarityChip color={step.mode === "disadvantage" ? rarityColors.artifact : step.mode === "advantage" ? rarityColors.uncommon : rarityColors.common} className="text-[11px]">
+                {text}
+            </RarityChip>
+        </span>
+    )
+}
+
+/** DND-49: os dois d20 da vantagem/desvantagem, com o mantido em destaque. */
+function KeptDice({ roll }: { roll: DiceRollResponse | null }) {
+    const kept = roll?.selectedD20?.kept
+    const discarded = roll?.selectedD20?.discarded
+    if (kept === undefined || kept === null || discarded === undefined || discarded === null) return null
+    return (
+        <span className="text-[11px] text-white/60" data-testid="combat-step-d20s">
+            d20: <span className="font-bold text-white">{kept}</span> · <span className="line-through">{discarded}</span>
+        </span>
+    )
+}
 
 const presetOf = (dice: string, label: string, mode: DiceRollPreset["mode"] = "normal"): DiceRollPreset => {
     const parsed = parseDiceExpression(dice) ?? { terms: [{ dice: "d20" as const, quantity: 1 }], modifier: 0 }
@@ -128,14 +153,17 @@ export function StepResult({ step }: { step: CombatActionStep }) {
         <li className="flex flex-wrap items-center gap-2 text-xs text-white/80" data-testid="combat-step" data-kind={step.kind} data-status={step.status}>
             <span className="font-semibold text-white/60">{STEP_LABELS[step.kind]}</span>
             {step.targetName && <span className="text-white/70">→ {step.targetName}</span>}
-            {step.status === "pending" && <span className="text-white/50">{step.roller === "player" ? "aguardando a rolagem" : "aguardando"}</span>}
+            {step.status === "pending" && <span className="text-white/50">{step.kind === "sneak-choice" ? "aguardando a escolha" : step.roller === "player" ? "aguardando a rolagem" : "aguardando"}</span>}
+            {step.kind === "sneak-choice" && step.status === "done" && <span data-testid="combat-step-sneak">{step.success ? `somado (+${step.dice})` : "não somado"}</span>}
             {step.status === "skipped" && <span className="text-white/40">não se aplica</span>}
             {step.total !== null && step.status === "done" && (
                 <span className="text-base font-black text-white" data-testid="combat-step-total">
                     {step.total}
                 </span>
             )}
+            {step.kind === "attack" && step.status === "done" && <KeptDice roll={step.roll} />}
             {critical && <span className="text-[11px]" style={{ color: CRITICAL_STAGE_CONFIG[critical].color }}>{critical === "critical-success" ? "20 natural" : "1 natural"}</span>}
+            {step.kind === "attack" && step.status !== "skipped" && <ModeReasons step={step} />}
             {verdict && (
                 <span data-testid="combat-step-verdict">
                     <RarityChip color={verdict.color} className="text-[11px] font-semibold">
@@ -161,12 +189,18 @@ interface ActionCardProps {
     stepReplays?: ReadonlyMap<number, DiceRollResponse>
     onRoll: (actionId: string) => Promise<DiceRollResponse>
     onCancel: (actionId: string) => void
+    /** DND-49: resposta ao "Somar ataque furtivo?" depois do acerto. */
+    onSneakChoice?: (actionId: string, add: boolean) => void
+    sneakChoosing?: boolean
 }
 
-export function CombatActionCard({ message, mine, replay, stepReplays, onRoll, onCancel }: ActionCardProps) {
+export function CombatActionCard({ message, mine, replay, stepReplays, onRoll, onCancel, onSneakChoice, sneakChoosing = false }: ActionCardProps) {
     const action = message.combatAction!
     const accent = action.actorKind === "character" ? ECONOMY_COLORS[action.economy] : COMBAT_COLOR
-    const next = action.steps.find((step) => step.status === "pending" && step.roller === "player")
+    const pending = action.steps.find((step) => step.status === "pending" && step.roller === "player")
+    // A escolha do furtivo vem antes do dano: enquanto ela não chega, não há dado para rolar.
+    const sneakChoice = pending?.kind === "sneak-choice" ? pending : undefined
+    const next = sneakChoice ? undefined : pending
     const held = useHeldRoll({ rolls: action.steps.map((step) => step.roll), pendingIndex: next ? action.steps.indexOf(next) : -1, replay: mine ? null : replay })
     const rollerStep = held.index >= 0 ? action.steps[held.index] : undefined
     const critical = action.steps.some((step) => step.kind === "attack" && step.critical)
@@ -199,6 +233,17 @@ export function CombatActionCard({ message, mine, replay, stepReplays, onRoll, o
                         <InlineRoller key={`${message.id}:${held.index}`} rollId={message.id} dice={rollerStep.dice} label={`${action.label} · ${STEP_LABELS[rollerStep.kind]}`} mode={rollerStep.mode} mine={mine} replay={held.replay} onRoll={onRoll} buttonLabel={`Rolar ${STEP_LABELS[rollerStep.kind].toLowerCase()}`} held={held} stepIndex={held.index} />
                     )}
                 </div>
+                {sneakChoice && mine && !cancelled && onSneakChoice && !held.holding && (
+                    <div className="relative z-10 flex flex-wrap items-center justify-end gap-2" data-testid="combat-sneak-choice">
+                        <span className="text-xs text-white/70">O ataque acertou: somar o ataque furtivo ao dano?</span>
+                        <Button size="sm" disabled={sneakChoosing} onClick={() => onSneakChoice(message.id, true)} data-testid="combat-sneak-add">
+                            {sneakChoosing ? <Loader2 className="animate-spin" aria-hidden /> : <Swords aria-hidden />} Somar ataque furtivo (+{sneakChoice.dice})
+                        </Button>
+                        <Button size="sm" variant="ghost" disabled={sneakChoosing} onClick={() => onSneakChoice(message.id, false)} data-testid="combat-sneak-skip">
+                            Não somar
+                        </Button>
+                    </div>
+                )}
                 {mine && action.cancellable && (
                     <div className="relative z-10 flex justify-end">
                         <Button size="sm" variant="ghost" onClick={() => onCancel(message.id)} data-testid="combat-action-cancel">
@@ -420,18 +465,29 @@ export function CombatPrepCard({ message }: { message: MaddoxGameMessageDto }) {
                     </p>
                 ) : (
                     <ul className="space-y-1.5" data-testid="combat-prep-changes">
-                        {changes.map((change, index) => (
-                            <li key={`${change.label}-${index}`} className="break-words rounded-lg border border-white/10 px-2.5 py-1.5 text-xs" data-applied={change.applied} data-testid="combat-prep-change">
-                                <p className="flex flex-wrap items-center gap-1.5 text-white/85">
-                                    <span className="font-semibold text-white">{change.label}</span>
-                                    <span className="text-white/50 line-through">{change.before}</span>
-                                    <ArrowRight className="h-3 w-3 text-white/40" aria-hidden />
-                                    <span>{change.after}</span>
-                                    {!change.applied && <RarityChip color={rarityColors.artifact}>não aplicada: a ficha mudou</RarityChip>}
-                                </p>
-                                <p className="mt-0.5 whitespace-pre-wrap break-words text-white/60">{change.reason}</p>
-                            </li>
-                        ))}
+                        {changes.map((change, index) =>
+                            change.area === "aviso" ? (
+                                <li key={`aviso-${index}`} className="break-words rounded-lg border px-2.5 py-1.5 text-xs text-white/80" style={{ borderColor: `${rarityColors.artifact}55` }} data-applied={false} data-testid="combat-prep-notice">
+                                    {change.reason}
+                                </li>
+                            ) : (
+                                <li key={`${change.label}-${index}`} className="break-words rounded-lg border border-white/10 px-2.5 py-1.5 text-xs" data-applied={change.applied} data-refused={Boolean(change.refused)} data-testid="combat-prep-change">
+                                    <p className="flex flex-wrap items-center gap-1.5 text-white/85">
+                                        <span className="font-semibold text-white">{change.label}</span>
+                                        <span className="text-white/50 line-through">{change.before}</span>
+                                        <ArrowRight className="h-3 w-3 text-white/40" aria-hidden />
+                                        <span>{change.after}</span>
+                                        {!change.applied && <RarityChip color={rarityColors.artifact}>{change.refused ? "recusada" : "não aplicada: a ficha mudou"}</RarityChip>}
+                                    </p>
+                                    <p className="mt-0.5 whitespace-pre-wrap break-words text-white/60">{change.reason}</p>
+                                    {change.refused && (
+                                        <p className="mt-0.5 whitespace-pre-wrap break-words font-semibold" style={{ color: rarityColors.artifact }} data-testid="combat-prep-refused">
+                                            {change.refused}
+                                        </p>
+                                    )}
+                                </li>
+                            ),
+                        )}
                     </ul>
                 )}
             </div>

@@ -122,6 +122,8 @@ export interface CharacterSheet {
     size: string
     armorTraining: ArmorTraining
     weaponProficiencies: string
+    /** DND-49: maestrias de arma (gravadas pelo Maddox; sem edição no editor da ficha). */
+    weaponMasteries?: { catalogItemId: string; mastery: string }[]
     toolProficiencies: string
     computedArmorClass?: number
     createdAt: string

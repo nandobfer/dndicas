@@ -6,6 +6,16 @@ import { freshEconomy } from "@/features/maddox/combat-rules"
 import { MADDOX_COMBAT_PREP_TEXT_CEILING } from "@/features/maddox/constants"
 import { emptyOverlay, type CombatPrepOverlay } from "@/features/maddox/combat-types"
 import { interpretPrep, mergeOverlay } from "@/features/maddox/server/combat-prep"
+import { createCatalogReadLog, recordCatalogRead } from "@/features/maddox/server/catalog-reads"
+
+/** DND-49: entidades "lidas" por ferramenta na execução, que sustentam as fontes das alterações de regra. */
+const catalogReads = () => {
+    const reads = createCatalogReadLog()
+    recordCatalogRead(reads, "Regra", "acuidade", { name: "Propriedade: Acuidade", description: "Ao atacar com uma arma com Acuidade, use o modificador de Força ou de Destreza, à sua escolha." })
+    recordCatalogRead(reads, "Classe", "ladino", { name: "Ladino", description: "Ataque Furtivo 1d6 no 1º nível. Destreza 17." })
+    return reads
+}
+const ACUIDADE = { ref: "Regra:acuidade", quote: "use o modificador de Força ou de Destreza" }
 
 /** DND-41: a parte pura da preparação da mesa de combate — lista do turno, ataque furtivo e validação da resposta da IA. */
 
@@ -102,13 +112,13 @@ describe("DND-41 — validação da resposta da IA", () => {
         const result = interpretPrep(
             {
                 sheetChanges: [
-                    { type: "ability", attribute: "dexterity", value: 17, reason: "ok" },
+                    { type: "ability", attribute: "dexterity", value: 17, reason: "ok", source: { ref: "Classe:ladino", quote: "nível. Destreza 17" } },
                     { type: "ability", attribute: "dexterity", value: 40, reason: "fora da faixa" },
                     { type: "attack-upsert", name: "Adaga", attackBonus: 50, damage: { quantity: 10, faces: 10 }, reason: "burla" },
                     { type: "apagar-tudo", reason: "não existe" },
                 ],
                 modify: [
-                    { optionId: "weapon:adaga", attack: { bonus: 5, damage: "1d4+3", damageType: "perfurante" }, reason: "Acuidade." },
+                    { optionId: "weapon:adaga", attack: { bonus: 5, damage: "1d4+3", damageType: "perfurante" }, reason: "Acuidade.", source: ACUIDADE },
                     { optionId: "weapon:fantasma", attack: { bonus: 5, damage: "1d4+3" }, reason: "x" },
                     { optionId: "weapon:maca", attack: { bonus: 5, damage: "dez dados" }, reason: "x" },
                 ],
@@ -117,9 +127,10 @@ describe("DND-41 — validação da resposta da IA", () => {
                     { id: "Ação Ardilosa!", category: "abilities", economy: "bonus", label: "Ação Ardilosa", resolution: "utility", reason: "Ladino 2." },
                     { id: "sem-carga", category: "abilities", economy: "bonus", label: "X", resolution: "utility", chargeId: "nao-existe", reason: "x" },
                 ],
-                sneakAttack: { dice: "1d6", reason: "Ladino 1." },
+                sneakAttack: { dice: "1d6", reason: "Ladino 1.", source: { ref: "Classe:ladino", quote: "Ataque Furtivo 1d6" } },
             },
             context(),
+            catalogReads(),
         )
         expect(result.sheetChanges.map((change) => change.type)).toEqual(["ability"])
         expect(result.overlay.modify.map((item) => item.optionId)).toEqual(["weapon:adaga"])
@@ -148,7 +159,11 @@ describe("DND-41 — validação da resposta da IA", () => {
 
     it("correção parcial do ataque herda Leve, à distância, tipo de dano e Acuidade da opção (o servidor segue liberando a ação bônus da arma Leve)", () => {
         const options = buildCombatOptions(input({ ignoreResources: true }))
-        const result = interpretPrep({ modify: [{ optionId: "weapon:adaga", attack: { bonus: 5, damage: "1d4+3" }, reason: "Acuidade." }, { optionId: "weapon:arco", attack: { bonus: 5, damage: "1d6+3" }, reason: "Destreza." }] }, { options, chargeIds: new Set(), itemIds: new Set() })
+        const result = interpretPrep(
+            { modify: [{ optionId: "weapon:adaga", attack: { bonus: 5, damage: "1d4+3" }, reason: "Acuidade.", source: ACUIDADE }, { optionId: "weapon:arco", attack: { bonus: 5, damage: "1d6+3" }, reason: "Destreza.", source: ACUIDADE }] },
+            { options, chargeIds: new Set(), itemIds: new Set() },
+            catalogReads(),
+        )
         expect(result.overlay.modify.map((item) => item.patch.attack)).toEqual([
             { bonus: 5, damage: "1d4+3", damageType: "perfurante", ranged: false, light: true, finesse: true },
             { bonus: 5, damage: "1d6+3", damageType: "perfurante", ranged: true, light: false, finesse: false },

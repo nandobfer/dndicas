@@ -3,6 +3,7 @@ import type { DiceRollResponse } from "@/features/dice-roller/types"
 import type { MaddoxReactionTrigger } from "./constants"
 import type { CombatCondition, CombatEconomy, CombatFlags, RollMode } from "./combat-rules"
 import type { CombatEconomySlot, CombatOption, CombatOptionCategory } from "./combat-options"
+import type { MaddoxMasteryKey } from "./weapon-mastery"
 
 /**
  * Tipos do combate tático (Maddox 7), sem Mongoose: o estado gravado em `maddox_combats` (ordem, estatísticas dos
@@ -140,7 +141,8 @@ export interface TacticalBlock {
 
 /** Um passo de uma ação (ataque, dano, cura, salvaguarda de um alvo, teste). */
 export interface CombatActionStep {
-    kind: "attack" | "damage" | "heal" | "save" | "check"
+    /** `sneak-choice` (DND-49): depois do acerto, o jogador decide se soma o ataque furtivo (`success` = somou). */
+    kind: "attack" | "damage" | "heal" | "save" | "check" | "sneak-choice"
     targetKey: string | null
     targetName: string | null
     status: "pending" | "done" | "skipped"
@@ -162,6 +164,8 @@ export interface CombatActionStep {
     note: string | null
     /** Perícia do teste (`check`). */
     skill: string | null
+    /** DND-49: motivos da vantagem/desvantagem do ataque ("atacante invisível"); os dois juntos = rolagem normal. */
+    modeReasons?: string[]
 }
 
 export interface IMaddoxCombatAction {
@@ -189,6 +193,12 @@ export interface IMaddoxCombatAction {
     ranged?: boolean
     /** DND-41: ataque furtivo somado ao dano (os dados extras já estão na expressão do passo de dano). */
     sneakAttack?: { dice: string } | null
+    /** DND-49: a opção pode somar o ataque furtivo (Acuidade ou à distância): a escolha vem depois do acerto. */
+    sneakRider?: { dice: string } | null
+    /** DND-49: maestria da arma dominada (efeito depois do acerto ou do erro) e o modificador de atributo usado. */
+    mastery?: { key: MaddoxMasteryKey; modifier: number; proficiency: number } | null
+    /** DND-49: efeitos de maestria registrados nesta ação (o Maddox narra). */
+    masteryNotes?: string[]
     /** Gravados no card: pode cancelar; passo reivindicado por uma rolagem em andamento (uma chamada vence). */
     cancellable?: boolean
     rollingStep?: number | null
@@ -288,13 +298,16 @@ export interface CombatPrepRider {
 
 /** Uma mudança para o card "Sua mesa está pronta": o que era, o que ficou e o motivo. */
 export interface CombatPrepChange {
-    area: "ficha" | "opcao" | "dano-adicional"
+    /** `aviso` (DND-49): linha só com o motivo (ex.: o Maddox não consultou o catálogo). */
+    area: "ficha" | "opcao" | "dano-adicional" | "aviso"
     label: string
     before: string
     after: string
     reason: string
     /** `false` = não aplicada (a ficha mudou ou o valor não passou na validação). */
     applied: boolean
+    /** DND-49: recusada por não estar confirmada no catálogo do DnDicas (o motivo da recusa, para o jogador). */
+    refused?: string | null
 }
 
 export interface CombatPrepAdjustment {
@@ -310,6 +323,9 @@ export interface CombatPrepAdjustment {
     changes: CombatPrepChange[]
     requestedAt: Date
     decidedAt: Date | null
+    /** DND-49: entidades do catálogo lidas ao examinar o pedido e alterações descartadas sem fonte. */
+    catalogRefs?: string[]
+    droppedWithoutSource?: number
 }
 
 export const emptyOverlay = (): CombatPrepOverlay => ({ modify: [], remove: [], add: [], suppress: [] })

@@ -131,12 +131,28 @@ export async function runCatalogTool(tool: MaddoxCatalogTool, rawInput: unknown)
     }
 }
 
-/** Ferramentas de catálogo no formato da AI SDK (a SDK `ai` entra sob demanda). */
-export async function buildCatalogAiTools(): Promise<ToolSet> {
+/**
+ * Ferramentas de catálogo no formato da AI SDK (a SDK `ai` entra sob demanda). `hooks` (DND-49): a preparação do combate
+ * registra cada resultado (`onResult`) e cada falha (`onError`) para conferir as fontes das alterações de regra.
+ */
+export async function buildCatalogAiTools(hooks: { onResult?: (tool: string, output: unknown) => void; onError?: (tool: string) => void } = {}): Promise<ToolSet> {
     const { dynamicTool } = await import("ai")
     const tools: ToolSet = {}
     for (const def of MADDOX_CATALOG_TOOLS) {
-        tools[def.name] = dynamicTool({ description: def.description, inputSchema: def.input, execute: async (input: unknown) => runCatalogTool(def, input) })
+        tools[def.name] = dynamicTool({
+            description: def.description,
+            inputSchema: def.input,
+            execute: async (input: unknown) => {
+                try {
+                    const output = await runCatalogTool(def, input)
+                    hooks.onResult?.(def.name, output)
+                    return output
+                } catch (error) {
+                    hooks.onError?.(def.name)
+                    throw error
+                }
+            },
+        })
     }
     return tools
 }

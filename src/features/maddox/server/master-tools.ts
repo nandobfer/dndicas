@@ -43,6 +43,7 @@ import {
     MADDOX_OPEX_NPC_CONSULTS_PER_NARRATION,
 } from "../constants"
 import { normalizeCatalogName } from "../catalog-markup"
+import { MADDOX_HIT_POINT_OPERATIONS } from "../hit-points-ops"
 import { MaddoxCampaignMemberModel, MaddoxCampaignModel, MaddoxCharacterModel, MaddoxNpcModel, type IMaddoxCampaign, type IMaddoxCharacter, type IMaddoxNpc } from "../models"
 import { MADDOX_ABILITIES, MADDOX_ABILITY_LABELS, MADDOX_SKILLS, checkAbility, checkTitle } from "../check-modifier"
 import { addDraftCheck, addDraftCombat, addDraftNpcPortrait, addDraftOpexNpcFailure, deleteJobOpexNpcConsult, jobOpexNpcConsult, linkJobOpexNpcConsult, jobOpexNpcConsultCount, setJobOpexNpcConsult, setDraftActionOptions, jobDraftChecks, jobDraftCombat, jobDraftSceneImage, jobWorkspace, maddoxJobMeta, setDraftSceneImage, type MaddoxDraftCombatReward } from "./game-live"
@@ -386,6 +387,32 @@ export const MADDOX_MASTER_TOOLS: readonly MaddoxMasterTool[] = [
             const fit = fitter()
             await MaddoxCharacterModel.updateOne({ _id: target._id }, { $set: { currentState: fit.fit("currentState", input.currentState), currentStatePublic: true } })
             return { saved: true, characterName: target.name, ...fit.notice() }
+        },
+    }),
+    define({
+        name: "update_character_hit_points",
+        description: [
+            "Muda os PV de um personagem jogador NA FICHA fora do combate tático (graus com ficha): curar (`dados` que o servidor rola, ou `valor` fixo), definir o PV, estabilizar quem está a 0 PV, acordar o estabilizado com 1 PV, descanso curto (gasta `dadosDeVida`) e descanso longo (PV máximos e testes contra a morte zerados).",
+            "Chame ANTES de narrar um personagem a 0 PV acordando, agindo ou se recuperando: sem isso, ele continua a 0 PV na ficha. O `motivo` é obrigatório e aparece na mesa (\"PV de X: 0 → 1 (motivo)\"). Durante o combate tático, use `apply_effect`.",
+        ].join(" "),
+        readOnly: false,
+        input: z.object({
+            personagem: z.string().min(1).describe("Nome do personagem jogador"),
+            operacao: z.enum(MADDOX_HIT_POINT_OPERATIONS).describe("curar | definir | estabilizar | acordar | descanso-curto | descanso-longo"),
+            dados: z.string().max(40).optional().describe("curar: dados de cura que o servidor rola (ex.: 2d4+2)"),
+            valor: z.number().int().min(0).max(999).optional().describe("curar: cura fixa; definir: o novo PV"),
+            dadosDeVida: z.number().int().min(1).max(30).optional().describe("descanso-curto: quantos dados de vida gasta"),
+            motivo: z.string().min(1).describe("Por que os PV mudam, curto (os jogadores leem)"),
+        }),
+        async execute(context, input) {
+            const { changeCharacterHitPoints, HitPointsError } = await import("./hit-points")
+            try {
+                const result = await changeCharacterHitPoints({ campaignId: context.campaignId, characterName: input.personagem, operation: input.operacao, dice: input.dados ?? null, value: input.valor ?? null, hitDice: input.dadosDeVida ?? null, reason: clip(input.motivo, MADDOX_TOOL_NAME_MAX * 2), turnNumber: context.turnNumber, origin: "narrator" })
+                return { saved: true, personagem: result.characterName, pv: `${result.after}/${result.hpMax}`, antes: result.before }
+            } catch (error) {
+                if (error instanceof HitPointsError) throw new MaddoxToolError(error.message)
+                throw error
+            }
         },
     }),
     define({
