@@ -4,7 +4,7 @@ import { detectSneakAttack } from "@/features/maddox/combat-prep"
 import { attackMode, freshEconomy, modeReasonText } from "@/features/maddox/combat-rules"
 import { applyHitPointsChange, availableHitDice, hitPointsLine, parseHitDice, type SheetHitPoints } from "@/features/maddox/hit-points-ops"
 import { isWeaponMasteryFeature, masteryKeyFromName, masteryLimit } from "@/features/maddox/weapon-mastery"
-import { CATALOG_SOURCE_MISSING, CATALOG_SOURCE_NOT_READ, CATALOG_SOURCE_QUOTE, catalogRefKey, checkCatalogSource, createCatalogReadLog, recordCatalogRead, recordCatalogToolResult } from "@/features/maddox/server/catalog-reads"
+import { CATALOG_SOURCE_MISSING, CATALOG_SOURCE_NOT_READ, CATALOG_SOURCE_QUOTE, CATALOG_SOURCE_SHORT, catalogRefKey, checkCatalogSource, createCatalogReadLog, recordCatalogRead, recordCatalogToolResult } from "@/features/maddox/server/catalog-reads"
 import { CATALOG_NOT_CONSULTED_NOTICE, interpretPrep, orderedChanges } from "@/features/maddox/server/combat-prep"
 
 /** DND-49 — a parte pura: fontes do catálogo, validação da preparação, maestrias e PV fora do combate. */
@@ -36,6 +36,34 @@ describe("DND-49 — registro das consultas ao catálogo", () => {
         expect(checkCatalogSource(undefined, log)).toBe(CATALOG_SOURCE_MISSING)
         expect(checkCatalogSource({ ref: "Regra:outra", quote: "Leve" }, log)).toBe(CATALOG_SOURCE_NOT_READ)
         expect(checkCatalogSource({ ref: "Regra:699fb13d", quote: "como Ação bônus extra" }, log)).toBe(CATALOG_SOURCE_QUOTE)
+    })
+
+    it("F4: trecho curto demais (menos de 3 palavras e 15 caracteres) não confirma a regra, mesmo estando no texto", () => {
+        const log = createCatalogReadLog()
+        recordCatalogRead(log, "Classe", "ladino", { name: "Ladino", description: "Ataque Furtivo: 1d6 de dano adicional uma vez por turno." })
+        expect(checkCatalogSource({ ref: "Classe:ladino", quote: "d6" }, log)).toBe(CATALOG_SOURCE_SHORT)
+        expect(checkCatalogSource({ ref: "Classe:ladino", quote: "dano" }, log)).toBe(CATALOG_SOURCE_SHORT)
+        expect(checkCatalogSource({ ref: "Classe:ladino", quote: "1d6 de dano adicional" }, log)).toBeNull()
+        const result = interpretPrep({ sheetChanges: [{ type: "attack-upsert", name: "Adaga", attackBonus: 9, damage: { quantity: 2, faces: 6 }, reason: "x", source: { ref: "Item:adaga", quote: "Leve" } }] }, context(), reads())
+        expect(result.sheetChanges).toEqual([])
+        expect(result.refusals[0]!.refused).toBe("Não confirmada no catálogo do DnDicas: o trecho citado é curto demais para confirmar a regra.")
+    })
+
+    it("F3: característica, talento e troca de círculo de magia gravados pelo Maddox exigem fonte; marcar magia preparada não", () => {
+        const result = interpretPrep(
+            {
+                sheetChanges: [
+                    { type: "trait-upsert", name: "Golpe Sombrio", description: "+2d6 de dano necrótico em acertos furtivos", reason: "Inventado." },
+                    { type: "feat-upsert", name: "Talento X", description: "+5 no ataque", reason: "Inventado." },
+                    { type: "spell-update", spellId: "s1", circle: 3, reason: "Inventado." },
+                    { type: "spell-update", spellId: "s1", prepared: true, reason: "Preparada hoje." },
+                ],
+            },
+            context(),
+            createCatalogReadLog(),
+        )
+        expect(result.sheetChanges).toEqual([expect.objectContaining({ type: "spell-update", prepared: true })])
+        expect(result.droppedWithoutSource).toBe(3)
     })
 
     it("o id da subclasse com dois-pontos vira uma chave só", () => {
@@ -251,7 +279,8 @@ describe("DND-49 — PV fora do combate", () => {
         expect(parseHitDice("3d8")).toEqual({ count: 3, die: "d8" })
         expect(availableHitDice({ hitDiceTotal: "3d8", hitDiceUsed: 1 })).toBe(2)
         expect(applyHitPointsChange(zero, { op: "descanso-curto", healed: 7, spent: 1 }).next).toMatchObject({ hp: 7, hitDiceUsed: 1 })
-        expect(applyHitPointsChange({ ...zero, hitDiceUsed: 2 }, { op: "descanso-longo" }).next).toMatchObject({ hp: 10, tempHp: 0, deathSuccess: 0, deathFailure: 0, hitDiceUsed: 0 })
+        // F2: o descanso longo não inventa a recuperação dos dados de vida (fica como está).
+        expect(applyHitPointsChange({ ...zero, hitDiceUsed: 2 }, { op: "descanso-longo" }).next).toMatchObject({ hp: 10, tempHp: 0, deathSuccess: 0, deathFailure: 0, hitDiceUsed: 2 })
         expect(hitPointsLine("Nala", 0, 1, "acordou na caverna")).toBe("PV de Nala: 0 → 1 (acordou na caverna)")
     })
 })

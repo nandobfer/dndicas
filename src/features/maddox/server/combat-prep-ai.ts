@@ -252,7 +252,11 @@ export interface ReviewAdjustmentInput extends ReviewSheetInput {
     request: string
     /** Pedidos anteriores e o que o Maddox decidiu. */
     previous: string
+    /** DND-49 (revisão, F1): a resposta anterior recusou sem consultar o catálogo; esta exige a consulta. */
+    mustConsult?: boolean
 }
+
+export const MUST_CONSULT_NOTE = `ATENÇÃO: a resposta anterior recusou o pedido sem consultar o catálogo. Antes de decidir, leia com ${MADDOX_CATALOG_TOOL_NAMES.get} a regra que o jogador cita (busque com ${MADDOX_CATALOG_TOOL_NAMES.search} se precisar). Recusa sem consulta não é aceita.`
 
 /** Pedido de ajuste: `{ decision, reason, sheetChanges, modify, remove, add }`. */
 export async function reviewAdjustment(input: ReviewAdjustmentInput): Promise<unknown> {
@@ -268,6 +272,7 @@ export async function reviewAdjustment(input: ReviewAdjustmentInput): Promise<un
         ...SHEET_CHANGE_CONTRACT,
         ...OPTION_CONTRACT,
         "Ao aceitar, corrija a opção pedida (modify, remove ou add) e grave a correção na ficha quando ela estiver errada lá. Ao recusar, deixe as listas vazias.",
+        ...(input.mustConsult ? [MUST_CONSULT_NOTE] : []),
     ].join("\n\n")
     const prompt = [
         `# Personagem: ${input.characterName}`,

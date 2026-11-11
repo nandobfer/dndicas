@@ -15,6 +15,12 @@ export function readCatalog(input: { reads?: CatalogReadLog }, type: string, id:
  * `vi.mock("@/features/maddox/server/combat-prep-ai", async () => (await import("../../helpers/combat-prep-mock")).combatPrepAiModule)`
  * e `waitForCombatPreps()` (server/combat-prep) antes de conferir a ordem de iniciativa.
  */
+/** Padrão do pedido de ajuste: consulta uma regra (DND-49: recusa sem consulta não vale) e recusa. */
+function defaultAdjust(input: { reads?: CatalogReadLog }): unknown {
+    readCatalog(input, "Regra", "padrao", { name: "Regra", description: "Regra padrão do catálogo do DnDicas." })
+    return { decision: "refuse", reason: "Sem motivo para mudar." }
+}
+
 export const combatPrepAi = {
     /** Checagem de quem está a 0 PV ao abrir o combate (DND-49): por padrão, segue caído. */
     downed: vi.fn(async (input: { characterName: string; currentState: string; recent: string }): Promise<unknown> => {
@@ -25,10 +31,7 @@ export const combatPrepAi = {
         void input
         return { sheetChanges: [], modify: [], remove: [], add: [] }
     }),
-    adjust: vi.fn(async (input: { request: string; optionText: string; reads?: CatalogReadLog; jobId?: string }): Promise<unknown> => {
-        void input
-        return { decision: "refuse", reason: "Sem motivo para mudar." }
-    }),
+    adjust: vi.fn(async (input: { request: string; optionText: string; reads?: CatalogReadLog; jobId?: string; mustConsult?: boolean }): Promise<unknown> => defaultAdjust(input)),
     screen: vi.fn(async (input: { request: string }): Promise<boolean | null> => {
         void input
         return null
@@ -41,7 +44,7 @@ export const combatPrepAi = {
         this.review.mockReset()
         this.review.mockImplementation(async () => ({ sheetChanges: [], modify: [], remove: [], add: [] }))
         this.adjust.mockReset()
-        this.adjust.mockImplementation(async () => ({ decision: "refuse", reason: "Sem motivo para mudar." }))
+        this.adjust.mockImplementation(async (input) => defaultAdjust(input))
         this.screen.mockReset()
         this.screen.mockImplementation(async () => null)
         this.sneak.mockReset()

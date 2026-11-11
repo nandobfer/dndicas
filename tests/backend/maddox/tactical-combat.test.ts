@@ -1187,7 +1187,7 @@ describe("DND-41 — pedido de ajuste na própria vez", () => {
     it("recusado: nada muda; o segundo pedido é tratado depois e vê o primeiro", async () => {
         const { id, kael, combatId } = await scene()
         await readyPrep(id, combatId, kael)
-        combatPrepAi.adjust.mockImplementation(async () => ({ decision: "refuse", reason: "10d10 não existe para uma espada." }))
+        combatPrepAi.adjust.mockImplementation(async (input) => (readRule(input), { decision: "refuse", reason: "10d10 não existe para uma espada." }))
         await adjustments.requestCombatAdjustment(id, { economy: "action", optionId: "unarmed", text: "dano 10d10" }, kael.userId)
         await adjustments.requestCombatAdjustment(id, { economy: "action", optionId: "unarmed", text: "então 2d10" }, kael.userId)
         await combatPrep.waitForCombatPreps()
@@ -1617,6 +1617,32 @@ describe("DND-49 — Referências do catálogo e catálogo lido na preparação"
         expect(prep.changes).toEqual([expect.objectContaining({ label: "Força", applied: false, refused: "Não confirmada no catálogo do DnDicas: sem a fonte do catálogo." })])
     })
 
+    it("DND-49 (F1): recusa sem consultar o catálogo não vale — nova tentativa exigindo a consulta; recusando de novo sem ler, o pedido fica não examinado", async () => {
+        const { id, kael, combatId } = await scene()
+        await readyPrep(id, combatId, kael)
+        combatPrepAi.adjust.mockImplementation(async () => ({ decision: "refuse", reason: "De memória: não existe." }))
+        await adjustments.requestCombatAdjustment(id, { economy: "action", optionId: "unarmed", text: "pela regra do catálogo meu soco é 1d4" }, kael.userId)
+        await combatPrep.waitForCombatPreps()
+        expect(combatPrepAi.adjust).toHaveBeenCalledTimes(2)
+        expect((combatPrepAi.adjust.mock.calls[1]![0] as { mustConsult?: boolean }).mustConsult).toBe(true)
+        const mine = (await game.getGameState(id, kael.userId)).me.combat!.adjustments!.at(-1)!
+        // Kael é o dono da campanha: vê a mensagem genérica com o motivo técnico.
+        expect(mine.status).toBe("error")
+        expect(mine.reason).toContain("O Maddox não conseguiu examinar o pedido agora. Tente de novo.")
+        expect(mine.reason).toContain("sem consultar o catálogo")
+        expect((await MaddoxCombatPrepModel.findOne({ combatId }).lean())!.adjustments.at(-1)!.error).toContain("sem consultar o catálogo")
+    })
+
+    it("DND-49 (F1): na nova tentativa o Maddox consulta e a recusa passa a valer, com o motivo", async () => {
+        const { id, kael, combatId } = await scene()
+        await readyPrep(id, combatId, kael)
+        combatPrepAi.adjust.mockImplementationOnce(async () => ({ decision: "refuse", reason: "De memória." })).mockImplementationOnce(async (input) => (readRule(input), { decision: "refuse", reason: "A regra do catálogo não dá isso." }))
+        await adjustments.requestCombatAdjustment(id, { economy: "action", optionId: "unarmed", text: "soco 2d10" }, kael.userId)
+        await combatPrep.waitForCombatPreps()
+        expect((await game.getGameState(id, kael.userId)).me.combat!.adjustments!.at(-1)).toMatchObject({ status: "refused", reason: "A regra do catálogo não dá isso." })
+        expect((await MaddoxCombatPrepModel.findOne({ combatId }).lean())!.adjustments.at(-1)).toMatchObject({ catalogRefs: ["Regra:r1"] })
+    })
+
     it("pedido de ajuste citando regra que não existe no catálogo é recusado com o motivo; a opção continua igual", async () => {
         const { id, kael, combatId } = await scene()
         await readyPrep(id, combatId, kael)
@@ -1678,7 +1704,8 @@ describe("DND-41 — revisão (rodada 1 do revisor)", () => {
         combatPrepAi.review.mockImplementation(async (input) => {
             if (input.characterName !== "Kael") return { sheetChanges: [], modify: [], remove: [], add: [] }
             traitId = /\[id="([a-f0-9]{24})"\] Ataque Furtivo/.exec(input.sheetText)![1]!
-            return { sheetChanges: [{ type: "trait-upsert", id: traitId, name: "Ataque Furtivo", description: "Uma vez por turno, +1d6.", reason: "Faltava o dano." }] }
+            readRule(input)
+            return { sheetChanges: [{ type: "trait-upsert", id: traitId, name: "Ataque Furtivo", description: "Uma vez por turno, +1d6.", reason: "Faltava o dano.", source: RULE }] }
         })
         const { kael } = await initiativeScene(null, {
             beforeCombat: async ({ id: campaignId }) => {

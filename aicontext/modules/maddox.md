@@ -1160,9 +1160,9 @@ correspondência no catálogo".
 **Registro das consultas** (`server/catalog-reads.ts`): cada `get_catalog_entity` da execução guarda `Tipo:id` e o texto normalizado da
 entidade compacta que o modelo viu (sem acento, caixa e pontuação). **Fonte obrigatória** (`source: {"ref":"Tipo:id","quote":"trecho"}`,
 `requiresCatalogSource` em `combat-prep-schemas.ts`) em: `sheetChanges` de atributo, proficiência de salvaguarda ou perícia, atributo de
-conjuração, espaços de magia, cargas, `attack-upsert` e `weapon-mastery`; `modify` com `attack`, `save`, `heal` ou `economy`; `add` com
+conjuração, espaços de magia, cargas, `attack-upsert`, `weapon-mastery`, `trait-upsert`, `feat-upsert` e `spell-update` que muda o círculo; `modify` com `attack`, `save`, `heal` ou `economy`; `add` com
 ataque, salvaguarda ou cura; e `sneakAttack`. Rótulo, detalhe, alvo, remoção, texto acrescentado e equipar não exigem. Sem `source`, com
-`ref` não lido nesta execução ou com `quote` fora do texto = recusada (`dropped`), e o card mostra a linha com "recusada" e o motivo ("Não
+`ref` não lido nesta execução, com `quote` fora do texto ou com `quote` curto demais (menos de 3 palavras e de 15 caracteres normalizados) = recusada (`dropped`), e o card mostra a linha com "recusada" e o motivo ("Não
 confirmada no catálogo do DnDicas: …"). Modelo que não consultou nada e teve alteração recusada = aviso no topo do card ("O Maddox não
 consultou o catálogo…"; falha da ferramenta: "A consulta ao catálogo do DnDicas falhou…"). O `sneakAttack: { dice: null }` sem fonte não
 apaga mais o furtivo do servidor.
@@ -1172,7 +1172,7 @@ apaga mais o furtivo do servidor.
 ajuste ("Recusada: esta opção segue a regra fixa do servidor…"), e um `add` que repete o ataque de maestria (Ágil, Trespassar, "outra
 mão") é recusado: o servidor resolve.
 
-**Pedido de ajuste.** Mesmas ferramentas e mesma exigência. Aceito com tudo recusado por falta de fonte = o pedido fica `refused` com o
+**Pedido de ajuste.** Mesmas ferramentas e mesma exigência. Recusa sem nenhuma leitura do catálogo não vale: o servidor pede de novo exigindo a consulta (`mustConsult`); recusando outra vez sem ler, o pedido fica `error` ("não examinado": o jogador vê a mensagem genérica para tentar de novo; o dono vê o motivo) e o log registra. Aceito com tudo recusado por falta de fonte = o pedido fica `refused` com o
 motivo do catálogo ("…A opção continua como está."). Cada ajuste guarda `catalogRefs` e `droppedWithoutSource`.
 
 **Registro e auditoria.** `maddox_combat_preps` grava `catalogRefs` (as refs lidas) e `droppedWithoutSource`; os logs `[maddox] mesa do
@@ -1222,7 +1222,7 @@ mantido em destaque, e o rolador já vem no modo certo.
 **PV fora do combate.** Ferramenta do narrador `update_character_hit_points` (`server/hit-points.ts`, regra pura em `hit-points-ops.ts`),
 nos graus `MADDOX_SHEET_RIGORS`, recusada com combate tático ativo (usar `apply_effect`): `curar` (`dados` que o servidor rola ou `valor`),
 `definir`, `estabilizar`, `acordar` (estabilizado → 1 PV), `descanso-curto` (`dadosDeVida`, cada dado + modificador de Constituição) e
-`descanso-longo` (PV máximos, PV temporários e testes contra a morte zerados, dados de vida recuperados). Motivo obrigatório; personagem
+`descanso-longo` (PV máximos, PV temporários e testes contra a morte zerados; os dados de vida gastos não mudam). Motivo obrigatório; personagem
 morto recusa; PV limitado ao máximo. Grava na ficha (auditoria `FichaPersonagem`, `origin: "narrator-hit-points"`, tempo real) e põe na
 mesa a mensagem `kind: "hit-points"` ("PV de X: 0 → 1 (motivo)", na transcrição como "ficha"). A instrução `MADDOX_HIT_POINTS_RULE` do
 narrador manda chamar a ferramenta antes de narrar alguém a 0 PV acordando, agindo ou se recuperando.

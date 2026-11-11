@@ -21,6 +21,8 @@ import { isOpexUserId } from "./opex-members"
 const log = loggerFor({ module: "maddox", feature: "combat-adjustments" })
 
 const REFUSED_BY_SCREEN = "Esse pedido não tem base nas regras nem na ficha do personagem: a opção continua como está."
+/** Motivo técnico (só o dono vê) quando o Maddox recusa duas vezes sem ler o catálogo (DND-49, F1). */
+const REFUSED_WITHOUT_CATALOG = "O Maddox recusou o pedido sem consultar o catálogo do DnDicas (duas tentativas); o pedido não foi examinado."
 
 export async function requestCombatAdjustment(campaignId: string, input: MaddoxCombatAdjustmentInput, userId: string) {
     const { loadMyCombatTurn } = await import("./tactical-actions")
@@ -93,8 +95,19 @@ async function runAdjustment(campaignId: Types.ObjectId, prepId: Types.ObjectId,
             .join("\n")
         const all = view ? [...view.options.action, ...view.options.bonus] : []
         const reads = createCatalogReadLog()
-        const raw = await ai.reviewAdjustment({ campaign, characterName: prep.characterName, sheetText: context.sheetText, optionsText: all.map(optionLine).join("\n") || context.optionsText, sneakAttack: context.sneakAttack, optionText, request: adjustment.text, previous, reads, jobId })
-        const response = combatAdjustResponseSchema.parse(raw)
+        const review = (mustConsult: boolean) => ai.reviewAdjustment({ campaign, characterName: prep.characterName, sheetText: context.sheetText, optionsText: all.map(optionLine).join("\n") || context.optionsText, sneakAttack: context.sneakAttack, optionText, request: adjustment.text, previous, reads, jobId, ...(mustConsult ? { mustConsult } : {}) })
+        let response = combatAdjustResponseSchema.parse(await review(false))
+        // DND-49 (revisão, F1): recusa sem nenhuma leitura do catálogo não vale — uma nova tentativa exigindo a consulta;
+        // se de novo não consultar, o pedido fica "não examinado" (o jogador pode pedir de novo), nunca recusado de memória.
+        if (response.decision === "refuse" && reads.refs.length === 0) {
+            log.warn({ campaignId: String(campaignId), option: adjustment.optionId, catalogFailures: reads.failures }, "[maddox] pedido de ajuste recusado sem consultar o catálogo; nova tentativa exigindo a consulta")
+            response = combatAdjustResponseSchema.parse(await review(true))
+            if (response.decision === "refuse" && reads.refs.length === 0) {
+                await decide(prepId, adjustmentId, { status: "error", reason: null, error: REFUSED_WITHOUT_CATALOG, catalogRefs: [], droppedWithoutSource: 0 })
+                log.warn({ campaignId: String(campaignId), option: adjustment.optionId, catalogFailures: reads.failures }, "[maddox] pedido de ajuste não examinado: o Maddox recusou duas vezes sem consultar o catálogo")
+                return
+            }
+        }
         const audit = { catalogRefs: reads.refs, refsCount: reads.refs.length, catalogFailures: reads.failures }
         if (response.decision === "refuse") {
             await decide(prepId, adjustmentId, { status: "refused", reason: response.reason, catalogRefs: reads.refs, droppedWithoutSource: 0 })

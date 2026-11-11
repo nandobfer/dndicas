@@ -112,7 +112,7 @@ describe("DND-41 — validação da resposta da IA", () => {
         const result = interpretPrep(
             {
                 sheetChanges: [
-                    { type: "ability", attribute: "dexterity", value: 17, reason: "ok", source: { ref: "Classe:ladino", quote: "Destreza 17" } },
+                    { type: "ability", attribute: "dexterity", value: 17, reason: "ok", source: { ref: "Classe:ladino", quote: "nível. Destreza 17" } },
                     { type: "ability", attribute: "dexterity", value: 40, reason: "fora da faixa" },
                     { type: "attack-upsert", name: "Adaga", attackBonus: 50, damage: { quantity: 10, faces: 10 }, reason: "burla" },
                     { type: "apagar-tudo", reason: "não existe" },

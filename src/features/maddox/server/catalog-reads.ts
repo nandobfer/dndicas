@@ -75,6 +75,11 @@ export function recordCatalogToolResult(log: CatalogReadLog, output: unknown): v
 export const CATALOG_SOURCE_MISSING = "sem a fonte do catálogo"
 export const CATALOG_SOURCE_NOT_READ = "a regra citada não foi consultada no catálogo"
 export const CATALOG_SOURCE_QUOTE = "o trecho citado não está no catálogo"
+export const CATALOG_SOURCE_SHORT = "o trecho citado é curto demais para confirmar a regra"
+
+/** DND-49 (revisão, F4): o trecho precisa ter pelo menos 3 palavras ou 15 caracteres (normalizados); "d6" ou "dano" não confirmam nada. */
+export const CATALOG_QUOTE_MIN_WORDS = 3
+export const CATALOG_QUOTE_MIN_CHARS = 15
 
 /** `null` = fonte confirmada; senão, o motivo da recusa (o jogador lê). */
 export function checkCatalogSource(source: CatalogSource | null | undefined, log: CatalogReadLog): string | null {
@@ -84,6 +89,7 @@ export function checkCatalogSource(source: CatalogSource | null | undefined, log
     if (text === undefined) return CATALOG_SOURCE_NOT_READ
     const quote = normalizeCatalogQuote(source.quote)
     if (!quote || !text.includes(quote)) return CATALOG_SOURCE_QUOTE
+    if (quote.split(" ").length < CATALOG_QUOTE_MIN_WORDS && quote.length < CATALOG_QUOTE_MIN_CHARS) return CATALOG_SOURCE_SHORT
     return null
 }
 

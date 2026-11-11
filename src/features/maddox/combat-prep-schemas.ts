@@ -114,7 +114,8 @@ export const combatAddSchema = z.object({
 export const sneakAttackSchema = z.object({ dice: diceText.nullable(), reason: optionalReason, source })
 
 /** Tipos de correção na ficha que mudam número ou regra (DND-49, A4): exigem `source` confirmado no catálogo. */
-const SOURCED_SHEET_CHANGES = new Set<CombatSheetChange["type"]>(["ability", "save-proficiency", "skill-proficiency", "spellcasting-attribute", "spell-slots", "charge-upsert", "attack-upsert", "weapon-mastery"])
+// DND-49 (revisão, F3): características e talentos gravados pelo Maddox e a troca de círculo de magia também são regra.
+const SOURCED_SHEET_CHANGES = new Set<CombatSheetChange["type"]>(["ability", "save-proficiency", "skill-proficiency", "spellcasting-attribute", "spell-slots", "charge-upsert", "attack-upsert", "weapon-mastery", "trait-upsert", "feat-upsert"])
 
 /**
  * Quais alterações exigem fonte (DND-49, A4 + decisão do dono D2): números e regras (bônus de ataque, dados e tipo de
@@ -127,7 +128,11 @@ export function requiresCatalogSource(kind: "add", item: z.infer<typeof combatAd
 export function requiresCatalogSource(kind: "sneak", item: z.infer<typeof sneakAttackSchema>): boolean
 export function requiresCatalogSource(kind: "sheet" | "modify" | "add" | "sneak", item: unknown): boolean {
     if (kind === "sneak") return true
-    if (kind === "sheet") return SOURCED_SHEET_CHANGES.has((item as CombatSheetChange).type)
+    if (kind === "sheet") {
+        const change = item as CombatSheetChange
+        if (change.type === "spell-update") return change.circle !== undefined
+        return SOURCED_SHEET_CHANGES.has(change.type)
+    }
     if (kind === "modify") {
         const modify = item as z.infer<typeof combatModifySchema>
         return Boolean(modify.attack || modify.save || modify.heal || modify.economy)

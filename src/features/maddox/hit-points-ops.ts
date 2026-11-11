@@ -60,7 +60,8 @@ export function applyHitPointsChange(current: SheetHitPoints, change: HitPointsC
             if (change.spent <= 0) return { next: current, error: "Informe quantos dados de vida o personagem gasta no descanso curto." }
             return { next: awake({ ...current, hp: clamp(current.hp + Math.max(0, change.healed), current.hpMax), hitDiceUsed: current.hitDiceUsed + change.spent }), error: null }
         case "descanso-longo":
-            return { next: { ...current, hp: current.hpMax, tempHp: 0, deathSuccess: 0, deathFailure: 0, hitDiceUsed: 0 }, error: null }
+            // Só PV máximos e testes contra a morte (escopo do E1); os dados de vida gastos ficam como estão.
+            return { next: { ...current, hp: current.hpMax, tempHp: 0, deathSuccess: 0, deathFailure: 0 }, error: null }
     }
 }
 
