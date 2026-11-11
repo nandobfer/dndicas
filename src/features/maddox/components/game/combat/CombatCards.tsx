@@ -18,6 +18,7 @@ import { MemberAvatar, OpexChip, RarityChip } from "../../campaigns/campaign-vis
 import { COMBAT_COLOR } from "../GameCombatCard"
 import { ReplayDie } from "./ReplayDie"
 import { ECONOMY_COLORS, ECONOMY_LABELS, HP_BAND_COLORS } from "./combat-visuals"
+import { useHeldRoll, type HeldRoll } from "./use-held-roll"
 
 /**
  * Cards do combate tático (Maddox 7) entre as falas da mesa: a ação de um combatente (com o dado rolado inline, como o
@@ -41,10 +42,16 @@ interface RollerProps {
     replay: DiceRollResponse | null
     onRoll: (id: string) => Promise<DiceRollResponse>
     buttonLabel: string
+    /** Ciclo do dado no card (DND-48): prende o passo do clique até o palco sair. */
+    held: HeldRoll
+    stepIndex: number
 }
 
-/** Painel de dados inline: quem rola clica "Rolar"; os outros repetem a animação recebida pelo stream. */
-function InlineRoller({ rollId, dice, label, mode, mine, replay, onRoll, buttonLabel }: RollerProps) {
+/**
+ * Painel de dados inline: quem rola clica "Rolar"; os outros repetem a animação recebida pelo stream. O card segura o
+ * painel no mesmo passo até o palco sair (a mesa nova chega com o passo já resolvido no meio da animação).
+ */
+function InlineRoller({ rollId, dice, label, mode, mine, replay, onRoll, buttonLabel, held, stepIndex }: RollerProps) {
     const [local, setLocal] = useState<DiceRollResponse | null>(null)
     const preset = useMemo(() => presetOf(dice, label, mode), [dice, label, mode])
     if (!mine && !replay) return null
@@ -63,10 +70,19 @@ function InlineRoller({ rollId, dice, label, mode, mine, replay, onRoll, buttonL
                 hideRollButton={!mine || Boolean(local)}
                 disableRolling={Boolean(local) || !mine}
                 externalResult={mine ? null : replay}
+                onRollSettled={held.settled}
+                onStageHidden={held.hidden}
                 rollRequest={async () => {
-                    const result = await onRoll(rollId)
-                    setLocal(result)
-                    return result
+                    held.start(stepIndex)
+                    try {
+                        const result = await onRoll(rollId)
+                        setLocal(result)
+                        held.created(result)
+                        return result
+                    } catch (error) {
+                        held.failed()
+                        throw error
+                    }
                 }}
             />
         </div>
@@ -74,8 +90,18 @@ function InlineRoller({ rollId, dice, label, mode, mine, replay, onRoll, buttonL
 }
 
 /** Passo do card; o dado rolado pelo servidor agora (`replay`) anima antes de o resultado aparecer. */
-function StepLine({ step, replay = null }: { step: CombatActionStep; replay?: DiceRollResponse | null }) {
+function StepLine({ step, replay = null, rolling = false }: { step: CombatActionStep; replay?: DiceRollResponse | null; rolling?: boolean }) {
     const [settled, setSettled] = useState(false)
+    // O dado do card ainda rola para este passo: o resultado só aparece quando ele para.
+    if (rolling) {
+        return (
+            <li className="flex flex-wrap items-center gap-2 text-xs text-white/80" data-testid="combat-step" data-kind={step.kind} data-status="rolling">
+                <span className="font-semibold text-white/60">{STEP_LABELS[step.kind]}</span>
+                {step.targetName && <span className="text-white/70">→ {step.targetName}</span>}
+                <span className="text-white/50">rolando…</span>
+            </li>
+        )
+    }
     if (replay && !settled) {
         return (
             <li className="flex flex-wrap items-center gap-2 text-xs text-white/80" data-testid="combat-step" data-kind={step.kind} data-status="rolling">
@@ -141,6 +167,8 @@ export function CombatActionCard({ message, mine, replay, stepReplays, onRoll, o
     const action = message.combatAction!
     const accent = action.actorKind === "character" ? ECONOMY_COLORS[action.economy] : COMBAT_COLOR
     const next = action.steps.find((step) => step.status === "pending" && step.roller === "player")
+    const held = useHeldRoll({ rolls: action.steps.map((step) => step.roll), pendingIndex: next ? action.steps.indexOf(next) : -1, replay: mine ? null : replay })
+    const rollerStep = held.index >= 0 ? action.steps[held.index] : undefined
     const critical = action.steps.some((step) => step.kind === "attack" && step.critical)
     const cancelled = action.status === "cancelled"
     const Icon = action.actorKind === "character" ? (action.category === "spells" ? HeartPulse : Swords) : Crosshair
@@ -164,11 +192,11 @@ export function CombatActionCard({ message, mine, replay, stepReplays, onRoll, o
                                 {cancelled ? <span className="font-normal text-white/50"> (cancelada)</span> : null}
                             </p>
                             {action.freeText && <p className="text-xs italic text-white/70">“{action.freeText}”</p>}
-                            {action.steps.length > 0 && <ul className="space-y-1">{action.steps.map((step, index) => <StepLine key={index} step={step} replay={stepReplays?.get(index) ?? null} />)}</ul>}
+                            {action.steps.length > 0 && <ul className="space-y-1">{action.steps.map((step, index) => <StepLine key={index} step={step} replay={stepReplays?.get(index) ?? null} rolling={held.holding && !held.revealed && held.index === index} />)}</ul>}
                         </div>
                     </div>
-                    {next && !cancelled && (
-                        <InlineRoller key={`${message.id}:${action.steps.indexOf(next)}`} rollId={message.id} dice={next.dice} label={`${action.label} · ${STEP_LABELS[next.kind]}`} mode={next.mode} mine={mine} replay={mine ? null : replay} onRoll={onRoll} buttonLabel={`Rolar ${STEP_LABELS[next.kind].toLowerCase()}`} />
+                    {rollerStep && !cancelled && (
+                        <InlineRoller key={`${message.id}:${held.index}`} rollId={message.id} dice={rollerStep.dice} label={`${action.label} · ${STEP_LABELS[rollerStep.kind]}`} mode={rollerStep.mode} mine={mine} replay={held.replay} onRoll={onRoll} buttonLabel={`Rolar ${STEP_LABELS[rollerStep.kind].toLowerCase()}`} held={held} stepIndex={held.index} />
                     )}
                 </div>
                 {mine && action.cancellable && (
@@ -237,6 +265,12 @@ export function EnemyInitiativeCard({ message, replay }: { message: MaddoxGameMe
 export function CombatRollCard({ message, mine, replay, onRoll }: { message: MaddoxGameMessageDto; mine: boolean; replay: DiceRollResponse | null; onRoll: (rollId: string) => Promise<DiceRollResponse> }) {
     const roll = message.combatRoll!
     if (roll.kind === "enemy-initiative") return <EnemyInitiativeCard message={message} replay={replay} />
+    return <PlayerRollCard message={message} mine={mine} replay={replay} onRoll={onRoll} />
+}
+
+function PlayerRollCard({ message, mine, replay, onRoll }: { message: MaddoxGameMessageDto; mine: boolean; replay: DiceRollResponse | null; onRoll: (rollId: string) => Promise<DiceRollResponse> }) {
+    const roll = message.combatRoll!
+    const held = useHeldRoll({ rolls: [roll.roll], pendingIndex: roll.status === "pending" ? 0 : -1, replay: mine ? null : replay })
     const name = message.characterName ?? "Personagem"
     if (roll.status === "cancelled") {
         return (
@@ -245,7 +279,10 @@ export function CombatRollCard({ message, mine, replay, onRoll }: { message: Mad
             </p>
         )
     }
-    const accent = roll.success === true ? rarityColors.uncommon : roll.success === false ? rarityColors.artifact : roll.kind === "death-save" ? rarityColors.artifact : rarityColors.legendary
+    // Com o dado ainda rolando no card, o desfecho (cor e total) espera ele parar.
+    const shown = !held.holding || held.revealed
+    const success = shown ? roll.success : null
+    const accent = success === true ? rarityColors.uncommon : success === false ? rarityColors.artifact : roll.kind === "death-save" ? rarityColors.artifact : rarityColors.legendary
     const Icon = roll.kind === "death-save" ? Skull : roll.kind === "initiative" ? ListOrdered : roll.kind === "damage" ? Swords : ShieldAlert
     const pendingMine = roll.status === "pending" && mine
     return (
@@ -265,7 +302,7 @@ export function CombatRollCard({ message, mine, replay, onRoll }: { message: Mad
                             {roll.dc !== null && roll.kind !== "death-save" && <RarityChip color={rarityColors.rare}>CD {roll.dc}</RarityChip>}
                             {roll.mode !== "normal" && <RarityChip color={roll.mode === "advantage" ? rarityColors.uncommon : rarityColors.artifact}>{roll.mode === "advantage" ? "Vantagem" : "Desvantagem"}</RarityChip>}
                         </div>
-                        {roll.status === "rolled" && (
+                        {roll.status === "rolled" && shown && (
                             <p className="flex flex-wrap items-center gap-2 text-sm text-white/80" data-testid="combat-roll-outcome">
                                 <span className="text-2xl font-black text-white">{roll.total}</span>
                                 {roll.outcome && <span>{roll.outcome}</span>}
@@ -273,7 +310,7 @@ export function CombatRollCard({ message, mine, replay, onRoll }: { message: Mad
                         )}
                     </div>
                 </div>
-                {roll.status === "pending" && <InlineRoller rollId={message.id} dice={roll.dice} label={ROLL_TITLES[roll.kind]} mode={roll.mode} mine={pendingMine} replay={mine ? null : replay} onRoll={onRoll} buttonLabel="Rolar" />}
+                {held.index === 0 && <InlineRoller rollId={message.id} dice={roll.dice} label={ROLL_TITLES[roll.kind]} mode={roll.mode} mine={mine} replay={held.replay} onRoll={onRoll} buttonLabel="Rolar" held={held} stepIndex={0} />}
             </div>
         </motion.div>
     )
