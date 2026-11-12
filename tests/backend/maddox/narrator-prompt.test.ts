@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
+    MADDOX_WRITE_ONCE_RULE,
     buildNarratorInstructions,
     checkResultLine,
     combatDifficultyLine,
@@ -61,6 +62,16 @@ describe("instruções do Maddox narrador", () => {
         // Lembrete a cada turno, junto do próprio estado (além da regra de persistência).
         const stateBlock = text.slice(text.indexOf("## Estado atual da história"))
         expect(stateBlock.split("\n")[1]).toContain("Os jogadores leem este estado e a condição de cada personagem no Diário da campanha")
+    })
+
+    it("escrita única (DND-52): ferramentas primeiro e o texto uma vez só, nos dois modos", () => {
+        for (const mode of [{ kind: "ai-sdk" as const }, { kind: "mcp" as const, server: "dndicas-maddox", turnToken: "t" }]) {
+            const text = buildNarratorInstructions(context(), mode)
+            expect(text).toContain(MADDOX_WRITE_ONCE_RULE)
+            expect(text).toContain("Antes de escrever a narração, grave o que mudou")
+            expect(text).toContain("Grave antes de escrever a narração, nunca no meio nem depois dela")
+            expect(text).not.toContain("Grave antes ou depois de escrever")
+        }
     })
 
     it("memórias do agente entram logo depois das instruções da aba", () => {
@@ -458,6 +469,10 @@ describe("sugestões de ação (DND-30)", () => {
         expect(narratorTaskText({ kind: "narration", turnNumber: 3, declarations }, { actionOptions: true })).toContain("chame `suggest_actions`")
         expect(narratorTaskText({ kind: "continuation", turnNumber: 3, round: 1, declarations, results: [] }, { actionOptions: true })).toContain("suggest_actions")
         expect(narratorTaskText({ kind: "narration", turnNumber: 3, declarations })).not.toContain("suggest_actions")
+        // DND-52: as sugestões vêm antes do texto (escrita única), nunca "no fim".
+        const line = narratorTaskText({ kind: "narration", turnNumber: 3, declarations }, { actionOptions: true })
+        expect(line).toContain("chame `suggest_actions` antes de escrever a narração")
+        expect(line).not.toContain("no fim com")
         expect(narratorTaskText({ kind: "answer", turnNumber: 3, characterName: "Lyra", question: "Há guardas?", declarations: [] }, { actionOptions: true })).not.toContain("suggest_actions")
         // Com densidade e sugestões, as duas linhas vêm depois da tarefa.
         const both = narratorTaskText({ kind: "narration", turnNumber: 3, declarations }, { density: "breve", actionOptions: true })

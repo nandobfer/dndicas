@@ -70,6 +70,8 @@ export function reduceGameStream(state: MaddoxGameStreamState, line: MaddoxGameS
             return { ...state, live: [...state.live.filter((item) => item.liveId !== line.live.liveId), line.live] }
         case "delta":
             return { ...state, live: patch(state.live, line.liveId, (item) => ({ ...item, text: item.text + line.text })) }
+        case "live-text":
+            return { ...state, live: patch(state.live, line.liveId, (item) => ({ ...item, text: line.text })) }
         case "tool":
             return { ...state, live: patch(state.live, line.liveId, (item) => ({ ...item, tool: line.running })) }
         case "live-end": {

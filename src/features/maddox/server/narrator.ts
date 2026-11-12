@@ -17,6 +17,7 @@ import {
     type MaddoxRigorLevel,
 } from "../constants"
 import { createMarkupFilter } from "../catalog-markup"
+import { dropRewrittenParagraphs, splitOpenParagraph } from "../narration-dedupe"
 import {
     MaddoxCampaignMemberModel,
     MaddoxCampaignMessageModel,
@@ -340,19 +341,39 @@ interface GenerateArgs {
     signal?: AbortSignal
 }
 
-/** Stream de texto com a marcação do catálogo segurada (nunca crua ao vivo). */
+/**
+ * Stream de texto com a marcação do catálogo segurada (nunca crua ao vivo). A cada trecho com quebra de linha, os parágrafos
+ * já fechados (nunca o que ainda está em escrita) passam
+ * pela mesma defesa da gravação (DND-52): se a reescrita depois das ferramentas repetir a primeira versão, o texto ao vivo
+ * é trocado pela versão sem repetição (`sink.replace`), igual ao que vai ser gravado.
+ */
 function liveText(sink: MaddoxMasterSink) {
     const markup = createMarkupFilter()
     let text = ""
+    let shown = ""
+    // Só os parágrafos fechados entram na comparação; no fim (`final`), todos estão fechados.
+    const settle = (final: boolean) => {
+        if (!sink.replace) return
+        const { closed, open } = final ? { closed: shown, open: "" } : splitOpenParagraph(shown)
+        const clean = dropRewrittenParagraphs(closed)
+        if (!clean.dropped) return
+        shown = clean.text + open
+        sink.replace(shown)
+    }
+    const show = (visible: string) => {
+        if (!visible) return
+        shown += visible
+        sink.delta(visible)
+    }
     return {
         push(chunk: string) {
             text += chunk
-            const visible = markup.push(chunk)
-            if (visible) sink.delta(visible)
+            show(markup.push(chunk))
+            if (chunk.includes("\n")) settle(false)
         },
         finish() {
-            const rest = markup.flush()
-            if (rest) sink.delta(rest)
+            show(markup.flush())
+            settle(true)
             return text
         },
     }
@@ -449,9 +470,12 @@ async function generate(args: GenerateArgs, sink: MaddoxMasterSink): Promise<str
     // Abortada pelo teto de duração: o texto parcial nunca vira narração gravada.
     if (args.signal?.aborted) throw new Error(MADDOX_MASTER_TIMEOUT_MESSAGE)
     sink.tool(false)
-    const raw = stream.finish().trim()
+    const finished = stream.finish().trim()
     if (failure) throw new Error(failure)
-    if (!raw) throw new Error("O Maddox não respondeu.")
+    if (!finished) throw new Error("O Maddox não respondeu.")
+    // Defesa da gravação (DND-52): a primeira versão de um trecho reescrito depois das ferramentas não chega ao diário.
+    const { text: raw, dropped } = dropRewrittenParagraphs(finished)
+    if (dropped) log.warn({ campaignId: args.campaignId, turnNumber: args.turnNumber, kind: args.task.kind, dropped }, "[maddox] narração reescrita depois das ferramentas: primeira versão descartada")
     const [{ linkCatalogMentions }, { campaignReservedNames }] = await Promise.all([import("./catalog-mentions"), import("./interviews")])
     const reserved = [...(await campaignReservedNames(context.campaign)), ...context.npcNames]
     return linkCatalogMentions(raw, { reserved })
