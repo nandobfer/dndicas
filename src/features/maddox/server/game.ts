@@ -921,6 +921,11 @@ async function messagesDto(all: MessageDoc[], viewer: MessagesViewer): Promise<M
     const knownFailureNpcs = viewer.isOwner ? await knownFailureNpcIds(messages) : new Set<string>()
     const characterById = new Map(characters.map((character) => [String(character._id), character]))
     const userById = new Map(users.map((user) => [String(user._id), user.name?.trim() || user.username || "Dono"]))
+    // Cards "Subida de nível" (DND-56): o status de cada degrau é lido agora na campanha.
+    const levelUpMessage = messages.find((message) => message.kind === "level-up" && message.levelUp)
+    const levels = levelUpMessage || messages.some((message) => message.kind === "experience") ? await import("./level-ups") : null
+    const levelCampaign = levelUpMessage ? await MaddoxCampaignModel.findById(levelUpMessage.campaignId).select("_id levelUps").lean<Pick<CampaignDoc, "_id" | "levelUps">>() : null
+    const levelLookups = levels && levelCampaign ? await levels.levelUpLookups(levelCampaign) : null
     return messages.map((message) => {
         const character = message.characterId ? characterById.get(String(message.characterId)) : undefined
         const hiddenAction = isHiddenPlayerAction(message, viewer)
@@ -956,6 +961,9 @@ async function messagesDto(all: MessageDoc[], viewer: MessagesViewer): Promise<M
             ...opexNpcFailuresDto(message, viewer, knownFailureNpcs),
             ...(message.kind === "combat-prep" && message.combatPrep ? { combatPrep: { characterName: message.combatPrep.characterName, changes: message.combatPrep.changes ?? [], question: message.combatPrep.question ? { ...message.combatPrep.question, deadline: new Date(message.combatPrep.question.deadline).toISOString(), settled: message.combatPrep.question.settled !== false, halted: message.combatPrep.question.halted ?? null } : null } } : {}),
             ...(message.kind === "rewind" && message.rewindNotice ? { rewindNotice: { event: message.rewindNotice.event, turnNumber: message.rewindNotice.turnNumber, originTurn: message.rewindNotice.originTurn } } : {}),
+            ...(message.kind === "level-up" && message.levelUp && levels && levelCampaign && levelLookups ? { levelUp: levels.levelUpCardDto(message.levelUp, levelCampaign, { memberId: viewer.memberId, isOwner: viewer.isOwner }, levelLookups) } : {}),
+            ...(message.kind === "experience" && message.experience && levels ? { experience: levels.experienceCardDto(message.experience) } : {}),
+            ...(message.kind === "chapter" && message.chapter ? { chapter: { title: message.chapter.title, summary: message.chapter.summary } } : {}),
             createdAt: new Date(message.createdAt).toISOString(),
         }
     })
@@ -1170,6 +1178,7 @@ export async function getGameState(campaignId: string, userId: string): Promise<
             sheet: await mySheet(members.find(({ member }) => String(member._id) === String(loaded.member._id))?.character ?? null),
             combat: tacticalCombat && tacticalModule ? await tacticalModule.myCombatDto(tacticalCombat, String(loaded.member._id), Boolean(combatActor && String(combatActor.memberId) === String(loaded.member._id)), campaign._id, campaign.ownerId === userId) : null,
             rewind: rewindControl,
+            levelUps: await (await import("./level-ups")).viewerLevelUps(campaign, { memberId: String(loaded.member._id), isOwner: campaign.ownerId === userId }),
         },
         messages: page.messages,
         hasMore: page.hasMore,

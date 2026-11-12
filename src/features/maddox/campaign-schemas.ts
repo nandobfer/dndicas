@@ -6,6 +6,7 @@ import {
     MADDOX_DENSITY_LEVELS,
     MADDOX_LEVEL_MAX,
     MADDOX_LEVEL_MIN,
+    MADDOX_PROGRESSION_MODES,
     MADDOX_RIGOR_LEVELS,
 } from "./constants"
 
@@ -40,11 +41,13 @@ const density = z.enum(MADDOX_DENSITY_LEVELS, { error: "Escolha uma densidade v�
 /** Dificuldade dos combates (DND-42): balanceamento dos adversários; aceita em todo grau, usada só nos táticos. */
 const combatDifficulty = z.enum(MADDOX_COMBAT_DIFFICULTY_LEVELS, { error: "Escolha uma dificuldade de combate válida" })
 
-export const createMaddoxCampaignSchema = z.strictObject({ name: campaignName, rigor, showCheckDc: showCheckDc.optional(), sceneImages: sceneImages.optional(), hidePlayerActions: hidePlayerActions.optional(), showEnemyHp: showEnemyHp.optional(), showAllyHp: showAllyHp.optional(), density: density.optional(), combatDifficulty: combatDifficulty.optional() })
-export type CreateMaddoxCampaignInput = z.infer<typeof createMaddoxCampaignSchema>
-
 /** Nível inicial da mesa (graus com ficha): o dono ajusta antes de a campanha começar. */
 const startingLevel = z.number({ error: "Escolha o nível inicial" }).int({ error: "Use um número inteiro" }).min(MADDOX_LEVEL_MIN, { error: `O nível vai de ${MADDOX_LEVEL_MIN} a ${MADDOX_LEVEL_MAX}` }).max(MADDOX_LEVEL_MAX, { error: `O nível vai de ${MADDOX_LEVEL_MIN} a ${MADDOX_LEVEL_MAX}` })
+/** Progressão de nível (DND-56, graus com ficha): só na criação; depois, só leitura. */
+const progression = z.enum(MADDOX_PROGRESSION_MODES, { error: "Escolha a progressão de nível" })
+
+export const createMaddoxCampaignSchema = z.strictObject({ name: campaignName, rigor, showCheckDc: showCheckDc.optional(), sceneImages: sceneImages.optional(), hidePlayerActions: hidePlayerActions.optional(), showEnemyHp: showEnemyHp.optional(), showAllyHp: showAllyHp.optional(), density: density.optional(), combatDifficulty: combatDifficulty.optional(), startingLevel: startingLevel.optional(), progression: progression.optional() })
+export type CreateMaddoxCampaignInput = z.infer<typeof createMaddoxCampaignSchema>
 
 export const updateMaddoxCampaignSchema = z
     .strictObject({ name: campaignName.optional(), rigor: rigor.optional(), showCheckDc: showCheckDc.optional(), startingLevel: startingLevel.optional(), sceneImages: sceneImages.optional(), hidePlayerActions: hidePlayerActions.optional(), showEnemyHp: showEnemyHp.optional(), showAllyHp: showAllyHp.optional(), density: density.optional(), combatDifficulty: combatDifficulty.optional() })

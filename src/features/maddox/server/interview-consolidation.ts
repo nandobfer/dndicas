@@ -161,7 +161,11 @@ async function completeCharacter(subject: InterviewSubject, doc: InterviewDoc, t
     // Por último: falha antes daqui mantém a entrevista em `proposed` e confirmar de novo reaplica.
     await finishInterview(doc, token, card?.base && final ? { ...data, abilityScores: { method: card.method, base: card.base, bonus: card.bonus ?? null, final }, build: doc.build ?? null } : data)
     // Campanha já iniciada (DND-50): a ficha entra na cópia do início, para onde o reinício a devolve.
-    if (sheet && subject.campaign.status !== "lobby" && subject.campaign.status !== "interview") await (await import("./turn-snapshots")).addToStartCopy(subject.campaign._id, sheet.sheetId)
+    if (sheet && subject.campaign.status !== "lobby" && subject.campaign.status !== "interview") {
+        await (await import("./turn-snapshots")).addToStartCopy(subject.campaign._id, sheet.sheetId)
+        // DND-56 (modo Marco): quem conclui a ficha depois de subidas declaradas recebe os degraus até o nível do grupo.
+        await (await import("./level-ups")).catchUpLevelUps(subject.campaign._id, character._id).catch(() => 0)
+    }
     await recordAudit({
         userId,
         entidade: MADDOX_CAMPAIGN_AUDIT_ENTITY,

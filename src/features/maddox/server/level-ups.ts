@@ -388,12 +388,12 @@ export function currentSteps(campaign: Pick<IMaddoxCampaign, "levelUps">): IMadd
 }
 
 export interface LevelUpViewer {
-    userId: string
+    memberId: string | null
     isOwner: boolean
 }
 
-export function levelUpStepDto(step: IMaddoxLevelUp, viewer: LevelUpViewer, actionable: ReadonlySet<string>, sheetIds: ReadonlyMap<string, string>, userIdOfMember: ReadonlyMap<string, string>): MaddoxLevelUpStepDto {
-    const mine = userIdOfMember.get(String(step.memberId)) === viewer.userId
+export function levelUpStepDto(step: IMaddoxLevelUp, viewer: LevelUpViewer, actionable: ReadonlySet<string>, sheetIds: ReadonlyMap<string, string>): MaddoxLevelUpStepDto {
+    const mine = Boolean(viewer.memberId) && String(step.memberId) === viewer.memberId
     const canComplete = actionable.has(String(step._id)) && (step.kind === "opex" ? viewer.isOwner && step.status === "failed" : mine && (step.status === "pending" || step.status === "failed"))
     return {
         id: String(step._id),
@@ -411,19 +411,14 @@ export function levelUpStepDto(step: IMaddoxLevelUp, viewer: LevelUpViewer, acti
     }
 }
 
-/** Mapas de apoio dos DTOs: fichas por personagem e usuário por membro. */
-export async function levelUpLookups(campaign: Pick<IMaddoxCampaign, "_id" | "levelUps">): Promise<{ sheetIds: Map<string, string>; userIdOfMember: Map<string, string>; actionable: Set<string> }> {
+/** Mapas de apoio dos DTOs: fichas por personagem e os degraus que podem ser concluídos agora. */
+export async function levelUpLookups(campaign: Pick<IMaddoxCampaign, "_id" | "levelUps">): Promise<{ sheetIds: Map<string, string>; actionable: Set<string> }> {
     const steps = campaign.levelUps ?? []
-    if (!steps.length) return { sheetIds: new Map(), userIdOfMember: new Map(), actionable: new Set() }
+    if (!steps.length) return { sheetIds: new Map(), actionable: new Set() }
     const characterIds = [...new Set(steps.map((step) => String(step.characterId)))].map((id) => new Types.ObjectId(id))
-    const memberIds = [...new Set(steps.map((step) => String(step.memberId)))].map((id) => new Types.ObjectId(id))
-    const [characters, members] = await Promise.all([
-        MaddoxCharacterModel.find({ _id: { $in: characterIds } }).select("_id sheetId").lean<{ _id: Types.ObjectId; sheetId: Types.ObjectId | null }[]>(),
-        MaddoxCampaignMemberModel.find({ _id: { $in: memberIds } }).select("_id userId").lean<{ _id: Types.ObjectId; userId: string }[]>(),
-    ])
+    const characters = await MaddoxCharacterModel.find({ _id: { $in: characterIds } }).select("_id sheetId").lean<{ _id: Types.ObjectId; sheetId: Types.ObjectId | null }[]>()
     return {
         sheetIds: new Map(characters.filter((item) => item.sheetId).map((item) => [String(item._id), String(item.sheetId)])),
-        userIdOfMember: new Map(members.map((item) => [String(item._id), item.userId])),
         actionable: new Set(currentSteps(campaign).map((step) => String(step._id))),
     }
 }
@@ -431,7 +426,7 @@ export async function levelUpLookups(campaign: Pick<IMaddoxCampaign, "_id" | "le
 export function levelUpCardDto(card: { toLevel: number; reason: string; source: MaddoxProgressionMode; levelUpIds: readonly (Types.ObjectId | string)[] }, campaign: Pick<IMaddoxCampaign, "levelUps">, viewer: LevelUpViewer, lookups: Awaited<ReturnType<typeof levelUpLookups>>): MaddoxLevelUpCardDto {
     const ids = new Set(card.levelUpIds.map(String))
     const steps = (campaign.levelUps ?? []).filter((step) => ids.has(String(step._id))).sort((a, b) => a.characterName.localeCompare(b.characterName, "pt-BR") || a.toLevel - b.toLevel)
-    return { toLevel: card.toLevel, reason: card.reason, source: card.source, entries: steps.map((step) => levelUpStepDto(step, viewer, lookups.actionable, lookups.sheetIds, lookups.userIdOfMember)) }
+    return { toLevel: card.toLevel, reason: card.reason, source: card.source, entries: steps.map((step) => levelUpStepDto(step, viewer, lookups.actionable, lookups.sheetIds)) }
 }
 
 export function experienceCardDto(card: { source: "combat" | "grant"; reason: string; total: number; entries: { characterId: Types.ObjectId | string; characterName: string; amount: number; total: number }[] }): MaddoxExperienceCardDto {
@@ -443,7 +438,7 @@ export async function viewerLevelUps(campaign: Pick<IMaddoxCampaign, "_id" | "le
     if (!hasLevels(campaign.rigor) || !(campaign.levelUps ?? []).length) return []
     const lookups = await levelUpLookups(campaign)
     return currentSteps(campaign)
-        .map((step) => levelUpStepDto(step, viewer, lookups.actionable, lookups.sheetIds, lookups.userIdOfMember))
+        .map((step) => levelUpStepDto(step, viewer, lookups.actionable, lookups.sheetIds))
         .filter((step) => step.canComplete)
 }
 
