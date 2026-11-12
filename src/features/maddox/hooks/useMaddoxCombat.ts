@@ -63,6 +63,10 @@ export const useDecideReaction = (campaignId: string) =>
     useCombatMutation<{ id: string; escolha: string }, MaddoxGameStateDto>(campaignId, async ({ id, escolha }) => unwrapApi((await api.post<ApiResponse<MaddoxGameStateDto>>(`${combatPath(campaignId)}/reactions/${id}`, { escolha })).data), "Não foi possível escolher a reação")
 
 /** DND-41: decisão do dono da campanha sobre uma preparação da mesa que falhou. */
+/** DND-51: resposta do jogador à pergunta da preparação do combate. */
+export const useAnswerCombatPrep = (campaignId: string) =>
+    useCombatMutation<{ prepId: string; text: string }, MaddoxGameStateDto>(campaignId, async ({ prepId, text }) => unwrapApi((await api.post<ApiResponse<MaddoxGameStateDto>>(`${combatPath(campaignId)}/preps/${prepId}/answer`, { text })).data), "Não foi possível enviar a resposta")
+
 export const useRetryCombatPrep = (campaignId: string) =>
     useCombatMutation<string, MaddoxGameStateDto>(campaignId, async (prepId) => unwrapApi((await api.post<ApiResponse<MaddoxGameStateDto>>(`${combatPath(campaignId)}/preps/${prepId}/retry`, {})).data), "Não foi possível tentar de novo")
 

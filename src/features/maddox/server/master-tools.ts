@@ -41,7 +41,10 @@ import {
     MADDOX_VISIBILITIES,
     maddoxOpexNpcFallbackNote,
     MADDOX_OPEX_NPC_CONSULTS_PER_NARRATION,
+    MADDOX_SHEET_FIX_TOOL_NAMES,
+    MADDOX_CATALOG_TOOL_NAMES,
 } from "../constants"
+import { SHEET_CHANGE_CONTRACT } from "../sheet-change-contract"
 import { normalizeCatalogName } from "../catalog-markup"
 import { MADDOX_HIT_POINT_OPERATIONS } from "../hit-points-ops"
 import { MaddoxCampaignMemberModel, MaddoxCampaignModel, MaddoxCharacterModel, MaddoxNpcModel, type IMaddoxCampaign, type IMaddoxCharacter, type IMaddoxNpc } from "../models"
@@ -405,9 +408,15 @@ export const MADDOX_MASTER_TOOLS: readonly MaddoxMasterTool[] = [
             motivo: z.string().min(1).describe("Por que os PV mudam, curto (os jogadores leem)"),
         }),
         async execute(context, input) {
-            const { changeCharacterHitPoints, HitPointsError } = await import("./hit-points")
+            const [{ changeCharacterHitPoints, HitPointsError }, { questionRun }] = await Promise.all([import("./hit-points"), import("./question-runs")])
+            // DND-51: no "Pergunte ao mestre", vale também no combate tático, só para o personagem de quem perguntou (o dono, qualquer um).
+            const run = questionRun(context.jobId)
+            if (run && !run.askerIsOwner) {
+                const own = run.askerCharacterId ? await MaddoxCharacterModel.findById(run.askerCharacterId).select("name").lean<{ name: string }>() : null
+                if (!own || keyOf(own.name) !== keyOf(input.personagem)) throw new MaddoxToolError("Quem perguntou só pode corrigir os PV do próprio personagem.")
+            }
             try {
-                const result = await changeCharacterHitPoints({ campaignId: context.campaignId, characterName: input.personagem, operation: input.operacao, dice: input.dados ?? null, value: input.valor ?? null, hitDice: input.dadosDeVida ?? null, reason: clip(input.motivo, MADDOX_TOOL_NAME_MAX * 2), turnNumber: context.turnNumber, origin: "narrator" })
+                const result = await changeCharacterHitPoints({ campaignId: context.campaignId, characterName: input.personagem, operation: input.operacao, dice: input.dados ?? null, value: input.valor ?? null, hitDice: input.dadosDeVida ?? null, reason: clip(input.motivo, MADDOX_TOOL_NAME_MAX * 2), turnNumber: context.turnNumber, origin: run ? "question" : "narrator", requestedBy: run?.askerUserId ?? null })
                 return { saved: true, personagem: result.characterName, pv: `${result.after}/${result.hpMax}`, antes: result.before }
             } catch (error) {
                 if (error instanceof HitPointsError) throw new MaddoxToolError(error.message)
@@ -1184,8 +1193,59 @@ export const MADDOX_OPEX_NPC_TOOLS: readonly MaddoxMasterTool[] = [
     }),
 ]
 
+/**
+ * DND-51: leitura e correção da ficha pelo "Pergunte ao mestre". Só oferecidas na resposta a uma pergunta (graus com
+ * ficha) e só funcionam dentro do job dela (`questionRun`).
+ */
+async function questionSheetCall<T>(work: (tools: typeof import("./question-sheet-tools")) => Promise<T>): Promise<T> {
+    const tools = await import("./question-sheet-tools")
+    try {
+        return await work(tools)
+    } catch (error) {
+        if (error instanceof tools.QuestionSheetError) throw new MaddoxToolError(error.message)
+        throw error
+    }
+}
+
+export const MADDOX_SHEET_FIX_TOOLS: readonly MaddoxMasterTool[] = [
+    define({
+        name: MADDOX_SHEET_FIX_TOOL_NAMES[0],
+        description: "Lê a ficha inteira de um personagem jogador (atributos, atributo de conjuração, ataques, itens, características, talentos, magias, recursos, com os ids) e as opções de combate que ela gera. Use antes de corrigir.",
+        readOnly: true,
+        input: z.object({ personagem: z.string().min(1).describe("Nome do personagem jogador") }),
+        async execute(context, input) {
+            return questionSheetCall((tools) => tools.readCharacterSheet(context.jobId, input.personagem))
+        },
+    }),
+    define({
+        name: MADDOX_SHEET_FIX_TOOL_NAMES[1],
+        description: "Lê o que a entrevista do personagem registrou: as escolhas gravadas (raça, classe, talentos, truques, magias, atributo de conjuração) e as falas do jogador na entrevista (onde ele disse o que escolheu).",
+        readOnly: true,
+        input: z.object({ personagem: z.string().min(1).describe("Nome do personagem jogador") }),
+        async execute(context, input) {
+            return questionSheetCall((tools) => tools.readCharacterInterview(context.jobId, input.personagem))
+        },
+    }),
+    define({
+        name: MADDOX_SHEET_FIX_TOOL_NAMES[2],
+        description: [
+            "Corrige a ficha de um personagem jogador pela lista fechada de alterações (cada uma é conferida sozinha; uma recusada não derruba as outras). Cada alteração tem \"type\", os campos dela e \"reason\" (motivo curto, os jogadores leem).",
+            ...SHEET_CHANGE_CONTRACT.slice(1),
+            "Os PV mudam com update_character_hit_points. O retorno diz o que foi aplicado, o que foi recusado e por quê.",
+        ].join("\n"),
+        readOnly: false,
+        input: z.object({
+            personagem: z.string().min(1).describe("Nome do personagem jogador"),
+            alteracoes: z.array(z.record(z.string(), z.unknown())).min(1).describe("Alterações da lista fechada"),
+        }),
+        async execute(context, input) {
+            return questionSheetCall((tools) => tools.updateCharacterSheetFromQuestion(context.jobId, { personagem: input.personagem, alteracoes: input.alteracoes }))
+        },
+    }),
+]
+
 /** Todas as ferramentas do narrador (persistência, testes, combate, a vez dos adversários, a imagem da cena e as sugestões de ação). */
-export const MADDOX_NARRATOR_TOOLS: readonly MaddoxMasterTool[] = [...MADDOX_MASTER_TOOLS, ...MADDOX_COMBAT_TOOLS, ...MADDOX_TACTICAL_TOOLS, ...MADDOX_SCENE_IMAGE_TOOLS, ...MADDOX_ACTION_OPTIONS_TOOLS, ...MADDOX_OPEX_NPC_TOOLS]
+export const MADDOX_NARRATOR_TOOLS: readonly MaddoxMasterTool[] = [...MADDOX_MASTER_TOOLS, ...MADDOX_COMBAT_TOOLS, ...MADDOX_TACTICAL_TOOLS, ...MADDOX_SCENE_IMAGE_TOOLS, ...MADDOX_ACTION_OPTIONS_TOOLS, ...MADDOX_OPEX_NPC_TOOLS, ...MADDOX_SHEET_FIX_TOOLS]
 
 export function findMaddoxTool(name: string): MaddoxMasterTool | undefined {
     return MADDOX_NARRATOR_TOOLS.find((tool) => tool.name === name)
@@ -1217,7 +1277,7 @@ export const MADDOX_CHECK_TOOL_NAME = "request_check"
  * imagem da cena (Maddox 10); `actionOptions: false` tira a das sugestões de ação (DND-30); `opexNpcs: false` tira a consulta
  * aos NPCs Opex (DND-27; respostas a perguntas).
  */
-export async function buildMaddoxAiTools(context: MaddoxToolContext, options: { checks?: boolean; combat?: boolean; tactical?: boolean; sceneImages?: boolean; actionOptions?: boolean; opexNpcs?: boolean } = {}): Promise<ToolSet> {
+export async function buildMaddoxAiTools(context: MaddoxToolContext, options: { checks?: boolean; combat?: boolean; tactical?: boolean; sceneImages?: boolean; actionOptions?: boolean; opexNpcs?: boolean; sheetFix?: boolean } = {}): Promise<ToolSet> {
     const { dynamicTool } = await import("ai")
     const tools: ToolSet = {}
     for (const def of MADDOX_NARRATOR_TOOLS) {
@@ -1227,13 +1287,28 @@ export async function buildMaddoxAiTools(context: MaddoxToolContext, options: { 
         if (def.name === MADDOX_SCENE_IMAGE_TOOL_NAME && !options.sceneImages) continue
         if (def.name === MADDOX_ACTION_OPTIONS_TOOL_NAME && !options.actionOptions) continue
         if (def.name === MADDOX_OPEX_NPC_CONSULT_TOOL_NAME && !options.opexNpcs) continue
+        if ((MADDOX_SHEET_FIX_TOOL_NAMES as readonly string[]).includes(def.name) && !options.sheetFix) continue
         tools[def.name] = dynamicTool({
             description: def.description,
             inputSchema: def.input,
             execute: async (input: unknown) => runMaddoxTool(def, context, input),
         })
     }
-    // Consulta ao catálogo (só leitura), em todos os graus.
-    const { buildCatalogAiTools } = await import("./catalog-tools")
-    return { ...tools, ...(await buildCatalogAiTools()) }
+    // Consulta ao catálogo (só leitura), em todos os graus. DND-51: na resposta a uma pergunta, cada leitura entra no
+    // registro do job (fonte das correções da ficha).
+    const [{ buildCatalogAiTools }, { catalogRunLog, recordCatalogToolResult }, { jobCatalogRunId }] = await Promise.all([import("./catalog-tools"), import("./catalog-reads"), import("./question-runs")])
+    const runLog = () => (context.jobId ? catalogRunLog(jobCatalogRunId(context.jobId)) : null)
+    return {
+        ...tools,
+        ...(await buildCatalogAiTools({
+            onResult: (_tool, output) => {
+                const log = runLog()
+                if (log) recordCatalogToolResult(log, output)
+            },
+            onError: (tool) => {
+                const log = runLog()
+                if (log && tool === MADDOX_CATALOG_TOOL_NAMES.get) log.failures += 1
+            },
+        })),
+    }
 }

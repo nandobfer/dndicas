@@ -32,7 +32,9 @@ export interface HitPointsRequest {
     reason: string
     turnNumber: number
     /** `narrator`: ferramenta do narrador (recusada no combate tático ativo); `combat-open`: checagem antes da iniciativa. */
-    origin: "narrator" | "combat-open"
+    origin: "narrator" | "combat-open" | "question"
+    /** DND-51: quem pediu pelo "Pergunte ao mestre" (vai na auditoria). */
+    requestedBy?: string | null
 }
 
 export interface HitPointsResult {
@@ -118,12 +120,12 @@ export async function changeCharacterHitPoints(request: HitPointsRequest): Promi
     const { publishPatched } = await import("./combat-sheet")
     await publishPatched(String(sheet._id))
     await recordAudit({
-        userId: campaign.ownerId,
+        userId: request.requestedBy ?? campaign.ownerId,
         entidade: MADDOX_SHEET_AUDIT_ENTITY,
         entidadeId: String(sheet._id),
         acao: AcaoAuditoria.ATUALIZAR,
         antes: { hpCurrent: current.hp, hpTemp: current.tempHp, deathSaves: { success: current.deathSuccess, failure: current.deathFailure }, hitDiceUsed: current.hitDiceUsed },
-        depois: { by: "maddox", origin: request.origin === "narrator" ? "narrator-hit-points" : "combat-open-hit-points", campaign: String(request.campaignId), character: character.name, operation: request.operation, reason, ...(rolled ? { rolled } : {}), hpCurrent: next.hp, hpTemp: next.tempHp, deathSaves: { success: next.deathSuccess, failure: next.deathFailure }, hitDiceUsed: next.hitDiceUsed },
+        depois: { by: "maddox", origin: request.origin === "narrator" ? "narrator-hit-points" : request.origin === "question" ? "question-hit-points" : "combat-open-hit-points", requestedBy: request.requestedBy ?? null, campaign: String(request.campaignId), character: character.name, operation: request.operation, reason, ...(rolled ? { rolled } : {}), hpCurrent: next.hp, hpTemp: next.tempHp, deathSaves: { success: next.deathSuccess, failure: next.deathFailure }, hitDiceUsed: next.hitDiceUsed },
     })
     // Na abertura do combate (fase de iniciativa), o estado do personagem no combate acompanha a ficha.
     if (combat) {

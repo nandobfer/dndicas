@@ -78,8 +78,8 @@ export interface SheetWriteContext {
     /** Jogador que pediu o ajuste (`null` na preparação automática). */
     requestedBy?: string | null
     characterName: string
-    /** Origem: preparação do combate ou pedido de ajuste. */
-    origin: "combat-prep" | "combat-adjust"
+    /** Origem: preparação do combate, pedido de ajuste ou "Pergunte ao mestre" (DND-51). */
+    origin: "combat-prep" | "combat-adjust" | "question"
 }
 
 export interface SheetWriteResult {
@@ -108,12 +108,12 @@ export async function applySheetChanges(changes: readonly CombatSheetChange[], c
     const m = await models()
     const sheetObjectId = new Types.ObjectId(context.sheetId)
     let sheetTouched = false
-    const collectionEvents: { name: CharacterSheetCollectionName; action: "created" | "updated" | "deleted"; recordId: string }[] = []
+    const collectionEvents: SheetEvent[] = []
 
     for (const change of changes) {
         let outcome: Outcome = null
         try {
-            outcome = await applyOne(change, sheetObjectId, m, result.created)
+            outcome = await applyOne(change, sheetObjectId, m, result.created, collectionEvents)
         } catch (error) {
             log.warn({ err: error instanceof Error ? error.message : String(error), sheetId: context.sheetId, type: change.type }, "[maddox] falha ao gravar uma correção na ficha")
             outcome = { label: describeSheetChange(change), before: "—", after: "—", applied: false }
@@ -166,12 +166,40 @@ export function describeSheetChange(change: CombatSheetChange): string {
             return "Anotação da ficha"
         case "weapon-mastery":
             return `Maestria de arma (${masteryLabel(change.mastery)})`
+        case "spell-add":
+            return "Magia acrescentada"
+        case "spell-remove":
+            return "Magia removida"
+        case "trait-remove":
+            return "Característica removida"
+        case "feat-remove":
+            return "Talento removido"
+        case "item-add":
+            return `Item ${change.name ?? "acrescentado"}`
+        case "item-remove":
+            return "Item removido"
+        case "item-quantity":
+            return "Quantidade do item"
     }
 }
 
+/** Bônus de ataque mágico da ficha (atributo de conjuração + proficiência), para os ataques automáticos dos truques. */
+async function spellAttackBonusOf(sheet: Record<string, unknown>): Promise<{ bonus: number; level: number }> {
+    const { getProficiencyBonus } = await import("@/features/character-sheets/utils/dnd-calculations")
+    const level = Math.max(1, Number(sheet.level) || 1)
+    const prof = getProficiencyBonus(level, null).value
+    const attribute = typeof sheet.spellcastingAttribute === "string" ? sheet.spellcastingAttribute : null
+    const score = attribute ? Number(sheet[attribute]) || 10 : 10
+    return { bonus: prof + Math.floor((score - 10) / 2), level }
+}
+
+const AUTO_SPELL_PREFIX = "auto:spell:"
+
 type Models = Awaited<ReturnType<typeof models>>
 
-async function applyOne(change: CombatSheetChange, sheetId: Types.ObjectId, m: Models, created: Map<string, string>): Promise<Outcome> {
+type SheetEvent = { name: CharacterSheetCollectionName; action: "created" | "updated" | "deleted"; recordId: string }
+
+async function applyOne(change: CombatSheetChange, sheetId: Types.ObjectId, m: Models, created: Map<string, string>, extra: SheetEvent[]): Promise<Outcome> {
     const label = describeSheetChange(change)
     const sheet = await m.CharacterSheet.findById(sheetId).lean<Record<string, unknown> & { _id: Types.ObjectId }>()
     if (!sheet) return { label, before: "—", after: "—", applied: false }
@@ -205,7 +233,9 @@ async function applyOne(change: CombatSheetChange, sheetId: Types.ObjectId, m: M
         case "spellcasting-attribute": {
             const before = (sheet.spellcastingAttribute as string | null | undefined) ?? null
             if (before === change.attribute) return null
-            return { label, before: before ? abilityLabel(before) : "nenhum", after: change.attribute ? abilityLabel(change.attribute) : "nenhum", applied: await setIf("spellcastingAttribute", before, change.attribute), sheet: true }
+            const applied = await setIf("spellcastingAttribute", before, change.attribute)
+            if (applied) await refreshAutoSpellAttacks(sheetId, m, extra)
+            return { label, before: before ? abilityLabel(before) : "nenhum", after: change.attribute ? abilityLabel(change.attribute) : "nenhum", applied, sheet: true }
         }
         case "spell-slots": {
             const slots = (sheet.spellSlots as Record<string, { total: number; used: number }> | undefined) ?? {}
@@ -312,6 +342,86 @@ async function applyOne(change: CombatSheetChange, sheetId: Types.ObjectId, m: M
             const updated = await m.CharacterSheet.updateOne({ _id: sheetId, [change.field]: before === "" ? { $in: ["", null] } : before }, { $set: { [change.field]: after } })
             return { label, before: "—", after: change.text, applied: updated.modifiedCount > 0, sheet: true }
         }
+        case "spell-add": {
+            if (!Types.ObjectId.isValid(change.catalogSpellId)) return { label, before: "—", after: "—", applied: false }
+            const catalogId = new Types.ObjectId(change.catalogSpellId)
+            const [{ Spell }, { catalogSpellDoc }, rules] = await Promise.all([import("@/features/spells/models/spell"), import("./sheet-builder"), import("@/features/character-sheets/utils/sheet-rules")])
+            const spell = await (Spell as unknown as { findOne: (q: unknown) => { lean: <T>() => Promise<T | null> } }).findOne({ _id: catalogId }).lean<Parameters<typeof catalogSpellDoc>[2] & { baseDice?: { quantidade: number; tipo: string } }>()
+            if (!spell) return { label, before: "—", after: "—", applied: false }
+            const name = `Magia ${spell.name}`
+            if (await m.CharacterSpell.exists({ sheetId, catalogSpellId: catalogId })) return null
+            const doc = await m.CharacterSpell.create({ ...catalogSpellDoc(sheetId, spell.name, spell), prepared: change.prepared })
+            const circleText = spell.circle === 0 ? "truque" : `${spell.circle}º círculo`
+            const outcome: NonNullable<Outcome> = { label: name, before: "não existia", after: `${circleText}${spell.circle ? (change.prepared ? " · preparada" : " · não preparada") : ""}`, applied: true, collection: { name: "spells", action: "created", recordId: String(doc._id) } }
+            // Truque com dano: o ataque automático da ficha, como na criação pela entrevista.
+            if (spell.circle === 0 && spell.baseDice && !(await m.CharacterAttack.exists({ sheetId, notes: rules.getAutoSpellAttackNotes(String(spell._id)) }))) {
+                const { bonus, level } = await spellAttackBonusOf(sheet)
+                const attack = await m.CharacterAttack.create({ sheetId, name: catalogSpellDoc(sheetId, spell.name, spell).name, ...rules.buildSpellAttackAutofill(spell as never, { spellAttackBonus: { value: bonus } }, level), notes: rules.getAutoSpellAttackNotes(String(spell._id)) })
+                extra.push({ name: "attacks", action: "created", recordId: String(attack._id) })
+            }
+            return outcome
+        }
+        case "spell-remove": {
+            if (!Types.ObjectId.isValid(change.spellId)) return { label, before: "—", after: "removida", applied: false }
+            const current = await m.CharacterSpell.findOneAndDelete({ _id: new Types.ObjectId(change.spellId), sheetId }).lean<{ _id: Types.ObjectId; name: string; circle: number | null; catalogSpellId?: Types.ObjectId | null }>()
+            if (!current) return { label, before: "—", after: "removida", applied: false }
+            if (current.catalogSpellId) {
+                const attack = await m.CharacterAttack.findOneAndDelete({ sheetId, notes: `${AUTO_SPELL_PREFIX}${String(current.catalogSpellId)}` }).lean<{ _id: Types.ObjectId }>()
+                if (attack) extra.push({ name: "attacks", action: "deleted", recordId: String(attack._id) })
+            }
+            return { label: `Magia ${plainText(current.name)}`, before: current.circle === 0 ? "truque" : current.circle ? `${current.circle}º círculo` : "na ficha", after: "removida", applied: true, auditBefore: current, collection: { name: "spells", action: "deleted", recordId: String(current._id) } }
+        }
+        case "trait-remove":
+        case "feat-remove": {
+            const Model = (change.type === "trait-remove" ? m.CharacterTrait : m.CharacterFeat) as unknown as typeof m.CharacterTrait
+            if (!Types.ObjectId.isValid(change.id)) return { label, before: "—", after: "removido", applied: false }
+            const current = await Model.findOneAndDelete({ _id: new Types.ObjectId(change.id), sheetId }).lean<{ _id: Types.ObjectId; name: string; description?: string }>()
+            if (!current) return { label, before: "—", after: "removido", applied: false }
+            const kind = change.type === "trait-remove" ? "Característica" : "Talento"
+            return { label: `${kind} ${plainText(current.name)}`, before: plainText(current.description ?? "").slice(0, 160) || plainText(current.name), after: "removido", applied: true, auditBefore: current, collection: { name: change.type === "trait-remove" ? "traits" : "feats", action: "deleted", recordId: String(current._id) } }
+        }
+        case "item-add": {
+            const { ItemModel } = await import("@/features/items/database/item")
+            const catalog = change.catalogItemId && Types.ObjectId.isValid(change.catalogItemId) ? await ItemModel.findOne({ _id: new Types.ObjectId(change.catalogItemId), status: "active" }).lean<{ _id: Types.ObjectId; name: string; type?: string; image?: string | null }>() : null
+            if (change.catalogItemId && !catalog) return { label, before: "—", after: "—", applied: false }
+            const name = catalog?.name ?? change.name
+            if (!name) return { label, before: "—", after: "—", applied: false }
+            const existing = catalog ? await m.CharacterItem.findOne({ sheetId, catalogItemId: catalog._id }).lean<{ _id: Types.ObjectId; quantity: number }>() : null
+            if (existing) {
+                const updated = await m.CharacterItem.updateOne({ _id: existing._id, quantity: existing.quantity }, { $inc: { quantity: change.quantity } })
+                return { label: `Item ${name}`, before: `qtd ${existing.quantity ?? 1}`, after: `qtd ${(existing.quantity ?? 1) + change.quantity}`, applied: updated.modifiedCount > 0, collection: { name: "items", action: "updated", recordId: String(existing._id) } }
+            }
+            const { mentionParagraphHtml } = await import("@/features/character-sheets/utils/sheet-rules")
+            const doc = await m.CharacterItem.create({ sheetId, catalogItemId: catalog?._id ?? null, name: catalog ? mentionParagraphHtml({ id: String(catalog._id), entityType: "Item", label: catalog.name }) : paragraph(name), image: catalog?.image ?? null, quantity: change.quantity, equipped: change.equipped, notes: "", catalogItemType: catalog?.type ?? null })
+            return { label: `Item ${name}`, before: "não existia", after: `qtd ${change.quantity}${change.equipped ? " · equipado" : ""}`, applied: true, collection: { name: "items", action: "created", recordId: String(doc._id) } }
+        }
+        case "item-remove": {
+            if (!Types.ObjectId.isValid(change.itemId)) return { label, before: "—", after: "removido", applied: false }
+            const current = await m.CharacterItem.findOneAndDelete({ _id: new Types.ObjectId(change.itemId), sheetId }).lean<{ _id: Types.ObjectId; name: string; quantity: number }>()
+            if (!current) return { label, before: "—", after: "removido", applied: false }
+            return { label: `Item ${plainText(current.name)}`, before: `qtd ${current.quantity ?? 1}`, after: "removido", applied: true, auditBefore: current, collection: { name: "items", action: "deleted", recordId: String(current._id) } }
+        }
+        case "item-quantity": {
+            if (!Types.ObjectId.isValid(change.itemId)) return { label, before: "—", after: "—", applied: false }
+            const current = await m.CharacterItem.findOne({ _id: new Types.ObjectId(change.itemId), sheetId }).lean<{ _id: Types.ObjectId; name: string; quantity: number }>()
+            if (!current) return { label, before: "—", after: "—", applied: false }
+            if ((current.quantity ?? 1) === change.quantity) return null
+            const updated = await m.CharacterItem.updateOne({ _id: current._id, quantity: current.quantity }, { $set: { quantity: change.quantity } })
+            return { label: `Quantidade de ${plainText(current.name)}`, before: String(current.quantity ?? 1), after: String(change.quantity), applied: updated.modifiedCount > 0, collection: { name: "items", action: "updated", recordId: String(current._id) } }
+        }
+    }
+}
+
+/** DND-51: o atributo de conjuração mudou — o bônus dos ataques automáticos dos truques acompanha. */
+async function refreshAutoSpellAttacks(sheetId: Types.ObjectId, m: Models, extra: SheetEvent[]) {
+    const sheet = await m.CharacterSheet.findById(sheetId).lean<Record<string, unknown>>()
+    if (!sheet) return
+    const { bonus } = await spellAttackBonusOf(sheet)
+    const attacks = await m.CharacterAttack.find({ sheetId, notes: { $regex: `^${AUTO_SPELL_PREFIX}` } }).select("_id attackBonus").lean<{ _id: Types.ObjectId; attackBonus: string }[]>()
+    for (const attack of attacks) {
+        if (attack.attackBonus === signed(bonus)) continue
+        await m.CharacterAttack.updateOne({ _id: attack._id }, { $set: { attackBonus: signed(bonus) } })
+        extra.push({ name: "attacks", action: "updated", recordId: String(attack._id) })
     }
 }
 

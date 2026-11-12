@@ -120,7 +120,7 @@ export interface IMaddoxCampaignMessage {
      * Card privado "Sua mesa está pronta" (`kind: "combat-prep"`, DND-41): só o dono do personagem (`memberId`) o recebe.
      * `content` fica vazio (fora da transcrição do narrador e do Diário).
      */
-    combatPrep: { combatId: Types.ObjectId; actorKey: string; characterName: string; changes: CombatPrepChange[] } | null
+    combatPrep: { combatId: Types.ObjectId; actorKey: string; characterName: string; changes: CombatPrepChange[]; question?: { prepId: string; text: string; status: "awaiting" | "answered" | "expired"; answer: string | null; deadline: Date } | null } | null
     /** Linha de aviso da volta a um turno (DND-44, `kind: "rewind"`): ida ao turno X ou retomada do turno N. */
     rewindNotice?: { event: "goto" | "resume"; turnNumber: number; originTurn: number } | null
     /** Descartada por uma volta pendente (DND-44): some de todas as leituras (`discard-filter.ts`). */

@@ -1915,6 +1915,67 @@ fica como estava, o início é liberado para ele e **só o dono** vê o aviso **
 e no banco, nunca no DTO. Ajuste `pending` sem execução viva é retomado na leitura do detalhe; preso há mais de
 `MADDOX_SHEET_RESTORE_STALE_MS` (10 min), vira falha. Personagem sem ficha (graus narrativos) só tem condição e status zerados.
 
+**Escolhas da entrevista (DND-51).** O ajuste nunca remove magias, talentos e características (nem o ataque automático de um
+truque, `notes: "auto:spell:<id>"`) cujo nome aparece no que a entrevista registrou — a conversa inteira, as escolhas do `build` e
+os textos de características da referência (`interviewCorpusOf`, comparação normalizada em `choseInInterview`) — e nunca troca o
+atributo de conjuração por "nenhum" quando a referência não o registra. O caso que motivou a regra: a entrevista de uma Ladina
+yuan-ti com Iniciado em Magia não conseguia gravar as magias (só as de classe eram aceitas), a ficha as recebeu depois e o ajuste
+as apagou por "não constar na referência".
+
+## Pergunte ao mestre corrige a campanha (DND-51)
+
+O "Pergunte ao mestre" é o canal de correção: nos graus com ficha, a resposta à pergunta recebe as ferramentas de leitura e
+correção da ficha (`MADDOX_SHEET_FIX_TOOL_NAMES`, em `MADDOX_SHEET_FIX_TOOLS` de `server/master-tools.ts`, implementadas em
+`server/question-sheet-tools.ts`) e as regras fixas `MADDOX_SHEET_FIX_TASK_RULES` na tarefa (`narrator-prompt.ts`):
+
+| Ferramenta | O que faz |
+| --- | --- |
+| `get_character_sheet` | A ficha inteira com os ids (o mesmo texto da preparação, `loadPrepSheet`) e as opções de combate que ela gera |
+| `get_character_interview` | As escolhas gravadas na entrevista (`buildSummary`, com `magiasExtras` e `atributoConjuracao`), as falas do jogador e a síntese final |
+| `update_character_sheet` | A lista fechada `combatSheetChangeSchema` (atributos, atributo de conjuração, espaços, cargas, ataques, características e talentos — incluir, corrigir e remover —, magias — `spell-add` pelo catálogo, com o ataque do truque, `spell-update`, `spell-remove` —, itens — `item-add`, `item-equip`, `item-quantity`, `item-remove` —, maestria e anotações), sem limite de alterações por chamada |
+| `update_character_hit_points` | PV (vale também no combate tático quando vem de uma pergunta, `origin: "question"`) |
+| `update_character_state` / `apply_effect` | Condição na história e efeitos no combate |
+
+- **Execução da pergunta** (`server/question-runs.ts`): `aiMaddoxMaster.answer` abre `openQuestionRun` para o job da resposta (fechado
+  no fim). As ferramentas só funcionam dentro dele. Quem perguntou corrige só o próprio personagem; o dono da campanha corrige
+  qualquer um. A auditoria (`FichaPersonagem`, `origin: "question"`) fica em nome de quem perguntou (`requestedBy`). A ficha aberta é
+  avisada em tempo real (`CharacterSheetPusherService`) e a mesa ganha a linha pública `kind: "sheet-change"` ("Ficha de X
+  corrigida:" e uma linha por alteração, com o motivo; `SheetChangeLine`), que entra na transcrição do narrador como `[ficha]`.
+- **Fonte do catálogo**: as leituras do catálogo do job entram no registro `job:<jobId>` (AI SDK pelos hooks de
+  `buildCatalogAiTools`; OpenCode pelo token de turno em `handleCatalog`). Correção de regra sem fonte lida é recusada, como na
+  preparação.
+- **Escolha do jogador** (`player-choice.ts`, `server/sheet-choice-rules.ts`): o atributo de conjuração de uma regra com lista
+  ("Inteligência, Sabedoria ou Carisma", `offersCastingAttributeChoice` no texto da fonte lida) e a magia escolhida de uma lista
+  (a regra não a nomeia, `ruleNamesSpell`) só passam com `choice.quote`. Esse trecho precisa estar numa mensagem do jogador (a
+  conversa da pergunta ou as falas dele na entrevista) e citar o valor gravado. Sem o trecho, a alteração é recusada com
+  `faltaEscolhaDoJogador` e a orientação de perguntar. Vale também na preparação do combate e no "Pedir ajuste". Magia nomeada
+  pela regra ("Você sabe Rajada de Veneno") não é escolha.
+- **Ida e volta**: uma nova pergunta do mesmo jogador no mesmo turno responde automaticamente à última resposta do Maddox a ele
+  (`replyToId`, `lastAnswerTo` em `game.ts`). A tarefa da resposta leva a conversa (`questionThread`, até 12 mensagens). Nada disso
+  gasta a Ação, fecha o turno ou repete o cabeçalho do turno (perguntas e respostas não abrem divisor).
+
+**Preparação do combate pergunta.** A resposta da revisão pode trazer `question: { text }`. Se o Maddox propõe uma escolha do
+jogador sem a escolha dele, o servidor faz a pergunta (`fallbackQuestion`). Nesse caso, nada é gravado: a preparação vai para
+`awaiting-player` (segura a ordem como `BLOCKING`; selo **"Pergunta ao jogador"**) e o card privado `combat-prep` mostra a pergunta,
+o campo de resposta e o prazo (`CombatPrepQuestionCard`). A resposta chega por `POST
+/api/maddox/campaigns/[id]/game/combat/preps/[prepId]/answer` (`{ text }`; responde o dono do personagem e, pelo Personagem Opex, o
+dono da campanha; auditada). A preparação volta para a fila com a resposta no prompt e sem nova pergunta. Sem resposta em
+`MADDOX_COMBAT_PREP_ANSWER_TIMEOUT_MS` (3 min; testes mudam `combatPrepTiming.answerMs`), a preparação conclui sem a escolha (o
+campo continua vazio) e o card avisa `MADDOX_COMBAT_PREP_EXPIRED_NOTICE`. Depois de um reinício do processo, o prazo vencido é
+conferido em `scheduleCombatPreps`.
+
+**Entrevista grava as magias da espécie e dos talentos.** `update_character_build` aceita `magiasExtras` (`[{ fonte, magia }]`,
+fonte = a espécie ou um talento do personagem; gravadas em `build.extraSpells`) e `atributoConjuracao` (a escolha do jogador, em
+`build.spellcastingAttribute`). O `faltando` cobra as magias da espécie e dos talentos que concedem magia e, havendo magia extra sem
+atributo da classe, o atributo de conjuração. A ficha (`computeCharacterSheet`) recebe essas magias, o ataque dos truques com dano
+e o atributo escolhido quando a classe não conjura.
+
+Testes: `question-sheet-fix.test.ts` (o pedido do relato aplicado e refletido nas opções de Ação, a recusa sem a escolha, a fonte,
+quem corrige quem, a leitura e a conversa), `player-choice.test.ts` (parte pura e operações novas), o bloco DND-51 de
+`tactical-combat.test.ts` (pergunta, resposta e prazo), de `game.test.ts` (conversa), de `interview-character-build.test.ts`
+(magias extras e atributo) e de `sheet-restore.test.ts` (o reinício mantém as escolhas) e, na tela, o bloco DND-51 de
+`maddox-combat-prep.test.tsx`.
+
 ## Testes
 
 `tests/backend/maddox/*` (configuração, roteiros, avatar, sessões, rotas, `campaigns.test.ts` com MongoDB em

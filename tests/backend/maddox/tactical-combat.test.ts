@@ -1172,6 +1172,72 @@ describe("DND-41 — a ordem de iniciativa espera a preparação da mesa", () =>
     })
 })
 
+describe("DND-51 — a preparação pergunta ao jogador quando falta uma escolha dele", () => {
+    const SERPENTINA = { name: "Conjuração Serpentina", description: "Você sabe Rajada de Veneno. Inteligência, Sabedoria, ou Carisma é sua habilidade de feitiços para esses feitiços (escolha quando selecionar esta corrida)." }
+    const SOURCE = { ref: "Habilidade:serpentina", quote: "Inteligência, Sabedoria, ou Carisma é sua habilidade de feitiços" }
+    const reviewFor = (answerQuote: (answer: string | null) => string | null) =>
+        combatPrepAi.review.mockImplementation(async (input) => {
+            if (input.characterName !== "Lyra") return { sheetChanges: [], modify: [], remove: [], add: [] }
+            readCatalog(input, "Habilidade", "serpentina", SERPENTINA)
+            const asked = (input as { question?: { text: string; answer: string | null } }).question
+            const quote = asked ? answerQuote(asked.answer) : null
+            // O Maddox "decide" Carisma sozinho na primeira passada; depois, usa o que o jogador respondeu.
+            return { sheetChanges: [{ type: "spellcasting-attribute", attribute: quote ? "wisdom" : "charisma", reason: "Conjuração Serpentina.", source: SOURCE, ...(quote ? { choice: { quote } } : {}) }], modify: [], remove: [], add: [] }
+        })
+
+    it("para com a pergunta (nada é gravado), segura a ordem e conclui com a resposta do jogador", async () => {
+        reviewFor((answer) => answer)
+        const { id, kael, lyra, cardOf } = await initiativeScene()
+        await rollInitiatives(id, { kael, lyra }, cardOf)
+        await settleCampaign(id)
+        const prep = (await prepsOf(id)).find((item) => item.characterName === "Lyra")!
+        expect(prep.status).toBe("awaiting-player")
+        expect(prep.question!.text).toMatch(/escolha sua/)
+        expect((await CharacterSheet.findById(lyra.sheetId).lean<{ spellcastingAttribute?: string | null }>())!.spellcastingAttribute ?? null).toBeNull()
+        expect((await MaddoxCombatModel.findOne({ campaignId: id }).lean())!.tactical!.phase).toBe("initiative")
+        const state = await game.getGameState(id, lyra.userId)
+        expect(state.combat!.tactical!.order.find((slot) => slot.name === "Lyra")!.prep).toEqual({ status: "asking" })
+        const card = state.messages.find((message) => message.kind === "combat-prep")!
+        expect(card.combatPrep!.question).toMatchObject({ prepId: String(prep._id), status: "awaiting", answer: null })
+        // Só o jogador do personagem responde.
+        await expect(combatPrep.answerCombatPrep(id, String(prep._id), "Sabedoria", kael.userId)).rejects.toMatchObject({ code: "FORBIDDEN" })
+        await combatPrep.answerCombatPrep(id, String(prep._id), "Quero Sabedoria", lyra.userId)
+        await combatPrep.waitForCombatPreps()
+        await settleCampaign(id)
+        expect((await CharacterSheet.findById(lyra.sheetId).lean<{ spellcastingAttribute: string }>())!.spellcastingAttribute).toBe("wisdom")
+        const done = (await MaddoxCombatPrepModel.findById(prep._id).lean())!
+        expect(done.status).toBe("ready")
+        expect(combatPrepAi.review).toHaveBeenLastCalledWith(expect.objectContaining({ characterName: "Lyra", question: expect.objectContaining({ answer: "Quero Sabedoria" }) }))
+        expect((await MaddoxCombatModel.findOne({ campaignId: id }).lean())!.tactical!.phase).toBe("running")
+        const after = (await game.getGameState(id, lyra.userId)).messages.find((message) => message.kind === "combat-prep" && message.combatPrep?.characterName === "Lyra")!
+        expect(after.combatPrep!.question).toMatchObject({ status: "answered", answer: "Quero Sabedoria" })
+        expect(after.combatPrep!.changes.some((change) => change.label === "Atributo de conjuração" && change.applied)).toBe(true)
+        await expect(combatPrep.answerCombatPrep(id, String(prep._id), "de novo", lyra.userId)).rejects.toMatchObject({ code: "PREP_NOT_ASKING" })
+    })
+
+    it("sem resposta no prazo, conclui sem a escolha (o atributo fica vazio) e avisa no card", async () => {
+        combatPrep.combatPrepTiming.answerMs = 40
+        try {
+            reviewFor(() => null)
+            const { id, kael, lyra, cardOf } = await initiativeScene()
+            await rollInitiatives(id, { kael, lyra }, cardOf)
+            await settleCampaign(id)
+            await new Promise((resolve) => setTimeout(resolve, 120))
+            await combatPrep.waitForCombatPreps()
+            await settleCampaign(id)
+            const prep = (await prepsOf(id)).find((item) => item.characterName === "Lyra")!
+            expect(prep.status).toBe("ready")
+            expect(prep.question!.expired).toBe(true)
+            expect((await CharacterSheet.findById(lyra.sheetId).lean<{ spellcastingAttribute?: string | null }>())!.spellcastingAttribute ?? null).toBeNull()
+            expect(prep.changes.some((change) => change.refused?.startsWith("Falta a escolha do jogador"))).toBe(true)
+            expect(prep.changes[0]).toMatchObject({ area: "aviso", reason: expect.stringMatching(/Pergunte ao mestre/) })
+            expect((await MaddoxCombatModel.findOne({ campaignId: id }).lean())!.tactical!.phase).toBe("running")
+        } finally {
+            combatPrep.combatPrepTiming.answerMs = 3 * 60_000
+        }
+    })
+})
+
 describe("DND-41 — pedido de ajuste na própria vez", () => {
     it("só o dono do personagem, só na vez dele, numa opção que existe e com a mesa preparada", async () => {
         const { id, kael, lyra, combatId } = await scene()

@@ -12,6 +12,7 @@ vi.mock("@/features/dice-roller/components/dice-roller-panel", () => ({ DiceRoll
 const { CombatActionBar, CombatWaitBar, combatMenuNotices } = await import("@/features/maddox/components/game/combat/CombatActionBar")
 const { InitiativeTracker } = await import("@/features/maddox/components/game/combat/InitiativeTracker")
 const { CombatPrepBlockedNotice, CombatPrepCard } = await import("@/features/maddox/components/game/combat/CombatCards")
+const { SheetChangeLine } = await import("@/features/maddox/components/game/SheetChangeLine")
 
 const option = (over: Partial<CombatOption>): CombatOption => ({ id: "x", category: "weapons", economy: "action", label: "X", detail: "", target: "enemy", multiTarget: false, resolution: "attack", ...over })
 const slot = (over: Partial<MaddoxTacticalCombatDto["order"][number]>): MaddoxTacticalCombatDto["order"][number] => ({ actorKey: "pc:x", kind: "character", side: "personagem", name: "X", portraitUrl: null, memberId: "m", initiative: null, active: false, hp: { current: 10, max: 10, temp: 0 }, band: null, conditions: [], concentration: null, defeated: false, dead: false, stable: false, dying: false, ...over })
@@ -184,5 +185,44 @@ describe("DND-41 — painel da vez: ajuste do Maddox, ataque furtivo e pedido de
         const menu = await screen.findByTestId("combat-menu")
         expect(within(menu).getByTestId("combat-menu-notices")).toHaveTextContent('Nenhuma ação bônus válida além de "Outra ação"')
         expect(combatMenuNotices("action", [option({ id: "unarmed" }), option({ id: "free", category: "other" })])).toEqual(["Sem armas equipadas: só o ataque desarmado.", "Nenhuma habilidade com custo de Ação na ficha."])
+    })
+})
+
+describe("DND-51 — a preparação pergunta ao jogador e a correção aparece na mesa", () => {
+    const base: MaddoxGameMessageDto = { id: "m1", turnNumber: 3, phase: "master", kind: "combat-prep", memberId: "m", characterName: "Nala", portraitUrl: null, content: "", replyToId: null, skippedByName: null, error: null, check: null, combat: null, createdAt: new Date().toISOString() }
+    const deadline = new Date(Date.now() + 180_000).toISOString()
+
+    it("card com a pergunta, o campo de resposta e o prazo; responder envia o texto", async () => {
+        const onAnswer = vi.fn(async () => undefined)
+        render(<CombatPrepCard message={{ ...base, combatPrep: { characterName: "Nala", changes: [], question: { prepId: "p1", text: "Qual atributo de conjuração você usa?", status: "awaiting", answer: null, deadline } } }} onAnswer={onAnswer} />)
+        expect(screen.getByTestId("combat-prep-question-text")).toHaveTextContent("Qual atributo de conjuração você usa?")
+        expect(screen.queryByText(/Sua mesa está pronta/)).not.toBeInTheDocument()
+        expect(screen.getByText(/o combate segue sem essa escolha/)).toBeInTheDocument()
+        const button = screen.getByTestId("combat-prep-answer")
+        expect(button).toBeDisabled()
+        fireEvent.change(screen.getByLabelText("Sua resposta ao mestre"), { target: { value: "Sabedoria" } })
+        await act(async () => fireEvent.click(button))
+        expect(onAnswer).toHaveBeenCalledWith("p1", "Sabedoria")
+    })
+
+    it("depois da resposta, o card da mesa pronta mostra a pergunta e o que o jogador respondeu (ou que o prazo venceu)", () => {
+        const { unmount } = render(<CombatPrepCard message={{ ...base, combatPrep: { characterName: "Nala", changes: [{ area: "ficha", label: "Atributo de conjuração", before: "nenhum", after: "Sabedoria", reason: "Sua escolha.", applied: true }], question: { prepId: "p1", text: "Qual atributo?", status: "answered", answer: "Sabedoria", deadline } } }} />)
+        expect(screen.getByText(/Sua mesa está pronta/)).toBeInTheDocument()
+        expect(screen.getByTestId("combat-prep-question-done")).toHaveTextContent("Sua resposta: Sabedoria")
+        unmount()
+        render(<CombatPrepCard message={{ ...base, combatPrep: { characterName: "Nala", changes: [], question: { prepId: "p1", text: "Qual atributo?", status: "expired", answer: null, deadline } } }} />)
+        expect(screen.getByTestId("combat-prep-question-done")).toHaveTextContent("Sem resposta no prazo.")
+    })
+
+    it('o selo "Pergunta ao jogador" na ordem e a linha pública da correção da ficha', () => {
+        render(
+            <>
+                <InitiativeTracker combat={{ ...preparing, order: [slot({ actorKey: "pc:nala", name: "Nala", prep: { status: "asking" } })] }} title="Emboscada" color="#3B82F6" />
+                <SheetChangeLine message={{ ...base, kind: "sheet-change", content: "Ficha de Nala corrigida:\n- Atributo de conjuração: nenhum → Sabedoria (Você escolheu Sabedoria.)\n- Magia Rajada de Veneno: não existia → truque" }} />
+            </>,
+        )
+        expect(screen.getByText("Pergunta ao jogador")).toBeInTheDocument()
+        expect(screen.getByTestId("sheet-change-line")).toHaveTextContent("Ficha de Nala corrigida:")
+        expect(screen.getAllByTestId("sheet-change-item").map((item) => item.textContent)).toEqual(["Atributo de conjuração: nenhum → Sabedoria (Você escolheu Sabedoria.)", "Magia Rajada de Veneno: não existia → truque"])
     })
 })

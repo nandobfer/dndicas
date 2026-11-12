@@ -69,6 +69,9 @@ const models = await import("@/features/maddox/models")
 const { MaddoxCampaignMemberModel, MaddoxCampaignModel, MaddoxCharacterModel, MaddoxCampaignSnapshotModel, MaddoxInterviewModel } = models
 const { CharacterSheet } = await import("@/features/character-sheets/models/character-sheet")
 const { CharacterItem } = await import("@/features/character-sheets/models/character-item")
+const { CharacterSpell } = await import("@/features/character-sheets/models/character-spell")
+const { CharacterAttack } = await import("@/features/character-sheets/models/character-attack")
+const { CharacterFeat } = await import("@/features/character-sheets/models/character-feat")
 const campaigns = await import("@/features/maddox/server/campaigns")
 const game = await import("@/features/maddox/server/game")
 const reset = await import("@/features/maddox/server/campaign-reset")
@@ -262,6 +265,45 @@ describe("ajuste pelo Maddox (sem cópia e sem retrato)", () => {
         expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({ entidade: "FichaPersonagem", depois: expect.objectContaining({ by: "maddox", origin: "campaign-reset", hpCurrent: 12 }) }))
         expect((await campaigns.getCampaignDetail(id, owner)).sheetRestores).toEqual([])
         expect((await settle(id, game.startCampaign(id, owner))).status).toBe("active")
+    })
+
+    it("DND-51: o ajuste nunca tira as escolhas da entrevista (magias, talentos, ataque do truque) nem apaga o atributo de conjuração", async () => {
+        const { id, owner, seats } = await withoutCopy(1)
+        const { sheetId, memberId } = seats[0]!
+        await MaddoxInterviewModel.updateOne(
+            { memberId },
+            {
+                $set: {
+                    messages: [
+                        { id: "a", role: "maddox", content: "Da espécie você já tem [Rajada de Veneno](#mention:Magia:1), e o [Iniciado em Magia](#mention:Talento:2) pede dois truques.", proposal: false },
+                        { id: "b", role: "user", content: "orientação e mensagem de truques", proposal: false },
+                    ],
+                },
+            },
+        )
+        await CharacterSheet.updateOne({ _id: sheetId }, { $set: { spellcastingAttribute: "wisdom" } })
+        const rajada = await CharacterSpell.create({ sheetId, name: "<p>Rajada de Veneno</p>", circle: 0, prepared: true })
+        const orientacao = await CharacterSpell.create({ sheetId, name: "<p>Orientação</p>", circle: 0, prepared: true })
+        const historia = await CharacterSpell.create({ sheetId, name: "<p>Bola de Fogo</p>", circle: 3, prepared: true })
+        const truque = await CharacterAttack.create({ sheetId, name: "<p>Rajada de Veneno</p>", attackBonus: "+5", damageType: "", notes: "auto:spell:abc" })
+        const talento = await CharacterFeat.create({ sheetId, name: "Iniciado em Magia", description: "<p>Dois truques.</p>" })
+        ai.response = () => ({
+            changes: [
+                { type: "remove", collection: "spells", id: String(rajada._id), reason: "Magia não consta na referência" },
+                { type: "remove", collection: "spells", id: String(orientacao._id), reason: "Magia não consta na referência" },
+                { type: "remove", collection: "spells", id: String(historia._id), reason: "aprendida na história" },
+                { type: "remove", collection: "attacks", id: String(truque._id), reason: "Ataque não consta na referência" },
+                { type: "remove", collection: "feats", id: String(talento._id), reason: "Talento não consta na referência" },
+                { type: "field", field: "spellcastingAttribute", reason: "volta ao da referência" },
+            ],
+        })
+        await reset.resetCampaign(id, owner)
+        await waitForCampaignIdle(id)
+        await restore.waitForSheetRestores()
+        expect((await CharacterSpell.find({ sheetId }).lean()).map((spell) => spell.name).sort()).toEqual(["<p>Orientação</p>", "<p>Rajada de Veneno</p>"])
+        expect(await CharacterAttack.exists({ _id: truque._id })).toBeTruthy()
+        expect(await CharacterFeat.exists({ _id: talento._id })).toBeTruthy()
+        expect((await CharacterSheet.findById(sheetId).lean())!.spellcastingAttribute).toBe("wisdom")
     })
 
     it("falha num personagem: a ficha dele fica como estava, os outros seguem e Tentar de novo refaz só ele", async () => {

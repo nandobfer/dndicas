@@ -19,7 +19,7 @@ import { actionOptionsView, combatBannerText, newestRewindNoticeId, composerBloc
 import { useMaddoxOpexTableActions } from "../../hooks/useMaddoxOpex"
 import { OpexFailureBanner } from "./OpexFailureBanner"
 import type { MaddoxCombatActionInput } from "../../combat-schemas"
-import { useCancelCombatAction, useChooseSneakAttack, useDecideReaction, useEndCombatTurn, useRequestCombatAdjustment, useRetryCombatPrep, useRollCombatStep, useSkipCombatPrep, useSubmitCombatAction } from "../../hooks/useMaddoxCombat"
+import { useCancelCombatAction, useChooseSneakAttack, useDecideReaction, useEndCombatTurn, useRequestCombatAdjustment, useAnswerCombatPrep, useRetryCombatPrep, useRollCombatStep, useSkipCombatPrep, useSubmitCombatAction } from "../../hooks/useMaddoxCombat"
 import { CombatActionBar, CombatWaitBar } from "./combat/CombatActionBar"
 import { InitiativeTracker } from "./combat/InitiativeTracker"
 import { CombatPrepBlockedNotice } from "./combat/CombatCards"
@@ -125,6 +125,7 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
     const combatEnd = useEndCombatTurn(state.campaignId)
     const combatRoll = useRollCombatStep(state.campaignId)
     const prepRetry = useRetryCombatPrep(state.campaignId)
+    const prepAnswer = useAnswerCombatPrep(state.campaignId)
     const prepSkip = useSkipCombatPrep(state.campaignId)
     const combatAdjust = useRequestCombatAdjustment(state.campaignId)
     const combatReact = useDecideReaction(state.campaignId)
@@ -295,6 +296,10 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
                             onSneakChoice: (actionId, add) => combatSneak.mutate({ id: actionId, add }),
                             sneakChoosing: combatSneak.isPending,
                             onDecideReaction: (reactionId, escolha) => combatReact.mutate({ id: reactionId, escolha }),
+                            answeringPrep: prepAnswer.isPending,
+                            onAnswerPrep: async (prepId, text) => {
+                                await prepAnswer.mutateAsync({ prepId, text })
+                            },
                         }}
                         actionOptions={optionsView ? { view: optionsView, busy: send.isPending, onPick: (option) => onSend({ kind: "declaration", content: option }) } : null}
                     />

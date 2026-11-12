@@ -161,7 +161,8 @@ export interface MaddoxTacticalSlotDto {
 
 /** Selo da preparação de um personagem: "Aguardando", "Preparando…", "Pronto" ou "Falhou". */
 export interface MaddoxCombatPrepSlotDto {
-    status: "waiting" | "preparing" | "ready" | "failed"
+    /** `asking` (DND-51): a preparação espera a resposta do jogador a uma pergunta. */
+    status: "waiting" | "preparing" | "asking" | "ready" | "failed"
 }
 
 /** DND-41: estado da preparação da mesa de combate. `failures` (com o motivo) só chega ao dono da campanha. */
@@ -255,6 +256,17 @@ export interface MaddoxCombatAdjustmentDto {
 export interface MaddoxCombatPrepCardDto {
     characterName: string
     changes: CombatPrepChange[]
+    /** DND-51: pergunta da preparação ao jogador (`awaiting` = esperando a resposta, com o campo no card). */
+    question?: MaddoxCombatPrepQuestionDto | null
+}
+
+export interface MaddoxCombatPrepQuestionDto {
+    prepId: string
+    text: string
+    status: "awaiting" | "answered" | "expired"
+    answer: string | null
+    /** ISO: depois disso a preparação segue sem a escolha. */
+    deadline: string
 }
 
 export interface MaddoxCombatRewardDto {

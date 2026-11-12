@@ -1,5 +1,5 @@
 import { memoriesSection } from "@/features/ai/memories-prompt"
-import { MADDOX_ACTION_OPTIONS_MAX, MADDOX_CATALOG_TOOL_NAMES, MADDOX_COMBAT_DIFFICULTY_DEFAULT, MADDOX_COMBAT_DIFFICULTY_LEVEL_DEFS, MADDOX_DEFAULT_DENSITY, MADDOX_DENSITY_LEVEL_DEFS, MADDOX_CHECK_RIGORS, MADDOX_CHECK_ROUNDS_MAX, MADDOX_COMBAT_LONG_TURNS, MADDOX_COMBAT_RIGORS, MADDOX_DECLARATION_VALIDATION_RIGORS, MADDOX_PROFILE_SECTIONS, MADDOX_SHEET_RIGORS, MADDOX_TACTICAL_COMBAT_RIGORS, MADDOX_TOOL_TEXT_GUIDE, MADDOX_WORLD_CATALOG_RIGORS, type MaddoxCampaignMemoryKind, type MaddoxCombatDifficultyLevel, type MaddoxDensityLevel, type MaddoxGameMessageKind, type MaddoxQuestStatus, type MaddoxRigorLevel, type MaddoxVisibility } from "../constants"
+import { MADDOX_ACTION_OPTIONS_MAX, MADDOX_CATALOG_TOOL_NAMES, MADDOX_COMBAT_DIFFICULTY_DEFAULT, MADDOX_COMBAT_DIFFICULTY_LEVEL_DEFS, MADDOX_DEFAULT_DENSITY, MADDOX_DENSITY_LEVEL_DEFS, MADDOX_CHECK_RIGORS, MADDOX_CHECK_ROUNDS_MAX, MADDOX_COMBAT_LONG_TURNS, MADDOX_COMBAT_RIGORS, MADDOX_DECLARATION_VALIDATION_RIGORS, MADDOX_PROFILE_SECTIONS, MADDOX_SHEET_FIX_TOOL_NAMES, MADDOX_SHEET_RIGORS, MADDOX_TACTICAL_COMBAT_RIGORS, MADDOX_TOOL_TEXT_GUIDE, MADDOX_WORLD_CATALOG_RIGORS, type MaddoxCampaignMemoryKind, type MaddoxCombatDifficultyLevel, type MaddoxDensityLevel, type MaddoxGameMessageKind, type MaddoxQuestStatus, type MaddoxRigorLevel, type MaddoxVisibility } from "../constants"
 import { CATALOG_CITATION_RULE, rigorBlock } from "./interview-prompt"
 import { checkSucceeded } from "../check-modifier"
 import { worldCatalogLines, type WorldCatalog } from "../world-catalog"
@@ -323,14 +323,14 @@ function memoriesBlock(memories: readonly NarratorMemory[]): string | null {
     return parts.join("\n")
 }
 
-export type NarratorToolMode = { kind: "ai-sdk" } | { kind: "mcp"; server: string; turnToken: string; checks?: boolean; combat?: boolean; tactical?: boolean; sceneImages?: boolean; actionOptions?: boolean; opexNpcs?: boolean }
+export type NarratorToolMode = { kind: "ai-sdk" } | { kind: "mcp"; server: string; turnToken: string; checks?: boolean; combat?: boolean; tactical?: boolean; sceneImages?: boolean; actionOptions?: boolean; opexNpcs?: boolean; sheetFix?: boolean }
 
 /** Bloco das ferramentas: na AI SDK elas vêm na chamada; no OpenCode, pelo MCP com o token de turno. */
 function toolsBlock(mode: NarratorToolMode): string | null {
     if (mode.kind === "ai-sdk") return null
     return [
         "## Ferramentas desta narração",
-        `- As ferramentas de anotações da campanha estão no servidor MCP \`${mode.server}\` (get_campaign_state, update_campaign_state, list_npcs, get_npc, save_npc, search_memories, save_memory, update_character_state, update_character_hit_points, resolve_reminder${mode.checks ? ", request_check" : ""}${mode.combat ? ", get_combat, start_combat, update_combat, end_combat" : ""}${mode.tactical ? ", monster_action, apply_effect, request_damage_roll, offer_reaction" : ""}${mode.sceneImages ? ", request_scene_image" : ""}${mode.actionOptions ? ", suggest_actions" : ""}, promover_npc_opex, desfazer_npc_opex, gravar_memoria_npc_opex${mode.opexNpcs ? ", consultar_npc_opex" : ""}, ${MADDOX_CATALOG_TOOL_NAMES.search}, ${MADDOX_CATALOG_TOOL_NAMES.get}).`,
+        `- As ferramentas de anotações da campanha estão no servidor MCP \`${mode.server}\` (get_campaign_state, update_campaign_state, list_npcs, get_npc, save_npc, search_memories, save_memory, update_character_state, update_character_hit_points, resolve_reminder${mode.checks ? ", request_check" : ""}${mode.combat ? ", get_combat, start_combat, update_combat, end_combat" : ""}${mode.tactical ? ", monster_action, apply_effect, request_damage_roll, offer_reaction" : ""}${mode.sceneImages ? ", request_scene_image" : ""}${mode.actionOptions ? ", suggest_actions" : ""}, promover_npc_opex, desfazer_npc_opex, gravar_memoria_npc_opex${mode.opexNpcs ? ", consultar_npc_opex" : ""}${mode.sheetFix ? `, ${MADDOX_SHEET_FIX_TOOL_NAMES.join(", ")}` : ""}, ${MADDOX_CATALOG_TOOL_NAMES.search}, ${MADDOX_CATALOG_TOOL_NAMES.get}).`,
         `- Em TODA chamada a essas ferramentas, envie o campo \`turno\` exatamente com este valor: \`${mode.turnToken}\`.`,
         "- Não use outras ferramentas (arquivos, terminal, web): a campanha vive só nessas anotações.",
     ].join("\n")
@@ -437,7 +437,17 @@ export function opexNpcDecisionLine(decision: NarratorOpexNpcDecision): string {
 export type NarratorTask =
     | { kind: "narration"; turnNumber: number; declarations: readonly NarratorDeclaration[]; combatHint?: "start" | "end" | null; tactical?: NarratorTacticalTask | null }
     | { kind: "continuation"; turnNumber: number; round: number; declarations: readonly NarratorDeclaration[]; results: readonly NarratorCheckResult[]; combatResults?: readonly string[]; tactical?: NarratorTacticalTask | null; lastRound?: boolean }
-    | { kind: "answer"; turnNumber: number; characterName: string; question: string; declarations: readonly NarratorDeclaration[] }
+    | {
+          kind: "answer"
+          turnNumber: number
+          characterName: string
+          question: string
+          declarations: readonly NarratorDeclaration[]
+          /** DND-51: a conversa da pergunta até aqui (perguntas e respostas anteriores), da mais antiga à atual, sem a pergunta atual. */
+          thread?: readonly { role: "player" | "maddox"; characterName: string | null; content: string }[]
+          /** DND-51: o Maddox pode ler e corrigir a ficha pelo "Pergunte ao mestre" (graus com ficha). */
+          sheetFix?: boolean
+      }
 
 const declarationLines = (declarations: readonly NarratorDeclaration[]) =>
     declarations.map((item) =>
@@ -595,12 +605,15 @@ function taskBody(task: NarratorTask): string {
         ].join("\n")
     }
     if (task.kind === "answer") {
+        const thread = task.thread ?? []
         return [
             `# Pergunta ao mestre (turno ${task.turnNumber}, turno dos jogadores)`,
+            ...(thread.length ? ["Conversa até aqui (esta pergunta continua a mesma conversa):", ...thread.map((entry) => (entry.role === "maddox" ? `- Maddox: ${entry.content.trim()}` : `- **${entry.characterName ?? task.characterName}**: ${entry.content.trim()}`)), ""] : []),
             `**${task.characterName}** pergunta: ${task.question.trim()}`,
             ...(task.declarations.length ? ["", "Declarações já feitas neste turno (ainda não resolvidas):", ...declarationLines(task.declarations)] : []),
             "",
             "Responda diretamente, em poucas frases, só com o que o personagem pode perceber, lembrar ou saber. NÃO avance a cena, não resolva declarações e não atribua ações a ninguém: o turno continua aberto. Se a resposta estabelecer um fato novo do mundo, grave-o.",
+            ...(task.sheetFix ? ["", MADDOX_SHEET_FIX_TASK_RULES] : []),
         ].join("\n")
     }
     if (task.declarations.length === 0 && task.tactical?.phase === "running") {
@@ -623,6 +636,18 @@ function taskBody(task: NarratorTask): string {
         "Narre o resultado dessas tentativas e as reações do mundo, desenvolva a situação e termine no próximo ponto de decisão. Depois grave o que mudou.",
     ].join("\n")
 }
+
+/**
+ * DND-51: o "Pergunte ao mestre" é o canal de correção da campanha. Regras fixas no código (valem com qualquer instrução
+ * salva na aba Agente Maddox).
+ */
+export const MADDOX_SHEET_FIX_TASK_RULES = [
+    "## Correções pedidas pelo jogador",
+    `Se o jogador pedir para corrigir a ficha, as ações, os PV ou o estado do personagem, CORRIJA de fato (não só narre): leia a ficha com \`${MADDOX_SHEET_FIX_TOOL_NAMES[0]}\` e o que ele escolheu na entrevista com \`${MADDOX_SHEET_FIX_TOOL_NAMES[1]}\`, consulte a regra no catálogo e grave com \`${MADDOX_SHEET_FIX_TOOL_NAMES[2]}\` (atributos, atributo de conjuração, truques e magias, ataques, talentos, características, itens, espaços de magia e cargas), \`update_character_hit_points\` (PV) e \`update_character_state\` (condição na história). Depois diga ao jogador, em uma ou duas frases, o que mudou.`,
+    "Toda correção de regra leva a fonte do catálogo (`source`: a entidade lida e o trecho exato dela).",
+    "NUNCA escolha pelo jogador o que a regra manda ele escolher (o atributo de conjuração de uma lista como \"Inteligência, Sabedoria ou Carisma\", os truques ou a magia escolhidos de uma lista). Grave a escolha só quando ele a disse, com o trecho literal da mensagem dele em `choice.quote`. Se ele ainda não disse, PERGUNTE e não grave: a resposta dele chega como uma nova pergunta nesta conversa.",
+    "Se faltar um dado para corrigir (qual truque, qual item, quanto), pergunte antes de gravar. A correção nunca gasta a Ação do personagem nem fecha o turno.",
+].join("\n")
 
 // ── Transcrição recente ────────────────────────────────────────────────────────
 
@@ -655,7 +680,7 @@ export function narratorTranscript(messages: readonly NarratorTranscriptMessage[
                         ? `[Turno ${message.turnNumber} — ${content}]`
                       : message.kind === "combat-action" || message.kind === "combat-roll" || message.kind === "combat-reaction"
                         ? `[Turno ${message.turnNumber} — combate] ${content}`
-                      : message.kind === "hit-points"
+                      : message.kind === "hit-points" || message.kind === "sheet-change"
                         ? `[Turno ${message.turnNumber} — ficha] ${content}`
                       : message.kind === "pass"
                         ? `[Turno ${message.turnNumber} — ${who} não fez nada]`

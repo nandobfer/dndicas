@@ -32,7 +32,7 @@ import {
     type SpellLimits,
     validateFeatAttributes,
 } from "../character-build-rules"
-import { MaddoxCampaignModel, MaddoxInterviewModel, type IMaddoxCampaign, type IMaddoxBuildRef, type IMaddoxCharacterBuild, type IMaddoxInterview } from "../models"
+import { MaddoxCampaignModel, MaddoxInterviewModel, type IMaddoxCampaign, type IMaddoxBuildRef, type IMaddoxCharacterBuild, type IMaddoxExtraSpell, type IMaddoxInterview } from "../models"
 import { submittedAbilityCard, submittedHitPointsCard } from "./interview-cards"
 
 /**
@@ -250,7 +250,7 @@ export async function loadBuildCatalog(build: IMaddoxCharacterBuild): Promise<Bu
     const featIds = [...build.feats.map((feat) => feat.id), build.fightingStyle?.id ?? null, background?.featId ?? null]
     const [feats, spells, items] = await Promise.all([
         byIds<CatalogFeat>("feat", featIds),
-        byIds<CatalogSpell>("spell", [...build.cantrips, ...build.spells].map((spell) => spell.id)),
+        byIds<CatalogSpell>("spell", [...build.cantrips, ...build.spells, ...(build.extraSpells ?? [])].map((spell) => spell.id)),
         byIds<CatalogItem>("item", build.equipment.map((item) => item.id)),
     ])
     const subclass = cls && build.subclass?.id ? findSubclass(cls, build.subclass.id) : null
@@ -323,6 +323,7 @@ export function missingItems(doc: Pick<IMaddoxInterview, "messages" | "build">, 
             if (rules.spells.prepared > build.spells.length) missing.push(`${plural(rules.spells.prepared - build.spells.length, "magia preparada", "magias preparadas")} (até o ${rules.spells.maxCircle}º círculo)`)
         }
     }
+    missing.push(...extraSpellsMissing(build, catalog))
     if (!build.equipment.length) missing.push("equipamento inicial")
     if (!build.languages.length) missing.push("idiomas")
     if (level && level > 1 && catalog.cls && !hitPointsSettled(doc, level, catalog.cls.hitDice)) missing.push(`pontos de vida dos níveis 2 a ${level} (card de PV: \`${MADDOX_INTERVIEW_TOOL_NAMES.hitPoints}\`)`)
@@ -351,6 +352,8 @@ export function buildSummary(doc: Pick<IMaddoxInterview, "messages" | "build">, 
         talentos: build.feats.map((feat) => ({ nivel: feat.level, talento: feat.name, atributos: Object.fromEntries(Object.entries(feat.attributes).map(([key, value]) => [MADDOX_ABILITY_LABELS[key as AttributeType], value])) })),
         truques: build.cantrips.map((spell) => spell.name),
         magias: build.spells.map((spell) => spell.name),
+        magiasExtras: (build.extraSpells ?? []).map((spell) => ({ magia: spell.name, fonte: spell.source.name, circulo: spell.circle })),
+        atributoConjuracao: build.spellcastingAttribute ? MADDOX_ABILITY_LABELS[build.spellcastingAttribute] : null,
         equipamento: build.equipment.map((item) => ({ item: `${item.name}${item.id ? "" : " (fora do catálogo)"}`, quantidade: item.quantity, equipado: item.equipped })),
         moedas: { po: build.coins.gp, pp: build.coins.sp, pc: build.coins.cp, pe: build.coins.ep, pl: build.coins.pp },
         idiomas: build.languages,
@@ -384,6 +387,8 @@ export async function buildStatusText(doc: Pick<IMaddoxInterview, "messages" | "
         summary.talentos.length ? `talentos ${summary.talentos.map((feat) => `${feat.talento} (nível ${feat.nivel})`).join(", ")}` : null,
         summary.truques.length ? `truques ${summary.truques.join(", ")}` : null,
         summary.magias.length ? `magias ${summary.magias.join(", ")}` : null,
+        summary.magiasExtras.length ? `magias da espécie e dos talentos ${summary.magiasExtras.map((spell) => `${spell.magia} (${spell.fonte})`).join(", ")}` : null,
+        summary.atributoConjuracao ? `atributo de conjuração ${summary.atributoConjuracao}` : null,
         summary.equipamento.length ? `${summary.equipamento.length} itens de equipamento` : null,
         summary.idiomas.length ? `idiomas ${summary.idiomas.join(", ")}` : null,
     ].filter(Boolean)
@@ -411,6 +416,12 @@ export const updateBuildInput = z.object({
         .describe("Talentos por nível de talento da classe (substitui a lista)"),
     truques: z.array(ref).max(10).optional().describe("Truques (substitui a lista)"),
     magias: z.array(ref).max(30).optional().describe("Magias preparadas (substitui a lista)"),
+    magiasExtras: z
+        .array(z.object({ fonte: ref.describe("A espécie ou o talento que concede a magia (id ou nome)"), magia: ref.describe("A magia (id ou nome)") }))
+        .max(20)
+        .optional()
+        .describe("Magias que não vêm da classe: as da espécie e as dos talentos (ex.: os truques e a magia do Iniciado em Magia). Substitui a lista"),
+    atributoConjuracao: z.enum(["Inteligência", "Sabedoria", "Carisma"]).optional().describe("Atributo de conjuração que o JOGADOR escolheu quando a espécie ou o talento oferece a escolha"),
     equipamento: z
         .array(z.object({ item: ref, quantidade: z.number().int().min(1).max(999).optional(), equipado: z.boolean().optional() }))
         .max(MADDOX_BUILD_EQUIPMENT_MAX)
@@ -613,6 +624,27 @@ export async function applyBuildInput(doc: Pick<IMaddoxInterview, "messages" | "
         }
         return out
     }
+    if (input.magiasExtras !== undefined) {
+        const extra: IMaddoxExtraSpell[] = []
+        const sources = extraSpellSources(next, withSub)
+        for (const entry of input.magiasExtras) {
+            const wanted = normalizeCatalogName(entry.fonte)
+            const source = sources.find((item) => item.id === entry.fonte.trim() || normalizeCatalogName(item.name) === wanted)
+            if (!source) {
+                errors.push(`Magia extra: “${entry.fonte}” não é a espécie nem um talento deste personagem (${sources.map((item) => item.name).join(", ") || "nenhum"}).`)
+                continue
+            }
+            const spell = await findCatalogEntity<CatalogSpell>("spell", entry.magia)
+            if (!spell) {
+                errors.push(`Magia extra “${entry.magia}” não está no catálogo.`)
+                continue
+            }
+            if (!extra.some((item) => item.id === String(spell._id))) extra.push({ id: String(spell._id), name: spell.name, circle: spell.circle, source })
+        }
+        next.extraSpells = extra
+    }
+    if (input.atributoConjuracao !== undefined) next.spellcastingAttribute = ABILITY_BY_LABEL[input.atributoConjuracao] ?? null
+
     const cantrips = await resolveSpells(input.truques, true)
     const spells = await resolveSpells(input.magias, false)
     if (cantrips) next.cantrips = cantrips
@@ -651,6 +683,34 @@ export async function applyBuildInput(doc: Pick<IMaddoxInterview, "messages" | "
     return { build: next, warnings, clearHitPoints }
 }
 
+/** Fontes das magias extras: a espécie e os talentos do personagem (o da origem, o estilo de luta e os de nível). */
+function extraSpellSources(build: IMaddoxCharacterBuild, catalog: BuildCatalog): IMaddoxExtraSpell["source"][] {
+    const out: IMaddoxExtraSpell["source"][] = []
+    if (build.race) out.push({ kind: "race", id: build.race.id, name: build.race.name })
+    if (catalog.originFeat) out.push({ kind: "feat", id: String(catalog.originFeat._id), name: catalog.originFeat.name })
+    for (const feat of [...build.feats, ...(build.fightingStyle ? [build.fightingStyle] : [])]) if (!out.some((item) => item.name === feat.name)) out.push({ kind: "feat", id: feat.id || null, name: feat.name })
+    return out
+}
+
+const grantsSpells = (text: string | undefined) => /\btruques?\b|\bmagias? de 1|\bvoc[eê] (sabe|conhece|aprende)\b/i.test(text ?? "")
+
+/**
+ * DND-51: a espécie ou um talento que concede magias (texto com "truque") e ainda não tem magia extra registrada; e o
+ * atributo de conjuração quando há magia extra sem atributo da classe.
+ */
+function extraSpellsMissing(build: IMaddoxCharacterBuild, catalog: BuildCatalog): string[] {
+    const extra = build.extraSpells ?? []
+    const missing: string[] = []
+    const raceText = (catalog.race?.traits ?? []).map((trait) => trait.description).join(" ")
+    if (catalog.race && grantsSpells(raceText) && !extra.some((spell) => spell.source.kind === "race")) missing.push(`magias da espécie ${catalog.race.name} (\`magiasExtras\`)`)
+    const feats = [catalog.originFeat, ...build.feats.map((feat) => (feat.id ? (catalog.feats.get(feat.id) ?? null) : null))].filter((feat): feat is CatalogFeat => Boolean(feat))
+    for (const feat of feats) {
+        if (grantsSpells((feat as CatalogFeat & { description?: string }).description) && !extra.some((spell) => spell.source.kind === "feat" && spell.source.name === feat.name)) missing.push(`magias do talento ${feat.name} (\`magiasExtras\`)`)
+    }
+    if (extra.length && !spellSource(catalog)?.attribute && !build.spellcastingAttribute) missing.push("atributo de conjuração das magias da espécie e dos talentos (escolha do jogador: `atributoConjuracao`)")
+    return missing
+}
+
 function validateFeatAttributesSafe(feat: CatalogFeat, parts: Partial<Record<AttributeType, number>>): string | null {
     return validateFeatAttributes(featAttributeRule(feat), parts, feat.name)
 }
@@ -687,6 +747,6 @@ export async function getCharacterBuild(context: BuildToolContext) {
 }
 
 export const BUILD_TOOL_DESCRIPTIONS = {
-    update: `Grava as escolhas da ficha do personagem (só o que vier; o resto fica). Valida contra o catálogo e devolve o que falta (\`faltando\`). Se algo for inválido, NADA é gravado e o erro traz o motivo e as opções. Use ids ou nomes do \`${MADDOX_CATALOG_TOOL_NAMES.search}\`. Listas (talentos, truques, magias, equipamento, idiomas, ferramentas) substituem as anteriores. Grave assim que o jogador confirmar cada escolha.`,
+    update: `Grava as escolhas da ficha do personagem (só o que vier; o resto fica). Valida contra o catálogo e devolve o que falta (\`faltando\`). Se algo for inválido, NADA é gravado e o erro traz o motivo e as opções. Use ids ou nomes do \`${MADDOX_CATALOG_TOOL_NAMES.search}\`. Listas (talentos, truques, magias, magias extras, equipamento, idiomas, ferramentas) substituem as anteriores. Magias da espécie e dos talentos (ex.: Iniciado em Magia) vão em \`magiasExtras\`, com a fonte; quando a espécie ou o talento manda escolher o atributo de conjuração, pergunte ao jogador e grave a escolha dele em \`atributoConjuracao\` (nunca escolha por ele). Grave assim que o jogador confirmar cada escolha.`,
     get: "Consulta as escolhas da ficha, as regras da classe no nível (perícias, subclasse, níveis de talento, magias, dado de vida) e o que falta. Use antes da síntese: ela só vale com `faltando` vazio.",
 }
