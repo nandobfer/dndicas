@@ -68,7 +68,7 @@ export function tacticalSnapshot(combat: TacticalCombat, hp: HpMap = new Map(), 
     }
 }
 
-const PREP_SLOT: Record<IMaddoxCombatPrep["status"], NonNullable<MaddoxTacticalSlotDto["prep"]>["status"] | null> = { pending: "waiting", running: "preparing", ready: "ready", skipped: "ready", failed: "failed", discarded: null }
+const PREP_SLOT: Record<IMaddoxCombatPrep["status"], NonNullable<MaddoxTacticalSlotDto["prep"]>["status"] | null> = { pending: "waiting", running: "preparing", "awaiting-player": "asking", ready: "ready", skipped: "ready", failed: "failed", discarded: null }
 
 /**
  * DND-41: selos da preparação na ordem e o estado geral. O motivo da falha (texto do provedor) só vai ao dono da
@@ -76,7 +76,7 @@ const PREP_SLOT: Record<IMaddoxCombatPrep["status"], NonNullable<MaddoxTacticalS
  */
 export function withPreparation(dto: MaddoxTacticalCombatDto, preps: readonly IMaddoxCombatPrep[], viewerIsOwner: boolean): MaddoxTacticalCombatDto {
     const relevant = preps.filter((prep) => prep.status !== "discarded")
-    const active = relevant.some((prep) => prep.status === "pending" || prep.status === "running" || prep.status === "failed")
+    const active = relevant.some((prep) => prep.status === "pending" || prep.status === "running" || prep.status === "awaiting-player" || prep.status === "failed")
     if (!active) return { ...dto, preparation: null }
     const byKey = new Map(relevant.map((prep) => [prep.actorKey, prep]))
     const failed = relevant.filter((prep) => prep.status === "failed")

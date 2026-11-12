@@ -15,6 +15,7 @@ import {
     MADDOX_SNEAK_ATTACK_CONSUMPTION_ORIGIN,
 } from "../constants"
 import { closeCatalogRun, openCatalogRun, recordCatalogToolResult, type CatalogReadLog } from "./catalog-reads"
+import { SHEET_CHANGE_CONTRACT, SHEET_CHANGE_SOURCE_FIELD as SOURCE_FIELD } from "../sheet-change-contract"
 
 /**
  * Chamadas de IA da preparação da mesa de combate (DND-41) — SOMENTE servidor. Usa o mesmo modelo do narrador no grau
@@ -47,25 +48,6 @@ export async function withTimeout<T>(ms: number, label: string, run: (signal: Ab
         if (timer) clearTimeout(timer)
     }
 }
-
-const SOURCE_FIELD = '"source":{"ref":"Tipo:id da entidade lida","quote":"trecho exato do texto dela"}'
-
-const SHEET_CHANGE_CONTRACT = [
-    '"sheetChanges": correções na ficha, cada uma com "type", os campos dela e "reason" (motivo curto, falando com o jogador, citando a regra e a fonte). Tipos permitidos:',
-    `  - {"type":"ability","attribute":"strength|dexterity|constitution|intelligence|wisdom|charisma","value":1-30,${SOURCE_FIELD}}`,
-    `  - {"type":"save-proficiency","attribute":"…","proficient":true|false,${SOURCE_FIELD}}`,
-    `  - {"type":"skill-proficiency","skill":"nome da perícia como na ficha","proficient":true|false,"expertise":true|false,${SOURCE_FIELD}}`,
-    `  - {"type":"spellcasting-attribute","attribute":"…"|null,${SOURCE_FIELD}}`,
-    `  - {"type":"spell-slots","circle":1-9,"total":0-9,${SOURCE_FIELD}}`,
-    `  - {"type":"charge-upsert","chargeId":"id existente (opcional)","name":"…","total":n,"used":n,${SOURCE_FIELD}}`,
-    `  - {"type":"attack-upsert","attackId":"id existente (opcional)","name":"…","attackBonus":n,"damage":{"quantity":n,"faces":4|6|8|10|12|20,"bonus":n,"type":"perfurante"},${SOURCE_FIELD}}`,
-    `  - {"type":"weapon-mastery","catalogItemId":"catalogItemId do item da ficha","mastery":"nick|vex|sap|topple|graze|push|slow|cleave",${SOURCE_FIELD}} (fonte = a característica de classe que dá a maestria, com o trecho do número de armas)`,
-    '  - {"type":"attack-remove","attackId":"id"}',
-    `  - {"type":"trait-upsert"|"feat-upsert","id":"id existente (opcional)","name":"…","description":"…","ref":"c1 (opcional, para ligar a uma opção acrescentada)",${SOURCE_FIELD}}`,
-    `  - {"type":"spell-update","spellId":"id","prepared":true|false,"circle":0-9,${SOURCE_FIELD} (obrigatório ao mudar "circle"; dispensado só para "prepared")}`,
-    '  - {"type":"item-equip","itemId":"id","equipped":true|false}',
-    '  - {"type":"text-append","field":"classFeatures|speciesTraits|featuresNotes|weaponProficiencies|notes","text":"…"}',
-]
 
 const OPTION_CONTRACT = [
     `"modify": opções que o servidor já mostra e precisam de correção: {"optionId":"id da lista","label"?,"detail"?,"economy"?:"action|bonus","attack"?:{"bonus":n,"damage":"1d4+3","damageType":"perfurante","ranged":bool,"light":bool,"finesse":bool},"save"?:{"ability":"…","dc":n,"halfOnSave":bool,"damage":"2d6"|null,"damageType":…},"heal"?:{"dice":"1d8+2"},"reason":"…",${SOURCE_FIELD} (obrigatório com attack, save, heal ou economy)}`,
@@ -216,6 +198,19 @@ export interface ReviewSheetInput {
     reads: CatalogReadLog
     /** DND-49: job da fila da campanha (token do MCP no OpenCode). */
     jobId: string
+    /** DND-51: pergunta já feita ao jogador nesta preparação e a resposta dele (`null` = não respondeu no prazo). */
+    question?: { text: string; answer: string | null }
+}
+
+/** DND-51: a preparação pode parar com uma pergunta ao jogador quando falta uma escolha dele na ficha. */
+const QUESTION_CONTRACT =
+    '"question": {"text":"pergunta curta ao jogador"} SÓ quando faltar na ficha uma escolha que a regra manda o JOGADOR fazer (ex.: o atributo de conjuração de uma lista, os truques escolhidos de um talento). Nunca escolha por ele. Com "question", a preparação para, espera a resposta dele e roda de novo com ela; omita "question" quando não faltar escolha.'
+
+function questionBlock(question: ReviewSheetInput["question"]): string[] {
+    if (!question) return []
+    return question.answer
+        ? ["## Resposta do jogador à sua pergunta", `Pergunta: ${question.text}`, `Resposta: ${question.answer}`, 'Use a resposta: grave a escolha com "choice":{"quote":"trecho literal da resposta"}. Não pergunte de novo.']
+        : ["## Pergunta sem resposta", `Você perguntou: ${question.text}`, "O jogador não respondeu a tempo: NÃO grave essa escolha (deixe o campo como está) e prepare o resto. Não pergunte de novo."]
 }
 
 /** Revisão da mesa de UM personagem. Devolve o objeto JSON da resposta (validado por quem chama). */
@@ -232,6 +227,7 @@ export async function reviewCombatSheet(input: ReviewSheetInput): Promise<unknow
         ...SHEET_CHANGE_CONTRACT,
         ...OPTION_CONTRACT,
         `"sneakAttack": {"dice":"Xd6"|null,"reason":"…",${SOURCE_FIELD}} só quando o ataque furtivo detectado pelo servidor estiver errado pelo catálogo (dados diferentes, ou o personagem não o tem); omita se estiver certo.`,
+        ...(input.question ? [] : [QUESTION_CONTRACT]),
     ].join("\n\n")
     const prompt = [
         `# Personagem: ${input.characterName}`,
@@ -239,6 +235,7 @@ export async function reviewCombatSheet(input: ReviewSheetInput): Promise<unknow
         "## Opções calculadas pelo servidor",
         input.optionsText,
         `## Ataque furtivo detectado pelo servidor: ${input.sneakAttack ? `+${input.sneakAttack}` : "nenhum"}`,
+        ...questionBlock(input.question),
     ].join("\n\n")
     const text = await withTimeout(MADDOX_COMBAT_PREP_TIMEOUT_MS, "a preparação da ficha", (signal) =>
         catalogGeneration({ campaign: input.campaign, instructions, prompt, title: `Maddox · preparação do combate · ${input.campaign.name}`, origin: MADDOX_COMBAT_PREP_CONSUMPTION_ORIGIN, signal, reads: input.reads, jobId: input.jobId, maxSteps: MADDOX_COMBAT_PREP_MAX_STEPS }),

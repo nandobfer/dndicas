@@ -10,7 +10,7 @@ import { detectSneakAttack, riderLabel } from "../combat-prep"
 import { combatAddSchema, combatModifySchema, combatPrepResponseSchema, combatRemoveSchema, combatSheetChangeSchema, parseList, requiresCatalogSource, sneakAttackSchema, type CombatSheetChange } from "../combat-prep-schemas"
 import { abilityModifier } from "../combat-rules"
 import { emptyOverlay, type CombatOptionPatch, type CombatPrepChange, type CombatPrepOverlay, type CombatPrepRider, type PreparedCombatOption, type TacticalCharacterState } from "../combat-types"
-import { MADDOX_CAMPAIGN_AUDIT_ENTITY, MADDOX_COMBAT_PREP_CONFLICT_RETRIES, MADDOX_COMBAT_PREP_STALE_MS, MADDOX_COMBAT_PREP_TRAIT_TEXT_MAX } from "../constants"
+import { MADDOX_CAMPAIGN_AUDIT_ENTITY, MADDOX_COMBAT_PREP_ANSWER_TIMEOUT_MS, MADDOX_COMBAT_PREP_CONFLICT_RETRIES, MADDOX_COMBAT_PREP_EXPIRED_NOTICE, MADDOX_COMBAT_PREP_STALE_MS, MADDOX_COMBAT_PREP_TRAIT_TEXT_MAX } from "../constants"
 import { MaddoxCampaignMessageModel, MaddoxCampaignModel, MaddoxCombatPrepModel, type IMaddoxCampaign, type IMaddoxCombatPrep } from "../models"
 import { masteryKeyFromName, masteryLabel, masteryLimit, type MaddoxMasteryKey } from "../weapon-mastery"
 import { MADDOX_HIT_POINT_OPERATIONS } from "../hit-points-ops"
@@ -45,7 +45,13 @@ const track = (promise: Promise<void>) => {
     void promise.finally(() => running.delete(promise))
 }
 
-const BLOCKING: IMaddoxCombatPrep["status"][] = ["pending", "running", "failed"]
+// DND-51: a pergunta ao jogador também segura a ordem (até a resposta ou o prazo).
+const BLOCKING: IMaddoxCombatPrep["status"][] = ["pending", "running", "awaiting-player", "failed"]
+
+/** DND-51: prazo da resposta do jogador (testes encurtam). */
+export const combatPrepTiming = ((globalThis as unknown as { __maddoxCombatPrepTiming?: { answerMs: number } }).__maddoxCombatPrepTiming ??= { answerMs: MADDOX_COMBAT_PREP_ANSWER_TIMEOUT_MS })
+/** Prazos vivos neste processo (a retomada após reinício confere os vencidos). */
+const answerTimers = ((globalThis as unknown as { __maddoxCombatPrepTimers?: Map<string, ReturnType<typeof setTimeout>> }).__maddoxCombatPrepTimers ??= new Map())
 
 /** Há preparação do combate ainda não pronta (inclusive com falha esperando o dono): a ordem não fecha. */
 export async function preparationPending(combatId: Types.ObjectId | string): Promise<boolean> {
@@ -87,6 +93,10 @@ export async function scheduleCombatPreps(campaignId: Types.ObjectId): Promise<n
     const { findActiveTactical } = await import("./tactical-combat")
     const combat = await findActiveTactical(campaignId)
     if (!combat) return 0
+    // DND-51: perguntas ao jogador com o prazo vencido (sem o timer, depois de um reinício) seguem sem a escolha.
+    const overdue = await MaddoxCombatPrepModel.find({ combatId: combat._id, status: "awaiting-player", "question.deadline": { $lte: new Date() } }).select("_id").lean<{ _id: Types.ObjectId }[]>()
+    for (const prep of overdue) await expireQuestion(prep._id)
+    for (const prep of await MaddoxCombatPrepModel.find({ combatId: combat._id, status: "awaiting-player" }).select("_id question").lean<Pick<PrepDoc, "_id" | "question">[]>()) armAnswerTimer(campaignId, prep)
     const staleBefore = new Date(Date.now() - MADDOX_COMBAT_PREP_STALE_MS)
     const preps = await MaddoxCombatPrepModel.find({ combatId: combat._id, $or: [{ status: "pending" }, { status: "running", startedAt: { $lt: staleBefore } }] })
         .sort({ _id: 1 })
@@ -299,6 +309,8 @@ export interface PrepInterpretation {
     refusals: CombatPrepChange[]
     /** DND-49: quantas alterações de regra foram descartadas por falta de fonte confirmada. */
     droppedWithoutSource: number
+    /** DND-51: pergunta do Maddox ao jogador (falta uma escolha dele). */
+    question?: string | null
 }
 
 const attackDetail = (attack: NonNullable<CombatOptionPatch["attack"]>) => `${signed(attack.bonus)} para acertar · ${attack.damage}${attack.damageType ? ` ${attack.damageType}` : ""}${attack.ranged ? " · à distância" : ""}`
@@ -494,7 +506,7 @@ export function interpretPrep(raw: unknown, context: Pick<PrepSheetContext, "opt
     if (droppedWithoutSource && reads.refs.length === 0) {
         refusals.unshift({ area: "aviso", label: "Catálogo", before: "", after: "", reason: reads.failures ? CATALOG_FAILED_NOTICE : CATALOG_NOT_CONSULTED_NOTICE, applied: false })
     }
-    return { sheetChanges, overlay, links, optionChanges, rider, dropped, refusals, droppedWithoutSource }
+    return { sheetChanges, overlay, links, optionChanges, rider, dropped, refusals, droppedWithoutSource, question: response.question?.text ?? null }
 }
 
 export const CATALOG_NOT_CONSULTED_NOTICE = "O Maddox não consultou o catálogo do DnDicas: as correções de regra foram descartadas e vale a lista calculada pelo servidor."
@@ -556,8 +568,27 @@ async function activeStateOf(campaignId: Types.ObjectId, prep: Pick<PrepDoc, "co
 }
 
 async function discard(prepId: Types.ObjectId, reason: string) {
+    const cards = await questionCardsOf({ _id: prepId, status: { $in: BLOCKING } })
     await MaddoxCombatPrepModel.updateOne({ _id: prepId, status: { $in: BLOCKING } }, { $set: { status: "discarded", finishedAt: new Date(), jobId: null } })
+    await haltQuestionCards(cards, "discarded")
     log.info({ prepId: String(prepId), reason }, "[maddox] preparação descartada")
+}
+
+/** Revisão DND-51 (F10): cards de pergunta das preparações que vão parar (descartadas ou com falha). */
+async function questionCardsOf(filter: Record<string, unknown>): Promise<Pick<PrepDoc, "_id" | "campaignId" | "messageId">[]> {
+    return MaddoxCombatPrepModel.find({ ...filter, messageId: { $ne: null }, question: { $ne: null } }).select("_id campaignId messageId").lean<Pick<PrepDoc, "_id" | "campaignId" | "messageId">[]>()
+}
+
+/**
+ * O card da pergunta fica num estado final (sem spinner e sem o campo de resposta): `discarded` (o combate terminou ou o
+ * personagem saiu) ou `failed` (a preparação falhou; "Tentar de novo" do dono volta a "concluindo").
+ */
+async function haltQuestionCards(cards: readonly Pick<PrepDoc, "_id" | "campaignId" | "messageId">[], halted: "discarded" | "failed" | null) {
+    if (!cards.length) return
+    for (const card of cards) clearAnswerTimer(card._id)
+    await MaddoxCampaignMessageModel.updateMany({ _id: { $in: cards.map((card) => card.messageId!) } }, { $set: { "combatPrep.question.halted": halted, "combatPrep.question.settled": halted !== null } })
+    const { publishGameChanged } = await import("./game")
+    for (const campaignId of new Set(cards.map((card) => String(card.campaignId)))) await publishGameChanged(new Types.ObjectId(campaignId))
 }
 
 async function runCombatPrep(campaignId: Types.ObjectId, prepId: Types.ObjectId, jobId: string): Promise<void> {
@@ -587,8 +618,24 @@ async function runCombatPrep(campaignId: Types.ObjectId, prepId: Types.ObjectId,
             const context = await loadPrepSheet(active.state, campaignId)
             if (!context) throw new Error("A ficha do personagem não foi encontrada.")
             const reads = createCatalogReadLog()
-            const raw = await ai.reviewCombatSheet({ campaign, characterName: claimed.characterName, sheetText: context.sheetText, optionsText: context.optionsText, sneakAttack: context.sneakAttack, reads, jobId })
+            const question = claimed.question
+            const raw = await ai.reviewCombatSheet({ campaign, characterName: claimed.characterName, sheetText: context.sheetText, optionsText: context.optionsText, sneakAttack: context.sneakAttack, reads, jobId, ...(question ? { question: { text: question.text, answer: question.answer } } : {}) })
             const interpretation = interpretPrep(raw, context, reads)
+            // DND-51: a escolha do jogador (atributo de conjuração de uma lista, magia escolhida) nunca é do Maddox.
+            const { screenPlayerChoices, refusalsOf, choiceSheetOf } = await import("./sheet-choice-rules")
+            const { interviewPlayerTexts } = await import("./question-runs")
+            const playerTexts = [...(await interviewPlayerTexts(campaignId, claimed.characterId)), ...(question?.answer ? [question.answer] : [])]
+            const screen = await screenPlayerChoices(interpretation.sheetChanges, reads, playerTexts, await choiceSheetOf(active.state.sheetId))
+            const asked = !question ? (interpretation.question ?? (screen.refused.length ? fallbackQuestion(screen.refused.map((item) => item.value)) : null)) : null
+            if (asked) {
+                if (await askPlayer(campaignId, claimed, jobId, asked)) {
+                    log.info({ campaignId: String(campaignId), prepId: String(prepId), character: claimed.characterName }, "[maddox] preparação parou com uma pergunta ao jogador")
+                    return
+                }
+            }
+            interpretation.sheetChanges = screen.allowed
+            interpretation.refusals.push(...refusalsOf(screen.refused))
+            if (question?.expired) interpretation.refusals.unshift({ area: "aviso", label: "Pergunta", before: "", after: "", reason: MADDOX_COMBAT_PREP_EXPIRED_NOTICE, applied: false })
             active = await activeStateOf(campaignId, claimed)
             if (!active) {
                 await discard(prepId, "o combate terminou durante a preparação")
@@ -618,7 +665,8 @@ async function runCombatPrep(campaignId: Types.ObjectId, prepId: Types.ObjectId,
         }
     } catch (error) {
         log.warn({ err: errorText(error), campaignId: String(campaignId), prepId: String(prepId), character: claimed.characterName }, "[maddox] falha na preparação da mesa de combate")
-        await MaddoxCombatPrepModel.updateOne({ _id: prepId, status: "running" }, { $set: { status: "failed", error: errorText(error), finishedAt: new Date(), jobId: null } })
+        const failed = await MaddoxCombatPrepModel.updateOne({ _id: prepId, status: "running" }, { $set: { status: "failed", error: errorText(error), finishedAt: new Date(), jobId: null } })
+        if (failed.modifiedCount > 0) await haltQuestionCards(await questionCardsOf({ _id: prepId }), "failed")
     }
     await afterPrepSettled(campaignId, claimed)
 }
@@ -672,7 +720,11 @@ async function checkDownedCharacter(campaign: IMaddoxCampaign, prep: PrepDoc, st
 
 /** Card privado "Sua mesa está pronta" para o dono do personagem. */
 async function postPrepCard(prep: PrepDoc) {
-    if (prep.messageId) return
+    if (prep.messageId) {
+        // DND-51: o card da pergunta vira o card da mesa pronta (a pergunta fica respondida ou vencida).
+        await MaddoxCampaignMessageModel.updateOne({ _id: prep.messageId }, { $set: { "combatPrep.changes": prep.changes, "combatPrep.question": questionCard(prep) } })
+        return
+    }
     const message = await MaddoxCampaignMessageModel.create({
         campaignId: prep.campaignId,
         turnNumber: prep.turnNumber,
@@ -684,7 +736,7 @@ async function postPrepCard(prep: PrepDoc) {
         characterName: prep.characterName,
         content: "",
         segment: prep.waitRound,
-        combatPrep: { combatId: prep.combatId, actorKey: prep.actorKey, characterName: prep.characterName, changes: prep.changes },
+        combatPrep: { combatId: prep.combatId, actorKey: prep.actorKey, characterName: prep.characterName, changes: prep.changes, question: questionCard(prep) },
     })
     await MaddoxCombatPrepModel.updateOne({ _id: prep._id }, { $set: { messageId: message._id } })
 }
@@ -702,6 +754,98 @@ async function afterPrepSettled(campaignId: Types.ObjectId, prep: Pick<PrepDoc, 
         log.warn({ err: errorText(error), campaignId: String(campaignId) }, "[maddox] falha ao seguir o combate depois da preparação")
     }
     await publishGameChanged(campaignId)
+}
+
+// ── Pergunta ao jogador (DND-51) ──────────────────────────────────────────────
+
+/** Pergunta do servidor quando o Maddox propôs uma escolha do jogador sem perguntar. */
+export function fallbackQuestion(values: readonly string[]): string {
+    return `Antes do combate, preciso de uma escolha sua que a ficha não registra (sugestão do Maddox: ${[...new Set(values)].join(", ")}). O que você escolhe? Responda com o nome do que escolher.`
+}
+
+/** `settled` (revisão DND-51, F2): a preparação terminou; antes disso o card não diz "mesa pronta". */
+function questionCard(prep: Pick<PrepDoc, "_id" | "question" | "status">) {
+    const question = prep.question
+    if (!question) return null
+    return { prepId: String(prep._id), text: question.text, status: question.expired ? ("expired" as const) : question.answer ? ("answered" as const) : ("awaiting" as const), answer: question.answer, deadline: question.deadline, settled: prep.status === "ready" || prep.status === "skipped" }
+}
+
+/** A preparação para com a pergunta: nada é gravado; o card privado traz o campo de resposta. */
+async function askPlayer(campaignId: Types.ObjectId, prep: PrepDoc, jobId: string, text: string): Promise<boolean> {
+    const now = new Date()
+    const question = { text, askedAt: now, deadline: new Date(now.getTime() + combatPrepTiming.answerMs), answer: null, answeredAt: null, expired: false }
+    const saved = await MaddoxCombatPrepModel.findOneAndUpdate({ _id: prep._id, status: "running", jobId }, { $set: { status: "awaiting-player", question, jobId: null } }, { returnDocument: "after" }).lean<PrepDoc>()
+    if (!saved) return false
+    await postPrepCard(saved)
+    armAnswerTimer(campaignId, saved)
+    const { publishGameChanged } = await import("./game")
+    await publishGameChanged(campaignId)
+    return true
+}
+
+function armAnswerTimer(campaignId: Types.ObjectId, prep: Pick<PrepDoc, "_id" | "question">) {
+    const key = String(prep._id)
+    if (answerTimers.has(key) || !prep.question) return
+    const wait = Math.max(0, new Date(prep.question.deadline).getTime() - Date.now())
+    const timer = setTimeout(() => {
+        answerTimers.delete(key)
+        track(
+            (async () => {
+                if (await expireQuestion(prep._id)) await scheduleCombatPreps(campaignId)
+            })().catch((error: unknown) => log.warn({ err: errorText(error), prepId: key }, "[maddox] falha ao vencer a pergunta da preparação")),
+        )
+    }, wait)
+    timer.unref?.()
+    answerTimers.set(key, timer)
+}
+
+function clearAnswerTimer(prepId: Types.ObjectId) {
+    const key = String(prepId)
+    const timer = answerTimers.get(key)
+    if (timer) clearTimeout(timer)
+    answerTimers.delete(key)
+}
+
+/** Prazo vencido: a preparação volta para a fila e conclui sem a escolha. */
+async function expireQuestion(prepId: Types.ObjectId): Promise<boolean> {
+    clearAnswerTimer(prepId)
+    const expired = await MaddoxCombatPrepModel.findOneAndUpdate({ _id: prepId, status: "awaiting-player" }, { $set: { status: "pending", "question.expired": true } }, { returnDocument: "after" }).lean<PrepDoc>()
+    if (!expired) return false
+    log.info({ prepId: String(prepId) }, "[maddox] pergunta da preparação venceu; segue sem a escolha")
+    // Revisão DND-51 (F3): o card deixa de oferecer o campo de resposta na hora.
+    if (expired.messageId) {
+        await MaddoxCampaignMessageModel.updateOne({ _id: expired.messageId }, { $set: { "combatPrep.question.status": "expired", "combatPrep.question.settled": false } })
+        const { publishGameChanged } = await import("./game")
+        await publishGameChanged(expired.campaignId)
+    }
+    return true
+}
+
+/**
+ * Resposta do jogador à pergunta da preparação. Responde o dono do personagem; pelo Personagem Opex, o dono da campanha.
+ * A preparação volta para a fila com a resposta (que vale como a escolha do jogador).
+ */
+export async function answerCombatPrep(campaignId: string, prepId: string, text: string, userId: string) {
+    const { loadAsMember, assertActive, publishGameChanged, getGameState } = await import("./game")
+    const { campaign } = await loadAsMember(campaignId, userId)
+    assertActive(campaign)
+    if (!Types.ObjectId.isValid(prepId)) throw new DomainError(404, "Preparação não encontrada.", "NOT_FOUND")
+    const prep = await MaddoxCombatPrepModel.findOne({ _id: new Types.ObjectId(prepId), campaignId: campaign._id }).lean<PrepDoc>()
+    if (!prep) throw new DomainError(404, "Preparação não encontrada.", "NOT_FOUND")
+    const { isOpexUserId } = await import("./opex-members")
+    const allowed = prep.userId === userId || (isOpexUserId(prep.userId) && campaign.ownerId === userId)
+    if (!allowed) throw new DomainError(403, "Só o jogador deste personagem responde a esta pergunta.", "FORBIDDEN")
+    if (prep.status !== "awaiting-player" || !prep.question) throw new DomainError(409, "Esta pergunta já foi respondida ou o prazo acabou.", "PREP_NOT_ASKING")
+    const answer = text.trim()
+    const updated = await MaddoxCombatPrepModel.updateOne({ _id: prep._id, status: "awaiting-player" }, { $set: { status: "pending", "question.answer": answer, "question.answeredAt": new Date() } })
+    if (updated.modifiedCount === 0) throw new DomainError(409, "Esta pergunta já foi respondida ou o prazo acabou.", "PREP_NOT_ASKING")
+    clearAnswerTimer(prep._id)
+    if (prep.messageId) await MaddoxCampaignMessageModel.updateOne({ _id: prep.messageId }, { $set: { "combatPrep.question.status": "answered", "combatPrep.question.answer": answer, "combatPrep.question.settled": false } })
+    await recordAudit({ userId, entidade: MADDOX_CAMPAIGN_AUDIT_ENTITY, entidadeId: String(campaign._id), acao: AcaoAuditoria.ATUALIZAR, depois: { combatPrep: String(prep._id), character: prep.characterName, decision: "answer", answer } })
+    log.info({ campaignId, prepId, character: prep.characterName }, "[maddox] jogador respondeu à pergunta da preparação")
+    await scheduleCombatPreps(campaign._id)
+    await publishGameChanged(campaign._id)
+    return getGameState(campaignId, userId)
 }
 
 // ── Decisões do dono da campanha ──────────────────────────────────────────────
@@ -723,6 +867,7 @@ export async function retryCombatPrep(campaignId: string, prepId: string, userId
     const { campaign, prep } = await loadOwnerPrep(campaignId, prepId, userId)
     const updated = await MaddoxCombatPrepModel.updateOne({ _id: prep._id, status: "failed" }, { $set: { status: "pending", error: null, jobId: null } })
     if (updated.modifiedCount === 0) throw new DomainError(409, "A preparação mudou. Atualize a mesa.", "PREP_CHANGED")
+    await haltQuestionCards(await questionCardsOf({ _id: prep._id }), null)
     await recordAudit({ userId, entidade: MADDOX_CAMPAIGN_AUDIT_ENTITY, entidadeId: String(campaign._id), acao: AcaoAuditoria.ATUALIZAR, depois: { combatPrep: String(prep._id), character: prep.characterName, decision: "retry" } })
     await scheduleCombatPreps(campaign._id)
     const { publishGameChanged, getGameState } = await import("./game")
@@ -738,6 +883,8 @@ export async function skipCombatPrep(campaignId: string, prepId: string, userId:
     const riders: CombatPrepRider[] = context?.sneakAttack ? [{ key: "sneak-attack", dice: context.sneakAttack, source: "server", reason: null }] : []
     const updated = await MaddoxCombatPrepModel.updateOne({ _id: prep._id, status: "failed" }, { $set: { status: "skipped", overlay: emptyOverlay(), riders, changes: [], finishedAt: new Date(), jobId: null } })
     if (updated.modifiedCount === 0) throw new DomainError(409, "A preparação mudou. Atualize a mesa.", "PREP_CHANGED")
+    // Revisão DND-51 (F11): a falha deixa de valer no card (a mesa segue com a lista base).
+    if (prep.messageId && prep.question) await MaddoxCampaignMessageModel.updateOne({ _id: prep.messageId }, { $set: { "combatPrep.question.settled": true, "combatPrep.question.halted": null } })
     await recordAudit({ userId, entidade: MADDOX_CAMPAIGN_AUDIT_ENTITY, entidadeId: String(campaign._id), acao: AcaoAuditoria.ATUALIZAR, depois: { combatPrep: String(prep._id), character: prep.characterName, decision: "skip" } })
     log.info({ campaignId, prepId, character: prep.characterName }, "[maddox] dono seguiu sem a preparação da ficha")
     await afterPrepSettled(campaign._id, prep)
@@ -747,7 +894,9 @@ export async function skipCombatPrep(campaignId: string, prepId: string, userId:
 
 /** Fim do combate: as preparações que ainda não terminaram são descartadas (nada é gravado na ficha). */
 export async function discardCombatPreps(combatId: Types.ObjectId): Promise<void> {
+    const cards = await questionCardsOf({ combatId, status: { $in: BLOCKING } })
     await MaddoxCombatPrepModel.updateMany({ combatId, status: { $in: BLOCKING } }, { $set: { status: "discarded", finishedAt: new Date(), jobId: null } })
+    await haltQuestionCards(cards, "discarded")
 }
 
 /**
@@ -757,7 +906,9 @@ export async function discardCombatPreps(combatId: Types.ObjectId): Promise<void
 export async function discardMemberPrep(combatId: Types.ObjectId, memberId: Types.ObjectId): Promise<void> {
     const prep = await MaddoxCombatPrepModel.findOne({ combatId, memberId, status: { $in: BLOCKING } }).select("campaignId turnNumber waitRound").lean<Pick<PrepDoc, "campaignId" | "turnNumber" | "waitRound">>()
     if (!prep) return
+    const cards = await questionCardsOf({ combatId, memberId, status: { $in: BLOCKING } })
     await MaddoxCombatPrepModel.updateMany({ combatId, memberId, status: { $in: BLOCKING } }, { $set: { status: "discarded", finishedAt: new Date(), jobId: null } })
+    await haltQuestionCards(cards, "discarded")
     if (await preparationPending(combatId)) return
     const { finishInitiativeIfReady } = await import("./tactical-combat")
     await finishInitiativeIfReady(prep.campaignId, prep.turnNumber, prep.waitRound + 1)

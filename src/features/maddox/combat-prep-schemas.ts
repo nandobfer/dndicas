@@ -26,15 +26,21 @@ const ref = z.string().trim().max(40).optional()
  */
 export const catalogSourceSchema = z.object({ ref: z.string().trim().min(3).max(300), quote: z.string().trim().min(1).max(2_000) })
 const source = catalogSourceSchema.optional().catch(undefined)
+/**
+ * Escolha do jogador (DND-51): trecho literal de uma mensagem dele que diz a escolha (atributo de conjuração de uma lista,
+ * magia escolhida de uma lista). Malformada vira ausente (a alteração é recusada com o motivo).
+ */
+const choice = z.object({ quote: z.string().trim().min(1).max(1_000) }).optional().catch(undefined)
+const recordId = z.string().trim().min(1).max(40)
 
 /** Operações de ficha permitidas (lista fechada). `ref` liga uma criação a uma opção acrescentada (`fromChange`). */
 export const combatSheetChangeSchema = z.discriminatedUnion("type", [
-    z.object({ type: z.literal("ability"), attribute, value: z.number().int().min(1).max(30), reason, ref, source }),
-    z.object({ type: z.literal("save-proficiency"), attribute, proficient: z.boolean(), reason, ref, source }),
-    z.object({ type: z.literal("skill-proficiency"), skill: z.enum(MADDOX_SKILLS as [string, ...string[]]), proficient: z.boolean(), expertise: z.boolean().optional(), reason, ref, source }),
-    z.object({ type: z.literal("spellcasting-attribute"), attribute: attribute.nullable(), reason, ref, source }),
-    z.object({ type: z.literal("spell-slots"), circle: z.number().int().min(1).max(9), total: z.number().int().min(0).max(9), reason, ref, source }),
-    z.object({ type: z.literal("charge-upsert"), chargeId: z.string().trim().max(80).optional(), name: text(CEILING.name).pipe(z.string().min(1)), total: z.number().int().min(0).max(99), used: z.number().int().min(0).max(99).optional(), reason, ref, source }),
+    z.object({ type: z.literal("ability"), attribute, value: z.number().int().min(1).max(30), reason, ref, source, choice }),
+    z.object({ type: z.literal("save-proficiency"), attribute, proficient: z.boolean(), reason, ref, source, choice }),
+    z.object({ type: z.literal("skill-proficiency"), skill: z.enum(MADDOX_SKILLS as [string, ...string[]]), proficient: z.boolean(), expertise: z.boolean().optional(), reason, ref, source, choice }),
+    z.object({ type: z.literal("spellcasting-attribute"), attribute: attribute.nullable(), reason, ref, source, choice }),
+    z.object({ type: z.literal("spell-slots"), circle: z.number().int().min(1).max(9), total: z.number().int().min(0).max(9), reason, ref, source, choice }),
+    z.object({ type: z.literal("charge-upsert"), chargeId: z.string().trim().max(80).optional(), name: text(CEILING.name).pipe(z.string().min(1)), total: z.number().int().min(0).max(99), used: z.number().int().min(0).max(99).optional(), reason, ref, source, choice }),
     z.object({
         type: z.literal("attack-upsert"),
         attackId: z.string().trim().max(40).optional(),
@@ -44,14 +50,23 @@ export const combatSheetChangeSchema = z.discriminatedUnion("type", [
         reason,
         ref,
         source,
+        choice,
     }),
-    z.object({ type: z.literal("attack-remove"), attackId: z.string().trim().min(1).max(40), reason, ref, source }),
-    z.object({ type: z.literal("trait-upsert"), id: z.string().trim().max(40).optional(), name: text(CEILING.name).pipe(z.string().min(1)), description: text(CEILING.description), reason, ref, source }),
-    z.object({ type: z.literal("feat-upsert"), id: z.string().trim().max(40).optional(), name: text(CEILING.name).pipe(z.string().min(1)), description: text(CEILING.description), reason, ref, source }),
-    z.object({ type: z.literal("spell-update"), spellId: z.string().trim().min(1).max(40), prepared: z.boolean().optional(), circle: z.number().int().min(0).max(9).optional(), reason, ref, source }),
-    z.object({ type: z.literal("item-equip"), itemId: z.string().trim().min(1).max(40), equipped: z.boolean(), reason, ref, source }),
-    z.object({ type: z.literal("weapon-mastery"), catalogItemId: z.string().trim().min(1).max(40), mastery: z.enum(MADDOX_MASTERY_KEYS), reason, ref, source }),
-    z.object({ type: z.literal("text-append"), field: z.enum(["classFeatures", "speciesTraits", "featuresNotes", "weaponProficiencies", "notes"]), text: text(CEILING.append).pipe(z.string().min(1)), reason, ref, source }),
+    z.object({ type: z.literal("attack-remove"), attackId: z.string().trim().min(1).max(40), reason, ref, source, choice }),
+    z.object({ type: z.literal("trait-upsert"), id: z.string().trim().max(40).optional(), name: text(CEILING.name).pipe(z.string().min(1)), description: text(CEILING.description), reason, ref, source, choice }),
+    z.object({ type: z.literal("feat-upsert"), id: z.string().trim().max(40).optional(), name: text(CEILING.name).pipe(z.string().min(1)), description: text(CEILING.description), reason, ref, source, choice }),
+    z.object({ type: z.literal("spell-update"), spellId: z.string().trim().min(1).max(40), prepared: z.boolean().optional(), circle: z.number().int().min(0).max(9).optional(), reason, ref, source, choice }),
+    z.object({ type: z.literal("item-equip"), itemId: z.string().trim().min(1).max(40), equipped: z.boolean(), reason, ref, source, choice }),
+    z.object({ type: z.literal("weapon-mastery"), catalogItemId: z.string().trim().min(1).max(40), mastery: z.enum(MADDOX_MASTERY_KEYS), reason, ref, source, choice }),
+    z.object({ type: z.literal("text-append"), field: z.enum(["classFeatures", "speciesTraits", "featuresNotes", "weaponProficiencies", "notes"]), text: text(CEILING.append).pipe(z.string().min(1)), reason, ref, source, choice }),
+    // DND-51: magias, características, talentos e itens entram e saem da ficha (o "Pergunte ao mestre" corrige tudo).
+    z.object({ type: z.literal("spell-add"), catalogSpellId: recordId, prepared: z.boolean().optional().default(true), reason, ref, source, choice }),
+    z.object({ type: z.literal("spell-remove"), spellId: recordId, reason, ref, source, choice }),
+    z.object({ type: z.literal("trait-remove"), id: recordId, reason, ref, source, choice }),
+    z.object({ type: z.literal("feat-remove"), id: recordId, reason, ref, source, choice }),
+    z.object({ type: z.literal("item-add"), catalogItemId: recordId.optional(), name: text(CEILING.name).optional(), quantity: z.number().int().min(1).max(9_999).optional().default(1), equipped: z.boolean().optional().default(false), reason, ref, source, choice }),
+    z.object({ type: z.literal("item-remove"), itemId: recordId, reason, ref, source, choice }),
+    z.object({ type: z.literal("item-quantity"), itemId: recordId, quantity: z.number().int().min(0).max(9_999), reason, ref, source, choice }),
 ])
 export type CombatSheetChange = z.infer<typeof combatSheetChangeSchema>
 
@@ -115,7 +130,8 @@ export const sneakAttackSchema = z.object({ dice: diceText.nullable(), reason: o
 
 /** Tipos de correção na ficha que mudam número ou regra (DND-49, A4): exigem `source` confirmado no catálogo. */
 // DND-49 (revisão, F3): características e talentos gravados pelo Maddox e a troca de círculo de magia também são regra.
-const SOURCED_SHEET_CHANGES = new Set<CombatSheetChange["type"]>(["ability", "save-proficiency", "skill-proficiency", "spellcasting-attribute", "spell-slots", "charge-upsert", "attack-upsert", "weapon-mastery", "trait-upsert", "feat-upsert"])
+// DND-51: a magia acrescentada também é regra (a classe, a espécie ou o talento que a concede).
+const SOURCED_SHEET_CHANGES = new Set<CombatSheetChange["type"]>(["ability", "save-proficiency", "skill-proficiency", "spellcasting-attribute", "spell-slots", "charge-upsert", "attack-upsert", "weapon-mastery", "trait-upsert", "feat-upsert", "spell-add"])
 
 /**
  * Quais alterações exigem fonte (DND-49, A4 + decisão do dono D2): números e regras (bônus de ataque, dados e tipo de
@@ -141,8 +157,15 @@ export function requiresCatalogSource(kind: "sheet" | "modify" | "add" | "sneak"
     return Boolean(add.attack || add.save || add.heal || add.resolution === "attack" || add.resolution === "save" || add.resolution === "heal")
 }
 
+/**
+ * DND-51: pergunta ao jogador na preparação (falta uma escolha dele na ficha). Texto curto, falando com o jogador.
+ * Malformada vira ausente.
+ */
+export const combatPrepQuestionSchema = z.object({ text: text(CEILING.reason).pipe(z.string().min(1)) })
+
 /** Resposta da preparação de uma ficha. Os arrays são conferidos item a item em `parseList`. */
 export const combatPrepResponseSchema = z.object({
+    question: combatPrepQuestionSchema.nullable().optional().catch(undefined),
     sheetChanges: z.array(z.unknown()).optional().default([]),
     modify: z.array(z.unknown()).optional().default([]),
     remove: z.array(z.unknown()).optional().default([]),

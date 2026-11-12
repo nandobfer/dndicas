@@ -1,5 +1,5 @@
 import mongoose, { Schema, type Model, type Types } from "mongoose"
-import type { CombatPrepAdjustment, CombatPrepChange, CombatPrepOverlay, CombatPrepRider, CombatPrepStatus } from "../combat-types"
+import type { CombatPrepAdjustment, CombatPrepChange, CombatPrepOverlay, CombatPrepQuestion, CombatPrepRider, CombatPrepStatus } from "../combat-types"
 
 /**
  * Preparação da mesa de combate (DND-41) — `maddox_combat_preps`. Um documento por personagem em cada combate tático
@@ -39,6 +39,8 @@ export interface IMaddoxCombatPrep {
     downedCheckedAt: Date | null
     /** Mensagem privada "Sua mesa está pronta". */
     messageId: Types.ObjectId | null
+    /** DND-51: pergunta ao jogador (a preparação para em `awaiting-player` até a resposta ou o prazo). */
+    question: CombatPrepQuestion | null
     createdAt: Date
     updatedAt: Date
 }
@@ -55,7 +57,7 @@ const PrepSchema = new Schema<IMaddoxCombatPrep>(
         characterName: { type: String, default: "" },
         turnNumber: { type: Number, default: 0 },
         waitRound: { type: Number, default: 0 },
-        status: { type: String, enum: ["pending", "running", "ready", "failed", "skipped", "discarded"], default: "pending" },
+        status: { type: String, enum: ["pending", "running", "awaiting-player", "ready", "failed", "skipped", "discarded"], default: "pending" },
         attempts: { type: Number, default: 0 },
         jobId: { type: String, default: null },
         error: { type: String, default: null },
@@ -69,6 +71,7 @@ const PrepSchema = new Schema<IMaddoxCombatPrep>(
         droppedWithoutSource: { type: Number, default: 0 },
         downedCheckedAt: { type: Date, default: null },
         messageId: { type: Schema.Types.ObjectId, default: null },
+        question: { type: Schema.Types.Mixed, default: null },
     },
     { collection: "maddox_combat_preps", timestamps: true, versionKey: false, minimize: false },
 )

@@ -406,6 +406,51 @@ describe("ficha completa pela entrevista de personagem", () => {
         expect(sheet.resourceCharges.some((row) => row.source?.entityId === String(cat.items.pack) && row.total === 10)).toBe(true)
     })
 
+    it("DND-51: magias da espécie e dos talentos (com a fonte) e o atributo de conjuração escolhido pelo jogador entram na ficha", async () => {
+        const campaignId = await characterInterview("fiel-dnd", 1)
+        await attributesWithSoldierBonus(campaignId)
+        const base = { raca: "Humano", classe: "Guerreiro", origem: "Soldado", periciasClasse: ["Percepção", "Sobrevivência"], estiloLuta: "Defesa", equipamento: [{ item: "Espada longa", equipado: true }], idiomas: ["Comum"] }
+        scripted.push([call("update_character_build", { ...base, magiasExtras: [{ fonte: "Elfo", magia: "Luz" }] }), say("Hm.")])
+        await run(await interviews.sendInterviewMessage(campaignId, "character", { content: "Luz." }, ids.ana))
+        expect(lastTool("update_character_build").error).toContain("“Elfo” não é a espécie nem um talento deste personagem")
+        // Magia extra sem o atributo de conjuração (o Guerreiro não conjura): a escolha do jogador falta.
+        scripted.push([call("update_character_build", { ...base, magiasExtras: [{ fonte: "Atacante Selvagem", magia: "Raio de Fogo" }, { fonte: "Humano", magia: "Luz" }] }), say("Qual atributo?")])
+        await run(await interviews.sendInterviewMessage(campaignId, "character", { content: "Raio de Fogo e Luz." }, ids.ana))
+        expect((lastTool("update_character_build").output as { faltando: string[] }).faltando).toEqual([expect.stringContaining("atributo de conjuração")])
+        scripted.push([call("update_character_build", { atributoConjuracao: "Sabedoria" }), say(PROPOSAL)])
+        await run(await interviews.sendInterviewMessage(campaignId, "character", { content: "Sabedoria." }, ids.ana))
+        const output = lastTool("update_character_build").output as { faltando: string[]; magiasExtras: { magia: string; fonte: string }[]; atributoConjuracao: string }
+        expect(output.faltando).toEqual([])
+        expect(output.magiasExtras).toEqual([expect.objectContaining({ magia: "Raio de Fogo", fonte: "Atacante Selvagem" }), expect.objectContaining({ magia: "Luz", fonte: "Humano" })])
+        expect(output.atributoConjuracao).toBe("Sabedoria")
+        generateAiText.mockResolvedValueOnce({ text: JSON.stringify({ name: null, profile: { identidade: "Guerreira" }, sheet: { appearance: "Alta.", history: "Lutou." } }) })
+        await completeInterview(campaignId, "character", ids.ana)
+        const sheetId = (await MaddoxCharacterModel.findOne({ userId: ids.ana }).lean())!.sheetId!
+        expect((await CharacterSheet.findById(sheetId).lean())!.spellcastingAttribute).toBe("wisdom")
+        const spells = await CharacterSpell.find({ sheetId }).lean()
+        expect(spells.map((spell) => String(spell.catalogSpellId)).sort()).toEqual([String(cat.spells.fireBolt), String(cat.spells.light)].sort())
+        // O truque com dano ganha o ataque com o atributo escolhido (Sabedoria 12: +1, proficiência +2).
+        const attack = await CharacterAttack.findOne({ sheetId, notes: `auto:spell:${String(cat.spells.fireBolt)}` }).lean()
+        expect(attack!.attackBonus).toBe("+3")
+    })
+
+    it("DND-51 (F7): talento sem magia cujo texto diz \"você aprende\" não cobra magias; com magia, cobra até gravar ou declarar sem magia", async () => {
+        const campaignId = await characterInterview("fiel-dnd", 1)
+        await attributesWithSoldierBonus(campaignId)
+        const base = { raca: "Humano", classe: "Guerreiro", origem: "Soldado", periciasClasse: ["Percepção", "Sobrevivência"], estiloLuta: "Defesa", equipamento: [{ item: "Espada longa", equipado: true }], idiomas: ["Comum"] }
+        await mongoose.connection.collection("feats").updateOne({ _id: cat.feats.savage }, { $set: { description: "Você aprende três idiomas e sabe falar com os animais da sua terra." } })
+        scripted.push([call("update_character_build", base), say("Ok.")])
+        await run(await interviews.sendInterviewMessage(campaignId, "character", { content: "Guerreiro." }, ids.ana))
+        expect((lastTool("update_character_build").output as { faltando: string[] }).faltando).toEqual([])
+        await mongoose.connection.collection("feats").updateOne({ _id: cat.feats.savage }, { $set: { description: "Você aprende um truque à sua escolha." } })
+        scripted.push([call("update_character_build", base), say("Ok.")])
+        await run(await interviews.sendInterviewMessage(campaignId, "character", { content: "De novo." }, ids.ana))
+        expect((lastTool("update_character_build").output as { faltando: string[] }).faltando).toEqual([expect.stringContaining("magias do talento Atacante Selvagem")])
+        scripted.push([call("update_character_build", { semMagiasExtras: ["Atacante Selvagem"] }), say("Ok.")])
+        await run(await interviews.sendInterviewMessage(campaignId, "character", { content: "Ele não tem magia." }, ids.ana))
+        expect((lastTool("update_character_build").output as { faltando: string[] }).faltando).toEqual([])
+    })
+
     it("refazer a ficha não duplica itens, ataques nem magias", async () => {
         const campaignId = await characterInterview("fiel-dnd", 1)
         await attributesWithSoldierBonus(campaignId)

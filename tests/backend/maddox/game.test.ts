@@ -211,6 +211,22 @@ describe("Maddox 3 — troca de turno", () => {
         expect(await narrations(id)).toBe(1)
     })
 
+    it("DND-51: a nova pergunta do jogador continua a conversa dele no turno (responde à última resposta do Maddox)", async () => {
+        const { id, owner, seats } = await table(2)
+        await g.startCampaign(id, owner)
+        let state = await g.submitGameAction(id, { kind: "question", content: "Qual truque você quer?" }, seats[0]!.userId)
+        const firstAnswer = state.messages.find((message) => message.kind === "answer")!
+        expect(state.messages.find((message) => message.kind === "question")!.replyToId).toBeNull()
+        state = await g.submitGameAction(id, { kind: "question", content: "Orientação" }, seats[0]!.userId)
+        const reply = state.messages.filter((message) => message.kind === "question").at(-1)!
+        expect(reply.replyToId).toBe(firstAnswer.id)
+        // Outro jogador começa a própria conversa; o turno segue aberto e nenhuma declaração foi gasta.
+        state = await g.submitGameAction(id, { kind: "question", content: "E eu?" }, seats[1]!.userId)
+        expect(state.messages.filter((message) => message.kind === "question").at(-1)!.replyToId).toBeNull()
+        expect(state.turn).toMatchObject({ number: 1, phase: "players" })
+        expect(state.me.declared).toBe(false)
+    })
+
     it("não declara duas vezes no mesmo turno nem no turno do mestre", async () => {
         const { id, owner, seats } = await table(2)
         await g.startCampaign(id, owner)

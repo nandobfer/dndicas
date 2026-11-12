@@ -698,7 +698,11 @@ export async function submitGameAction(campaignId: string, input: MaddoxGameActi
 
     if (input.kind === "question") {
         const turnNumber = campaign.turn.number
+        // DND-51: a nova pergunta continua a conversa do jogador neste turno (a réplica responde à última resposta do
+        // Maddox a ele), para o mestre perguntar de volta e concluir a correção com a resposta.
+        const replyToId = await lastAnswerTo(campaign._id, turnNumber, member._id)
         const question = await MaddoxCampaignMessageModel.create({
+            replyToId,
             campaignId: campaign._id,
             turnNumber,
             phase: "players",
@@ -726,6 +730,17 @@ export async function submitGameAction(campaignId: string, input: MaddoxGameActi
     await publishGameChanged(campaign._id)
     await evaluateTurn(campaign._id)
     return getGameState(campaignId, userId)
+}
+
+/** Última resposta do Maddox a uma pergunta do membro neste turno (`null` = conversa nova). */
+async function lastAnswerTo(campaignId: Types.ObjectId, turnNumber: number, memberId: Types.ObjectId): Promise<Types.ObjectId | null> {
+    const questions = await MaddoxCampaignMessageModel.find({ campaignId, turnNumber, kind: "question", memberId }).select("_id").lean<{ _id: Types.ObjectId }[]>()
+    if (!questions.length) return null
+    const answer = await MaddoxCampaignMessageModel.findOne({ campaignId, turnNumber, kind: "answer", error: null, replyToId: { $in: questions.map((item) => item._id) } })
+        .sort({ _id: -1 })
+        .select("_id")
+        .lean<{ _id: Types.ObjectId }>()
+    return answer?._id ?? null
 }
 
 /**
@@ -935,7 +950,7 @@ async function messagesDto(all: MessageDoc[], viewer: MessagesViewer): Promise<M
             ...(message.kind === "narration" ? { actionOptions: actionOptionsFor(message, viewer) } : {}),
             // O motivo bruto do provedor só vai ao dono; para os demais o campo nem é serializado (DND-27).
             ...opexNpcFailuresDto(message, viewer, knownFailureNpcs),
-            ...(message.kind === "combat-prep" && message.combatPrep ? { combatPrep: { characterName: message.combatPrep.characterName, changes: message.combatPrep.changes ?? [] } } : {}),
+            ...(message.kind === "combat-prep" && message.combatPrep ? { combatPrep: { characterName: message.combatPrep.characterName, changes: message.combatPrep.changes ?? [], question: message.combatPrep.question ? { ...message.combatPrep.question, deadline: new Date(message.combatPrep.question.deadline).toISOString(), settled: message.combatPrep.question.settled !== false, halted: message.combatPrep.question.halted ?? null } : null } } : {}),
             ...(message.kind === "rewind" && message.rewindNotice ? { rewindNotice: { event: message.rewindNotice.event, turnNumber: message.rewindNotice.turnNumber, originTurn: message.rewindNotice.originTurn } } : {}),
             createdAt: new Date(message.createdAt).toISOString(),
         }

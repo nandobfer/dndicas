@@ -255,7 +255,18 @@ export interface IMaddoxCombatReaction {
 
 // ── Preparação da mesa de combate (DND-41) ────────────────────────────────────
 
-export type CombatPrepStatus = "pending" | "running" | "ready" | "failed" | "skipped" | "discarded"
+/** `awaiting-player` (DND-51): a preparação parou com uma pergunta ao jogador (falta uma escolha dele na ficha). */
+export type CombatPrepStatus = "pending" | "running" | "awaiting-player" | "ready" | "failed" | "skipped" | "discarded"
+
+/** DND-51: pergunta da preparação ao jogador e a resposta dele (ou o prazo vencido). */
+export interface CombatPrepQuestion {
+    text: string
+    askedAt: Date
+    deadline: Date
+    answer: string | null
+    answeredAt: Date | null
+    expired: boolean
+}
 
 /** O que a preparação muda numa opção que o servidor já calcula (pelo id estável da opção). */
 export interface CombatOptionPatch {

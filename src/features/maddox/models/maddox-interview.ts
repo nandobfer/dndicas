@@ -58,6 +58,13 @@ export interface IMaddoxWorldCatalog {
  * Escolhas da ficha feitas na entrevista de personagem (graus com ficha), gravadas por `update_character_build` e
  * validadas contra o catálogo. A ficha é montada no servidor a partir delas (`sheet-builder.ts`).
  */
+export interface IMaddoxExtraSpell {
+    id: string
+    name: string
+    circle: number
+    source: { kind: "race" | "feat"; id: string | null; name: string }
+}
+
 export interface IMaddoxCharacterBuild {
     level: number | null
     race: IMaddoxBuildRef | null
@@ -71,6 +78,15 @@ export interface IMaddoxCharacterBuild {
     feats: { level: number; id: string; name: string; attributes: Partial<Record<AttributeType, number>>; cap?: number }[]
     cantrips: IMaddoxBuildRef[]
     spells: IMaddoxBuildRef[]
+    /**
+     * DND-51: magias que não vêm da classe — da espécie ("Você sabe Rajada de Veneno") ou de um talento (os truques e a
+     * magia do Iniciado em Magia) — com a fonte. Opcional: entrevistas antigas não têm.
+     */
+    extraSpells?: IMaddoxExtraSpell[]
+    /** DND-51 (revisão, F7): espécie ou talento declarados sem magia (não cobram `magiasExtras`). */
+    noExtraSpellSources?: string[]
+    /** DND-51: atributo de conjuração escolhido pelo jogador (regra com lista, como espécie ou talento). */
+    spellcastingAttribute?: AttributeType | null
     equipment: { id: string | null; name: string; quantity: number; equipped: boolean }[]
     coins: { cp: number; sp: number; ep: number; gp: number; pp: number }
     languages: string[]

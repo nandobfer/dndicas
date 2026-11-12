@@ -119,6 +119,11 @@ async function runAdjustment(campaignId: Types.ObjectId, prepId: Types.ObjectId,
         // As opções atuais (já preparadas) também são ids válidos para corrigir.
         const options = { action: [...context.options.action, ...(view?.options.action ?? [])], bonus: [...context.options.bonus, ...(view?.options.bonus ?? [])], reactions: context.options.reactions, attacksPerAction: context.options.attacksPerAction }
         const interpretation = interpretPrep({ sheetChanges: response.sheetChanges, modify: response.modify, remove: response.remove, add: response.add }, { ...context, options }, reads)
+        // DND-51: a escolha do jogador só vale dita por ele (no pedido ou na entrevista).
+        const [{ screenPlayerChoices, refusalsOf, choiceSheetOf }, { interviewPlayerTexts }] = await Promise.all([import("./sheet-choice-rules"), import("./question-runs")])
+        const screen = await screenPlayerChoices(interpretation.sheetChanges, reads, [adjustment.text, ...prep.adjustments.map((item) => item.text), ...(await interviewPlayerTexts(campaign._id, prep.characterId))], await choiceSheetOf(state.sheetId))
+        interpretation.sheetChanges = screen.allowed
+        interpretation.refusals.push(...refusalsOf(screen.refused))
         const written = await applyInterpretation(interpretation, { sheetId: state.sheetId, campaign, characterName: prep.characterName, origin: "combat-adjust", requestedBy })
         const changes: CombatPrepChange[] = orderedChanges(interpretation, [...written.changes, ...interpretation.optionChanges])
         const sourced = { catalogRefs: reads.refs, droppedWithoutSource: interpretation.droppedWithoutSource }

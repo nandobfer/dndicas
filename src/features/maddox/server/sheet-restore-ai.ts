@@ -22,6 +22,7 @@ const INSTRUCTIONS = [
     "Você é o Maddox, mestre de D&D. A campanha foi reiniciada: a história jogada foi apagada e cada personagem volta ao estado do fim da entrevista de criação.",
     "Compare a FICHA ATUAL com a FICHA DE REFERÊNCIA (a que a entrevista gerou, calculada pelo servidor) e diga o que precisa voltar para a ficha ficar como no fim da entrevista: PV, dados de vida, espaços de magia e cargas usados, moedas, itens ganhos ou perdidos na história, ataques, traços, talentos, magias e anotações.",
     "Mantenha o que já está igual à referência e o que não mudou por causa da história jogada. Na dúvida, não altere.",
+    "O reinício apaga a história, não as escolhas da entrevista: NUNCA remova magias, truques, talentos ou características que o jogador escolheu na entrevista (veja o resultado da entrevista), mesmo que faltem na referência, nem apague o atributo de conjuração.",
     "## Formato da resposta",
     'Responda SOMENTE com um objeto JSON {"changes":[…]} (lista vazia quando nada precisa mudar). Cada alteração tem "reason" (motivo curto) e um destes formatos:',
     `  - {"type":"field","field":"${SHEET_RESTORE_FIELDS.join("|")}"} — o campo volta ao valor da referência;`,

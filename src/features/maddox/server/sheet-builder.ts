@@ -257,12 +257,16 @@ export async function computeCharacterSheet(input: BuildSheetInput): Promise<Com
     }
 
     const source = spellSource(catalog)
-    const spellMod = source?.attribute ? mods[mapCatalogAttributeToSheetAttribute(source.attribute as CatalogAttributeType) ?? "intelligence"] : 0
-    const spellDocs = [...build.cantrips, ...build.spells].map((ref) => {
+    // DND-51: sem atributo da classe, vale o que o jogador escolheu para as magias da espécie e dos talentos.
+    const attribute = (source?.attribute ? mapCatalogAttributeToSheetAttribute(source.attribute as CatalogAttributeType) : null) ?? build.spellcastingAttribute ?? null
+    if (!set.spellcastingAttribute && build.spellcastingAttribute) set.spellcastingAttribute = build.spellcastingAttribute
+    const spellMod = attribute ? mods[attribute] : 0
+    const extraSpells = (build.extraSpells ?? []).filter((extra) => ![...build.cantrips, ...build.spells].some((ref) => ref.id === extra.id))
+    const spellDocs = [...build.cantrips, ...build.spells, ...extraSpells].map((ref) => {
         const spell = ref.id ? (catalog.spells.get(ref.id) ?? null) : null
-        return spellDoc(input.sheetId, ref.name, spell)
+        return catalogSpellDoc(input.sheetId, ref.name, spell)
     })
-    for (const ref of build.cantrips) {
+    for (const ref of [...build.cantrips, ...extraSpells]) {
         const spell = ref.id ? (catalog.spells.get(ref.id) as (CatalogSpell & { baseDice?: { quantidade: number; tipo: string } }) | undefined) : undefined
         if (!spell || spell.circle !== 0 || !spell.baseDice) continue
         attacks.push({ sheetId: input.sheetId, name: paragraph({ id: String(spell._id), entityType: "Magia", label: spell.name }), ...buildSpellAttackAutofill(spell as never, { spellAttackBonus: { value: prof + spellMod } }, level), notes: getAutoSpellAttackNotes(String(spell._id)) })
@@ -314,7 +318,8 @@ export async function initialWeaponMasteries(catalog: Pick<BuildCatalog, "cls" |
     return chosen
 }
 
-function spellDoc(sheetId: Types.ObjectId, name: string, spell: CatalogSpell | null) {
+/** Registro de magia da ficha a partir do catálogo (entrevista e correções do Maddox, DND-51). */
+export function catalogSpellDoc(sheetId: Types.ObjectId, name: string, spell: CatalogSpell | null) {
     const components = spell?.component ?? []
     return {
         sheetId,

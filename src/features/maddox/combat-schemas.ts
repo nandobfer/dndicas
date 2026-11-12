@@ -44,3 +44,13 @@ export const maddoxCombatAdjustmentSchema = z.strictObject({
         .max(MADDOX_COMBAT_ADJUST_TEXT_MAX, { error: `O pedido pode ter no máximo ${MADDOX_COMBAT_ADJUST_TEXT_MAX.toLocaleString("pt-BR")} caracteres` }),
 })
 export type MaddoxCombatAdjustmentInput = z.infer<typeof maddoxCombatAdjustmentSchema>
+
+/** DND-51: resposta do jogador à pergunta da preparação do combate. */
+export const maddoxCombatPrepAnswerSchema = z.strictObject({
+    text: z
+        .string({ error: "Escreva a sua resposta" })
+        .trim()
+        .min(1, { error: "Escreva a sua resposta" })
+        .max(MADDOX_COMBAT_ADJUST_TEXT_MAX, { error: `A resposta pode ter no máximo ${MADDOX_COMBAT_ADJUST_TEXT_MAX.toLocaleString("pt-BR")} caracteres` }),
+})
+export type MaddoxCombatPrepAnswerInput = z.infer<typeof maddoxCombatPrepAnswerSchema>

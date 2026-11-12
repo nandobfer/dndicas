@@ -27,7 +27,7 @@ export const combatPrepAi = {
         void input
         return { decisao: "manter", motivo: "Segue caído." }
     }),
-    review: vi.fn(async (input: { characterName: string; sheetText: string; optionsText: string; sneakAttack: string | null; reads?: CatalogReadLog; jobId?: string }): Promise<unknown> => {
+    review: vi.fn(async (input: { characterName: string; sheetText: string; optionsText: string; sneakAttack: string | null; reads?: CatalogReadLog; jobId?: string; question?: { text: string; answer: string | null } }): Promise<unknown> => {
         void input
         return { sheetChanges: [], modify: [], remove: [], add: [] }
     }),

@@ -10,8 +10,8 @@ import { MemberAvatar, OpexChip, RarityChip } from "../../campaigns/campaign-vis
 import { COMBAT_COLOR } from "../GameCombatCard"
 import { HP_BAND_COLORS, hpColor } from "./combat-visuals"
 
-const PREP_LABELS: Record<MaddoxCombatPrepSlotDto["status"], string> = { waiting: "Aguardando", preparing: "Preparando…", ready: "Pronto", failed: "Falhou" }
-const PREP_COLORS: Record<MaddoxCombatPrepSlotDto["status"], string> = { waiting: rarityColors.common, preparing: rarityColors.legendary, ready: rarityColors.uncommon, failed: rarityColors.artifact }
+const PREP_LABELS: Record<MaddoxCombatPrepSlotDto["status"], string> = { waiting: "Aguardando", preparing: "Preparando…", asking: "Pergunta ao jogador", ready: "Pronto", failed: "Falhou" }
+const PREP_COLORS: Record<MaddoxCombatPrepSlotDto["status"], string> = { waiting: rarityColors.common, preparing: rarityColors.legendary, asking: rarityColors.rare, ready: rarityColors.uncommon, failed: rarityColors.artifact }
 
 /** DND-41: selo da preparação da mesa de um personagem. */
 export function PrepSeal({ prep }: { prep: MaddoxCombatPrepSlotDto }) {

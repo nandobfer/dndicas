@@ -9,6 +9,7 @@ import { isActiveMaddoxJob } from "./game-live"
 import { MADDOX_NARRATOR_TOOLS, MaddoxToolError, runMaddoxTool, type MaddoxMasterTool } from "./master-tools"
 import { verifyMaddoxCatalogToken, verifyMaddoxInterviewToken, verifyMaddoxTurnToken } from "./master-turn-token"
 import { catalogRunLog, recordCatalogToolResult } from "./catalog-reads"
+import { jobCatalogRunId } from "./question-runs"
 import { MADDOX_ALL_INTERVIEW_TOOLS, MaddoxInterviewToolError, runInterviewTool, type MaddoxInterviewTool } from "./interview-tools"
 import { MADDOX_CATALOG_TOOLS, MaddoxCatalogToolError, runCatalogTool, type MaddoxCatalogTool } from "./catalog-tools"
 import { MaddoxInterviewModel } from "../models"
@@ -60,7 +61,8 @@ async function handleCatalog(tool: MaddoxCatalogTool, args: Record<string, unkno
     const interview = turn ? null : verifyMaddoxInterviewToken(raw)
     // DND-49: token da preparação do combate / do pedido de ajuste (só catálogo; as leituras entram no registro da execução).
     const catalog = turn || interview ? null : verifyMaddoxCatalogToken(raw)
-    const runLog = catalog ? catalogRunLog(catalog.runId) : null
+    // DND-51: na resposta a uma pergunta, as leituras com o token de turno entram no registro do job.
+    const runLog = catalog ? catalogRunLog(catalog.runId) : turn ? catalogRunLog(jobCatalogRunId(turn.jobId)) : null
     let active = false
     if (turn && Types.ObjectId.isValid(turn.campaignId)) active = isActiveMaddoxJob(turn.campaignId, turn.jobId)
     else if (catalog && Types.ObjectId.isValid(catalog.campaignId)) active = Boolean(runLog) && isActiveMaddoxJob(catalog.campaignId, catalog.jobId)

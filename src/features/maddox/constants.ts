@@ -315,7 +315,7 @@ export const MADDOX_GAME_CHANGED_EVENT = "maddox.game.changed"
  * reação (`combat-reaction`). `rewind` (DND-44) é a linha de aviso "O dono voltou a mesa para o turno X" / "O dono retomou o
  * turno N": nunca é descartada e fica fora da transcrição do narrador, do Opex e da busca do Diário.
  */
-export const MADDOX_GAME_MESSAGE_KINDS = ["narration", "declaration", "pass", "question", "answer", "check", "combat", "combat-action", "combat-roll", "combat-reaction", "reminder", "combat-prep", "rewind", "hit-points"] as const
+export const MADDOX_GAME_MESSAGE_KINDS = ["narration", "declaration", "pass", "question", "answer", "check", "combat", "combat-action", "combat-roll", "combat-reaction", "reminder", "combat-prep", "rewind", "hit-points", "sheet-change"] as const
 export type MaddoxGameMessageKind = (typeof MADDOX_GAME_MESSAGE_KINDS)[number]
 
 /** O que o jogador envia no próprio turno. */
@@ -719,6 +719,17 @@ export const MADDOX_COMBAT_PREP_TEXT_CEILING = { reason: 4_000, label: 300, deta
 /** Trecho de cada característica e talento que vai ao modelo; acima disso (ou com menções) ele só acrescenta, não reescreve. */
 export const MADDOX_COMBAT_PREP_TRAIT_TEXT_MAX = 400
 /** Mensagem dos demais quando a preparação de uma ficha falhou (o motivo só vai ao dono da campanha). */
+/**
+ * DND-51: ferramentas de leitura e correção da ficha do "Pergunte ao mestre" (só na resposta a uma pergunta, nos graus
+ * com ficha).
+ */
+export const MADDOX_SHEET_FIX_TOOL_NAMES = ["get_character_sheet", "get_character_interview", "update_character_sheet"] as const
+
+/** DND-51: prazo da resposta do jogador a uma pergunta da preparação do combate; depois, a preparação conclui sem a escolha. */
+export const MADDOX_COMBAT_PREP_ANSWER_TIMEOUT_MS = 3 * 60_000
+
+export const MADDOX_COMBAT_PREP_EXPIRED_NOTICE = "Você não respondeu a tempo: a preparação seguiu sem essa escolha. Peça a correção pelo \"Pergunte ao mestre\"."
+
 export const MADDOX_COMBAT_PREP_FAILED_MESSAGE = "A preparação desta ficha falhou. Aguardando o dono da campanha."
 /** Mensagem do jogador quando o pedido de ajuste não pôde ser examinado (o motivo só vai ao dono da campanha). */
 export const MADDOX_COMBAT_ADJUST_FAILED_MESSAGE = "O Maddox não conseguiu examinar o pedido agora. Tente de novo."
