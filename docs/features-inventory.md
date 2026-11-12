@@ -603,7 +603,6 @@ APIs:
 - `GET /api/character-sheets/[id]`
 - `PATCH /api/character-sheets/[id]`
 - `DELETE /api/character-sheets/[id]`
-- `POST /api/character-sheets/[id]/long-rest`
 - `GET|POST /api/character-sheets/[id]/items`
 - `PATCH|DELETE /api/character-sheets/[id]/items/[itemId]`
 - `GET|POST /api/character-sheets/[id]/spells`

@@ -44,6 +44,7 @@ export interface ICharacterSheet extends Document {
     hitDiceUsed: number
     deathSavesSuccess: number
     deathSavesFailure: number
+    exhaustion: number
     armorClassOverride: number | null
     armorClassBonus: number | null
     unarmoredDefense: { enabled: boolean; base: number; attributes: AttributeType[] }
@@ -150,6 +151,7 @@ const CharacterSheetSchema = new Schema<ICharacterSheet>(
         hitDiceUsed: { type: Number, default: 0, min: 0 },
         deathSavesSuccess: { type: Number, default: 0, min: 0, max: 3 },
         deathSavesFailure: { type: Number, default: 0, min: 0, max: 3 },
+        exhaustion: { type: Number, default: 0, min: 0, max: 6 },
         armorClassOverride: { type: Number, default: null },
         armorClassBonus: { type: Number, default: null },
         unarmoredDefense: {

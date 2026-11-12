@@ -37,6 +37,7 @@ const FIELD_DEFAULTS: Partial<Record<SheetRestoreField, unknown>> = {
     hitDiceUsed: 0,
     deathSavesSuccess: 0,
     deathSavesFailure: 0,
+    exhaustion: 0,
     inspiration: false,
     coins: { cp: 0, sp: 0, ep: 0, gp: 0, pp: 0 },
     notes: "",
