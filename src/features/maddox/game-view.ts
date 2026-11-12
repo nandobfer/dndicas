@@ -6,7 +6,7 @@ export const MADDOX_GAME_POLL_MS = 5000
 
 /** Regras de exibição da mesa (Maddox 3) — módulo PURO, sem React. */
 
-export type MaddoxSeatStatus = "declared" | "waiting" | "offline" | "next-turn" | "preparing" | "watching" | "rolling"
+export type MaddoxSeatStatus = "declared" | "waiting" | "offline" | "next-turn" | "preparing" | "watching" | "rolling" | "resting"
 
 export const MADDOX_SEAT_LABELS: Record<MaddoxSeatStatus, string> = {
     declared: "Declarou",
@@ -16,6 +16,7 @@ export const MADDOX_SEAT_LABELS: Record<MaddoxSeatStatus, string> = {
     preparing: "Preparando personagem",
     watching: "Na mesa",
     rolling: "Rolando teste",
+    resting: "Descansando",
 }
 
 /**
@@ -29,6 +30,8 @@ export function seatStatus(participant: MaddoxGameParticipantDto, state: Pick<Ma
     if (state.status === "active" && state.turn.phase === "master" && state.turn.awaitingChecks && [...state.turn.pendingChecks, ...(state.turn.pendingCombat ?? [])].some((check) => check.memberId === participant.memberId)) return "rolling"
     if (state.status !== "active" || state.turn.phase !== "players") return "watching"
     if (!participant.eligible) return "next-turn"
+    // Descanso aberto (DND-58): quem ainda tem parte a concluir aparece "Descansando" (offline conclui sozinho).
+    if (!participant.opex && participant.characterName && state.turn.restWaiting?.some((item) => item.characterName === participant.characterName) && (!presence.available || presence.online.has(participant.userId))) return "resting"
     if (participant.declared) return "declared"
     if (presence.available && !participant.opex && !presence.online.has(participant.userId)) return "offline"
     return "waiting"

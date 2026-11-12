@@ -93,6 +93,8 @@ export interface CharacterSheet {
     hitDiceUsed: number
     deathSavesSuccess: number
     deathSavesFailure: number
+    /** Exaustão (DND-58): 0–6; −2 por nível nos testes de d20 da mesa Maddox; 6 = morte. */
+    exhaustion: number
     armorClassOverride: number | null
     armorClassBonus: number | null
     unarmoredDefense: UnarmoredDefenseConfig
@@ -400,6 +402,7 @@ export const PatchSheetSchema = z.object({
     hitDiceUsed: z.number().int().min(0).optional(),
     deathSavesSuccess: z.number().int().min(0).max(3).optional(),
     deathSavesFailure: z.number().int().min(0).max(3).optional(),
+    exhaustion: z.number().int().min(0).max(6).optional(),
     armorClassOverride: z.number().int().nullable().optional(),
     armorClassBonus: z.number().int().nullable().optional(),
     unarmoredDefense: z.object({

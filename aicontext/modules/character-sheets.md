@@ -63,6 +63,16 @@ A rota `/sheets` é protegida por guard server-side usando `getCurrentUserFromDb
 ### Métricas de uso no dashboard
 O dashboard usa `GET /api/stats/entity-usage?entityType=...` para exibir uso real de entidades em vez de crescimento temporal nos cards do catálogo. A rota deriva uso em fichas a partir de `classRef`, `raceRef`, `originRef`, `catalogSpellId`, `catalogFeatId`, `catalogTraitId`, `catalogItemId` e `resourceCharges.source.entityType`, retornando `{ active, usage }` para preservar o contrato visual do `EntityCard`.
 
+## Exaustão e descanso (DND-58)
+
+- Campo `exhaustion` (0–6, padrão 0) no model, nos tipos e no `PatchSheetSchema` (`z.number().int().min(0).max(6)`). A linha
+  "Exaustão" fica no card "Dado de Vida / Salvaguarda Contra Morte" (`sheet-header.tsx`, 6 marcadores; clicar no nível atual desce um).
+  Na mesa Maddox, cada nível tira 2 de todo teste de d20 e o nível 6 mata o personagem (ver `aicontext/modules/maddox.md`).
+  O PATCH que grava `exhaustion` 6 (`patchSheet`/`patchSheetWithAccess`) também mata o personagem de campanha Maddox ligado à ficha.
+- A ficha **não tem mais descanso longo**: o botão, o hook `use-long-rest`, `useTriggerLongRest`/`triggerLongRest`,
+  `applyLongRest`/`applyLongRestWithAccess` e as rotas `POST /api/character-sheets/[id]/long-rest` e
+  `POST /api/owlbear/character-sheets/[id]/long-rest` foram removidos. O descanso é conduzido pelo Maddox (`start_rest`).
+
 ## Regras dos métodos de atributos
 
 `src/features/character-sheets/utils/ability-score-rules.ts` (módulo puro, sem "use client") concentra o conjunto padrão

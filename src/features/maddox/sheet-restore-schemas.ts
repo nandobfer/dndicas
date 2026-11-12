@@ -27,6 +27,7 @@ export const SHEET_RESTORE_FIELDS = [
     "hitDiceUsed",
     "deathSavesSuccess",
     "deathSavesFailure",
+    "exhaustion",
     "inspiration",
     "spellcastingAttribute",
     "spellSlots",

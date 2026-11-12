@@ -46,7 +46,7 @@ import { checkSucceeded, keptD20 } from "../check-modifier"
 import { isHiddenPlayerAction, type PlayerActionsViewer } from "../player-actions-visibility"
 import { assertMemberCanPlay, isMemberReadyToPlay, loadMembership } from "./campaigns"
 import { getMaddoxMaster, type MaddoxMasterDeclaration } from "./game-master"
-import { beginLive, enqueueMaddoxJob, isActiveMaddoxJob, isCampaignBusy, maddoxJobSignal, takeDraftActionOptions, takeDraftChecks, takeDraftCombat, takeDraftImages, takeDraftOpexNpcFailures } from "./game-live"
+import { beginLive, enqueueMaddoxJob, isActiveMaddoxJob, isCampaignBusy, maddoxJobSignal, takeDraftActionOptions, takeDraftChecks, takeDraftCombat, takeDraftImages, takeDraftOpexNpcFailures, takeDraftRest } from "./game-live"
 import { onlineUserIds } from "./game-presence"
 import { isOpexMember, isOpexUserId, realUserIds } from "./opex-members"
 
@@ -193,6 +193,9 @@ async function runMasterTurn(campaignId: Types.ObjectId, token: string, turnNumb
             // O combate pedido nesta geração é aplicado ANTES de gravar a narração (o card precisa do id): o card de início vem acima
             // dela, o de fim abaixo. Os efeitos do fim só rodam depois (`finishCombatTurn`), que também grava o card que faltar.
             const combatEvents = takeDraftCombat(String(campaignId), jobId)
+            // Descanso (DND-58): o balão vem logo abaixo da narração; um combate começado nesta narração o interrompe.
+            const restDraft = takeDraftRest(String(campaignId), jobId)
+            const restDoc = restDraft ? await (await import("./rest")).restMessageDoc(campaignId, turnNumber, round, restDraft, combatEvents.some((event) => event.type === "start")) : null
             // Combate tático: a vez dos adversários (cópia de trabalho do job) é gravada antes do fim do combate.
             const tacticalMessages = tacticalRigor ? await (await import("./tactical-master")).commitTacticalWorkspace(campaignId, jobId) : []
             const combat = combatModule && combatEvents.length ? await combatModule.applyCombatDrafts(campaign, turnNumber, combatEvents, round) : { messages: [], touched: [], extraMessages: [] }
@@ -203,6 +206,7 @@ async function runMasterTurn(campaignId: Types.ObjectId, token: string, turnNumb
                     // Bloco de um adversário (DND-25): os dados (cards das ações) vêm antes da narração dele.
                     ...(blockBefore?.kind === "npc" ? tacticalMessages : []),
                     { campaignId, turnNumber, phase: "master", kind: "narration", content, segment: round, actionOptions, opexNpcFailures: opexNpcFailures.length ? opexNpcFailures : null },
+                    ...(restDoc ? [restDoc] : []),
                     ...drafts.map((draft) => draftCheckMessage(campaignId, turnNumber, round, draft)),
                     ...(blockBefore?.kind === "npc" ? [] : tacticalMessages),
                     ...combat.extraMessages,
@@ -213,6 +217,8 @@ async function runMasterTurn(campaignId: Types.ObjectId, token: string, turnNumb
             const message = inserted.find((item) => item.kind === "narration")
             if (combatModule && round === 0) await combatModule.countCombatNarration(campaignId, [...(combatBefore ? [combatBefore._id] : []), ...combat.touched])
             live.end({ messageId: String(message!._id), error: null })
+            const restMessage = inserted.find((item) => item.kind === "rest")
+            if (restMessage) await (await import("./rest")).afterRestCreated(campaign, restMessage)
             // Lembranças desta narração (DND-25): guardadas como memória ou usadas só agora, depois da narração gravada.
             await (await import("./reminders")).commitReminders(campaignId, jobId, turnNumber)
             // Imagens nas cenas (Maddox 10): a pedida nesta narração fica ligada a ela; os retratos marcados, aos NPCs.
@@ -554,6 +560,9 @@ export async function evaluateTurn(campaignId: Types.ObjectId): Promise<void> {
         await resumeMasterTurn(campaign)
         return
     }
+    // Descanso aberto (DND-58): quem está offline conclui a parte dele já aqui, mesmo antes de qualquer declaração.
+    const online = await onlineUserIds(String(campaignId))
+    const restBlocked = await (await import("./rest")).restBlocksTurn(campaignId, online)
     const declared = idSet(campaign.turn?.declaredMemberIds)
     const eligibleIds = (campaign.turn?.eligibleMemberIds ?? []).map(String)
     if (eligibleIds.length === 0 || declared.size === 0) return
@@ -561,10 +570,11 @@ export async function evaluateTurn(campaignId: Types.ObjectId): Promise<void> {
     const eligibleMembers = await MaddoxCampaignMemberModel.find({ _id: { $in: eligibleIds }, campaignId, status: "joined" }).select("userId kind opex.addedAt createdAt").lean<Pick<MemberDoc, "_id" | "userId" | "kind" | "opex" | "createdAt">[]>()
     // Personagens Opex (DND-26) ficam fora da regra dos humanos: agem depois, um de cada vez.
     const humans = eligibleMembers.filter((member) => member.kind !== "opex")
-    const online = await onlineUserIds(String(campaignId))
     const required = online ? humans.filter((member) => online.has(member.userId)) : humans
     const pending = required.filter((member) => !declared.has(String(member._id)))
     if (pending.length > 0) return
+    // Descanso aberto (DND-58): o turno só avança quando cada personagem do descanso concluiu a parte dele.
+    if (restBlocked) return
     if (campaign.turn.opexActor) return
     const opex = eligibleMembers.filter((member) => member.kind === "opex" && !declared.has(String(member._id)))
     if (opex.length > 0) {
@@ -849,6 +859,8 @@ export async function onMemberLeftGame(campaignId: Types.ObjectId, memberId: Typ
     // Combate tático (Maddox 7): o personagem sai da ordem; se era a vez dele, ela fecha e o turno do mestre segue.
     const { onMemberLeftCombat } = await import("./tactical-actions")
     await onMemberLeftCombat(campaignId, memberId)
+    // Descanso aberto (DND-58): as partes de quem saiu são concluídas sem ele.
+    await (await import("./rest")).onRestMemberLeft(campaignId, memberId)
     const before = await MaddoxCampaignModel.findById(campaignId).select("turn").lean<Pick<CampaignDoc, "turn">>()
     if (before?.turn?.combatActor && String(before.turn.combatActor.memberId) === String(memberId)) {
         await MaddoxCampaignModel.updateOne({ _id: campaignId }, { $pull: { "turn.eligibleMemberIds": memberId } })
@@ -893,7 +905,7 @@ const visibleTo = (viewer: MessagesViewer) => (message: MessageDoc) =>
 
 async function messagesDto(all: MessageDoc[], viewer: MessagesViewer): Promise<MaddoxGameMessageDto[]> {
     const messages = all.filter(visibleTo(viewer))
-    const characterIds = [...new Set(messages.map((message) => message.characterId).filter((id): id is Types.ObjectId => Boolean(id)).map(String))]
+    const characterIds = [...new Set([...messages.map((message) => message.characterId), ...messages.flatMap((message) => (message.rest?.characters ?? []).map((entry) => entry.characterId))].filter((id): id is Types.ObjectId => Boolean(id)).map(String))]
     const skippers = [
         ...new Set(
             messages
@@ -916,6 +928,10 @@ async function messagesDto(all: MessageDoc[], viewer: MessagesViewer): Promise<M
     const opexNpcs = await opexNpcChips(messages, combats)
     const knownFailureNpcs = viewer.isOwner ? await knownFailureNpcIds(messages) : new Set<string>()
     const characterById = new Map(characters.map((character) => [String(character._id), character]))
+    // Descanso (DND-58): balões com os retratos e o que cada um pode fazer (o jogador do personagem ou o dono pelo Opex).
+    const rests = messages.some((message) => message.kind === "rest")
+        ? await (await import("./rest")).restDtos(messages, { userId: "", memberId: viewer.memberId, isOwner: viewer.isOwner }, new Map(characters.map((character) => [String(character._id), character.portraitUrl ?? null])))
+        : null
     const userById = new Map(users.map((user) => [String(user._id), user.name?.trim() || user.username || "Dono"]))
     return messages.map((message) => {
         const character = message.characterId ? characterById.get(String(message.characterId)) : undefined
@@ -951,6 +967,8 @@ async function messagesDto(all: MessageDoc[], viewer: MessagesViewer): Promise<M
             // O motivo bruto do provedor só vai ao dono; para os demais o campo nem é serializado (DND-27).
             ...opexNpcFailuresDto(message, viewer, knownFailureNpcs),
             ...(message.kind === "combat-prep" && message.combatPrep ? { combatPrep: { characterName: message.combatPrep.characterName, changes: message.combatPrep.changes ?? [], question: message.combatPrep.question ? { ...message.combatPrep.question, deadline: new Date(message.combatPrep.question.deadline).toISOString(), settled: message.combatPrep.question.settled !== false, halted: message.combatPrep.question.halted ?? null } : null } } : {}),
+            ...(message.kind === "rest" && rests?.has(String(message._id)) ? { rest: rests.get(String(message._id))! } : {}),
+            ...(message.kind === "rest-request" && message.restId ? { restId: String(message.restId) } : {}),
             ...(message.kind === "rewind" && message.rewindNotice ? { rewindNotice: { event: message.rewindNotice.event, turnNumber: message.rewindNotice.turnNumber, originTurn: message.rewindNotice.originTurn } } : {}),
             createdAt: new Date(message.createdAt).toISOString(),
         }
@@ -1064,6 +1082,10 @@ export async function getGameState(campaignId: string, userId: string): Promise<
         // Personagem Opex na vez (DND-26): depois de um reinício, a leitura da mesa retoma a execução (idempotente).
         if (campaign.turn?.phase === "players" && (campaign.turn.opexActor || campaign.turn.combatActor)) void import("./opex-table").then(({ driveOpex }) => driveOpex(campaign._id)).catch(() => undefined)
     }
+    // Descanso aberto (DND-58): preparações presas (reinício do processo) voltam à fila; a faixa mostra quem falta.
+    const restModule = await import("./rest")
+    const restWaiting = campaign.status === "active" ? await restModule.restWaiting(campaign._id) : []
+    if (restWaiting.length) void restModule.scheduleRestPreps(campaign._id).catch(() => undefined)
     const viewer = viewerOf(campaign, loaded.member)
     // Imagens nas cenas (Maddox 10): as presas (processo reiniciado) viram falha antes da leitura.
     const sceneImages = await import("./scene-images")
@@ -1138,6 +1160,7 @@ export async function getGameState(campaignId: string, userId: string): Promise<
             failed: campaign.turn?.phase === "master" && !campaign.turn?.generating && !campaign.turn?.awaitingChecks && Boolean(campaign.turn?.failedAt),
             awaitingChecks: campaign.turn?.phase === "master" && Boolean(campaign.turn?.awaitingChecks),
             pendingChecks: pendingChecks.map((check) => ({ checkId: String(check._id), memberId: String(check.memberId), characterName: check.characterName ?? "Personagem" })),
+            restWaiting,
             combatActor:
                 combatActor && tacticalCombat
                     ? { actorKey: combatActor.actorKey, memberId: String(combatActor.memberId), characterName: tacticalCombat.tactical.characters.find((item) => item.actorKey === combatActor.actorKey)?.name ?? "Personagem" }

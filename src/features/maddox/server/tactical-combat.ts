@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto"
 import { partsFromCalc } from "@/features/dice-roller/dice-breakdown"
-import { initiativeParts } from "../roll-parts"
+import { exhaustionParts, initiativeParts } from "../roll-parts"
 import { Types } from "mongoose"
 import { DomainError } from "@/lib/api/route"
 import { loggerFor } from "@/lib/logger"
@@ -680,6 +680,8 @@ export async function advanceToNextCharacter(campaignId: Types.ObjectId, turnNum
     const actor = findActor(saved, nextKey)
     if (!actor || actor.kind !== "character") return { kind: "none" }
     if (actor.state.hpZero && !actor.state.stable && !actor.state.dead) {
+        // DND-58: a exaustão da ficha também vale no teste contra a morte.
+        const exhaustion = await (await import("./combat-sheet")).characterExhaustionPenalty(actor.state.sheetId)
         await MaddoxCampaignMessageModel.create({
             campaignId,
             turnNumber,
@@ -690,7 +692,7 @@ export async function advanceToNextCharacter(campaignId: Types.ObjectId, turnNum
             characterId: new Types.ObjectId(actor.state.characterId),
             characterName: actor.state.name,
             content: "",
-            combatRoll: { combatId: String(saved._id), kind: "death-save", waitRound: null, status: "pending", ability: null, dc: 10, mode: "normal", dice: "1d20", roll: null, total: null, success: null, reason: "Teste contra a morte", effect: null, targetKey: actor.key, outcome: null, rolledBy: null },
+            combatRoll: { combatId: String(saved._id), kind: "death-save", waitRound: null, status: "pending", ability: null, dc: 10, mode: "normal", dice: d20Expression(exhaustion), modifierParts: exhaustionParts(exhaustion), roll: null, total: null, success: null, reason: "Teste contra a morte", effect: null, targetKey: actor.key, outcome: null, rolledBy: null },
         })
     }
     const { onlineUserIds } = await import("./game-presence")

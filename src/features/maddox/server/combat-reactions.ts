@@ -8,7 +8,7 @@ import { normalizeCatalogName } from "../catalog-markup"
 import { attackOutcome } from "../combat-rules"
 import type { CombatActionStep, IMaddoxCombatAction, IMaddoxCombatReaction, TacticalCharacterState } from "../combat-types"
 import type { MaddoxGameStateDto } from "../game-types"
-import { MaddoxCampaignMessageModel, type IMaddoxCampaign, type IMaddoxCampaignMessage } from "../models"
+import { MaddoxCampaignMessageModel, MaddoxCharacterModel, type IMaddoxCampaign, type IMaddoxCampaignMessage } from "../models"
 import { assertMemberCanPlay } from "./campaigns"
 import { assertActive, getGameState, loadAsMember, publishGameChanged } from "./game"
 import { d20Expression as d20ExpressionOf, findActiveTactical, findActor, mutateTactical, rollExpression, scheduleTimer } from "./tactical-combat"
@@ -166,6 +166,8 @@ async function settleReaction(campaignId: Types.ObjectId, message: MessageDoc, s
         if (shield && !reaction.pendingAttack) outcome.push(`${message.characterName ?? "O personagem"} conjurou Escudo: +5 na CA até o próximo turno.`)
         if (attackOption && option?.attack && attackSource) {
             const source = attackSource
+            // DND-58: a exaustão da ficha vale no ataque de oportunidade.
+            const exhaustion = await reactionExhaustion(message.characterId ?? null)
             {
                 spawnedAction = {
                     combatId: String(combat._id),
@@ -182,7 +184,7 @@ async function settleReaction(campaignId: Types.ObjectId, message: MessageDoc, s
                     freeText: null,
                     status: "pending",
                     // Ataque e dano rolados pelo jogador (o dano só se o ataque acertar), como na Ação.
-                    steps: [attackStep(source.key, source.name, option.attack.bonus), ...(option.attack.damage && option.attack.damage !== "0" ? [damageStep(source.key, source.name, option.attack.damage, option.attack.damageType)] : [])],
+                    steps: [attackStep(source.key, source.name, option.attack.bonus + exhaustion), ...(option.attack.damage && option.attack.damage !== "0" ? [damageStep(source.key, source.name, option.attack.damage, option.attack.damageType)] : [])],
                     ranged: Boolean(option.attack.ranged),
                     summary: `${message.characterName} — Reação: ${option.label} em ${source.name}`,
                     waitRound: reaction.waitRound,
@@ -224,6 +226,13 @@ async function settleReaction(campaignId: Types.ObjectId, message: MessageDoc, s
     await publishGameChanged(campaignId)
     const { advanceAfterChecks } = await import("./game-checks")
     await advanceAfterChecks(campaignId, message.turnNumber, reaction.waitRound)
+}
+
+async function reactionExhaustion(characterId: Types.ObjectId | null): Promise<number> {
+    if (!characterId) return 0
+    const character = await MaddoxCharacterModel.findById(characterId).select("sheetId").lean<{ sheetId?: Types.ObjectId | null }>()
+    const { characterExhaustionPenalty } = await import("./combat-sheet")
+    return characterExhaustionPenalty(character?.sheetId ? String(character.sheetId) : null)
 }
 
 const attackStep = (key: string, name: string, bonus: number): CombatActionStep => ({

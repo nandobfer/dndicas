@@ -115,6 +115,10 @@ export async function updateCharacterSheetFromQuestion(jobId: string | undefined
             return
         }
         const change = result.data
+        if (run.allowedChangeTypes && !run.allowedChangeTypes.includes(change.type)) {
+            refused.push({ alteracao: index + 1, motivo: `"${change.type}" não é uma troca depois do descanso (permitidas: ${run.allowedChangeTypes.join(", ")})` })
+            return
+        }
         if (requiresCatalogSource("sheet", change)) {
             const problem = checkCatalogSource(change.source, run.reads)
             if (problem) {
@@ -140,7 +144,10 @@ export async function updateCharacterSheetFromQuestion(jobId: string | undefined
         origin: "question",
     })
     const applied = written.changes.filter((change) => change.applied)
-    if (applied.length) await postSheetChangeLine(run, character, applied)
+    if (applied.length) {
+        await postSheetChangeLine(run, character, applied)
+        await run.onSheetChanged?.(applied.map((change) => `${changeText(change)}${change.reason ? ` (${change.reason})` : ""}`))
+    }
     log.info({ campaignId: run.campaignId, character: character.name, applied: applied.length, refused: refused.length }, "[maddox] ficha corrigida pelo Pergunte ao mestre")
     return {
         personagem: character.name,
@@ -229,7 +236,7 @@ async function postSheetChangeLine(run: QuestionRun, character: CharacterRow, ch
         kind: "sheet-change",
         characterId: character._id,
         characterName: character.name,
-        content: `Ficha de ${character.name} corrigida:\n${lines.map((line) => `- ${line}`).join("\n")}`,
+        content: `${run.sheetChangeTitle ?? `Ficha de ${character.name} corrigida:`}\n${lines.map((line) => `- ${line}`).join("\n")}`,
         replyToId: new Types.ObjectId(run.questionId),
     })
 }

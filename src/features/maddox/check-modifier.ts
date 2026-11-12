@@ -1,5 +1,6 @@
 import { getAttributeModifier, getProficiencyBonus, getSavingThrowBonus, getSkillBonus, SKILL_ATTRIBUTE_MAP, type CalcPart } from "@/features/character-sheets/utils/dnd-calculations"
 import type { AttributeType, CharacterSheet, SkillName } from "@/features/character-sheets/types/character-sheet.types"
+import { exhaustionLevel, exhaustionPenaltyOf } from "./exhaustion-rules"
 import { MADDOX_CHECK_KIND_LABELS, MADDOX_CHECK_MODE_LABELS, type MaddoxCheckKind, type MaddoxCheckMode } from "./constants"
 
 /**
@@ -24,7 +25,7 @@ export const MADDOX_SKILLS = Object.keys(SKILL_ATTRIBUTE_MAP) as SkillName[]
 
 /** Campos da ficha usados nos testes e no resumo do narrador. */
 export type MaddoxCheckSheet = Pick<CharacterSheet, AttributeType | "level" | "proficiencyBonusOverride" | "savingThrows" | "skills"> &
-    Partial<Pick<CharacterSheet, "name" | "class" | "subclass" | "race" | "hpMax" | "hpCurrent" | "hpTemp" | "computedArmorClass">>
+    Partial<Pick<CharacterSheet, "name" | "class" | "subclass" | "race" | "hpMax" | "hpCurrent" | "hpTemp" | "computedArmorClass" | "exhaustion">>
 
 export interface MaddoxCheckSpec {
     kind: MaddoxCheckKind
@@ -48,9 +49,21 @@ export function checkAbility(kind: MaddoxCheckKind, ability: AttributeType | nul
     return ability
 }
 
-/** Modificador do teste pela ficha; sem ficha = 0 com a parte "Ficha não encontrada". */
+/** Parcela "Exaustão −2n" (DND-58): vale em todo teste de d20 da mesa Maddox. */
+export function exhaustionCalcParts(level: number | null | undefined): CalcPart[] {
+    const penalty = exhaustionPenaltyOf(level)
+    return penalty ? [{ label: "Exaustão", value: signed(penalty), color: "manual" }] : []
+}
+
+/** Modificador do teste pela ficha (com a exaustão, DND-58); sem ficha = 0 com a parte "Ficha não encontrada". */
 export function checkModifier(sheet: MaddoxCheckSheet | null, check: MaddoxCheckSpec): MaddoxCheckModifier {
     if (!sheet) return { value: 0, parts: [{ label: "Ficha não encontrada", value: "+0", color: "manual" }] }
+    const base = baseCheckModifier(sheet, check)
+    const penalty = exhaustionPenaltyOf(sheet.exhaustion)
+    return penalty ? { value: base.value + penalty, parts: [...base.parts, ...exhaustionCalcParts(sheet.exhaustion)] } : base
+}
+
+function baseCheckModifier(sheet: MaddoxCheckSheet, check: MaddoxCheckSpec): MaddoxCheckModifier {
     const attributes = attributesOf(sheet)
     const prof = proficiencyOf(sheet)
     if (check.kind === "skill" && check.skill) {
@@ -116,7 +129,7 @@ export function sheetSummary(sheet: MaddoxCheckSheet): string {
         return data && (data.proficient || data.expertise || data.override !== undefined)
     }).map((skill) => `${skill} ${signed(checkModifier(sheet, { kind: "skill", ability: SKILL_ATTRIBUTE_MAP[skill], skill }).value)}`)
     return [
-        [identity || null, hp, ac, `Proficiência ${signed(prof)}`].filter(Boolean).join(" · "),
+        [identity || null, hp, ac, `Proficiência ${signed(prof)}`, exhaustionLevel(sheet.exhaustion) ? `Exaustão ${exhaustionLevel(sheet.exhaustion)} (${signed(exhaustionPenaltyOf(sheet.exhaustion))} em todo d20)` : null].filter(Boolean).join(" · "),
         `Atributos: ${abilities}`,
         `Resistências com proficiência: ${saves.length ? saves.join(", ") : "nenhuma"}`,
         `Perícias treinadas: ${skills.length ? skills.join(", ") : "nenhuma"}`,

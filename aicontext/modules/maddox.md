@@ -1222,8 +1222,8 @@ mantido em destaque, e o rolador já vem no modo certo.
 
 **PV fora do combate.** Ferramenta do narrador `update_character_hit_points` (`server/hit-points.ts`, regra pura em `hit-points-ops.ts`),
 nos graus `MADDOX_SHEET_RIGORS`, recusada com combate tático ativo (usar `apply_effect`): `curar` (`dados` que o servidor rola ou `valor`),
-`definir`, `estabilizar`, `acordar` (estabilizado → 1 PV), `descanso-curto` (`dadosDeVida`, cada dado + modificador de Constituição) e
-`descanso-longo` (PV máximos, PV temporários e testes contra a morte zerados; os dados de vida gastos não mudam). Motivo obrigatório; personagem
+`definir`, `estabilizar` e `acordar` (estabilizado → 1 PV). O descanso NÃO passa mais por aqui: desde a DND-58 ele é a ferramenta
+`start_rest` (seção "Descanso curto e longo (DND-58)"). Motivo obrigatório; personagem
 morto recusa; PV limitado ao máximo. Grava na ficha (auditoria `FichaPersonagem`, `origin: "narrator-hit-points"`, tempo real) e põe na
 mesa a mensagem `kind: "hit-points"` ("PV de X: 0 → 1 (motivo)", na transcrição como "ficha"). A instrução `MADDOX_HIT_POINTS_RULE` do
 narrador manda chamar a ferramenta antes de narrar alguém a 0 PV acordando, agindo ou se recuperando.
@@ -2145,7 +2145,71 @@ sem retrato e imagem quebrada, propagação bloqueada, `className`, painel de NP
 `maddox-campaigns.test.tsx`.
 
 
+## Descanso curto e longo (DND-58)
+
+O descanso é conduzido só pelo Maddox (sem botão de jogador ou dono) e acontece **numa narração só**: a ferramenta já recebe o
+desfecho. Regra pura em `rest-rules.ts` (tabela de recuperação, dados de vida, trecho do catálogo) e `exhaustion-rules.ts`; Zod em
+`rest-schemas.ts`; servidor em `server/rest.ts` (+ `rest-interpret.ts`, `rest-prep-ai.ts`); tela em `components/game/rest/RestCard.tsx`,
+`rest-view.ts` e `hooks/useMaddoxRest.ts`.
+
+- **`start_rest`** (`tipo` curto|longo, `personagens?` — vazio = o grupo ativo com ficha, sem mortos —, `desfecho` concluido|interrompido,
+  `interrupcao` obrigatória se interrompido, `descricao`): só graus `MADDOX_SHEET_RIGORS`, só na narração (`meta.kind === "narration"`, fora
+  dos blocos do combate tático), uma por narração. Recusa: combate tático ativo, descanso `running` aberto, personagem desconhecido, morto
+  ou com exaustão 6. Fica em rascunho no job (`addDraftRest`/`takeDraftRest` em `game-live.ts`) e vira a mensagem `kind: "rest"` LOGO
+  ABAIXO da narração gravada (`restMessageDoc`); se a geração falha, nada fica. Um `start_combat` na mesma narração interrompe o descanso
+  ("Um combate começou."). Interrompido: nenhuma ficha muda. Auditoria `CampanhaMaddox` (`depois.rest`).
+- **Mensagem `kind: "rest"`** (`rest` Mixed: tipo, status `interrupted|running|closed`, um registro por personagem com `prep`,
+  `hitDice`, `exchange`, `answeredBy`, `doneReason`). Está em `MUTABLE_KINDS` do retrato do turno (a volta a um turno repõe o balão junto
+  das fichas) e é apagada pelo reinício. As partes são gravadas pelo driver (`MaddoxCampaignMessageModel.collection`) com `arrayFilters`:
+  o cast do Mongoose sobre o `Mixed` perdia a condição do personagem.
+- **Preparação da ficha** (job serial `rest-prep` por personagem, `scheduleRestPreps`, também retomado no `GET …/game` e depois da volta
+  a um turno): troca condicional `pending → running`; o **plano com valores absolutos** é gravado (`applying`) ANTES de escrever a ficha
+  e reaplicado sem somar; `ready` com o resumo `recovered`/`notRecovered`. O Maddox só é chamado (`reviewRestRecovery`, ferramentas de
+  catálogo como na DND-49) quando há carga com origem gasta ou, no curto, espaços gastos; `interpretRestPrep` só aceita decisão com
+  `source {ref, quote}` lido NESTA execução, da origem da carga (ou da classe/subclasse para os espaços do curto) e com trecho que fale do
+  descanso (`quoteMentionsRest`). Carga manual (sem `source`) nunca volta; sem descrição, não volta com o motivo. Falha: uma nova
+  tentativa automática; na segunda, `failed` e o dono escolhe "Tentar de novo" ou "Seguir sem" (`skipRestPrep`: aplica a parte da
+  regra com cargas e espaços do curto como "não foi possível consultar o catálogo agora"). O motivo técnico só vai ao dono.
+- **Tabela**: longo = PV máximos, PV temporários zerados, metade dos dados de vida (mínimo 1), todos os espaços, testes contra a morte
+  zerados, exaustão −1, cargas pelo catálogo; magias preparadas ficam. Curto = só cargas/espaços confirmados no catálogo (Magia de
+  Pacto). Dados de vida: a ficha do Maddox grava só o tipo (`"d8"`) e o total é o nível (`hitDicePool`); multiclasse fora do escopo.
+- **Dados de vida (curto)**: `POST …/game/rests/[restId]/characters/[characterId]/hit-dice/{roll,decline}`. Um dado por vez (`1dX` +
+  Constituição, cura mínima 0, PV até o máximo), gravado na entrada por troca condicional do tamanho de `rolls` (duas rolagens
+  simultâneas → 409) antes da ficha; linha `hit-points` e auditoria `origin: "rest-hit-die"`; stream `rest-rolled`
+  (`{messageId}:{characterId}` no mapa de replays). Fecha sozinho no PV máximo ou sem dados.
+- **Trocas** (`POST …/exchange` com `{ text }`, `…/exchange/finish` com `{ nothing }`): o pedido vira `kind: "rest-request"` e um job
+  `rest-exchange` chama `MaddoxMaster.restExchange` (tarefa `rest-exchange`, regras `MADDOX_REST_EXCHANGE_TASK_RULES`: consultar a
+  classe no catálogo, aplicar só o que a regra permite, recusar com motivo, PERGUNTAR sem aplicar quando ambíguo). Abre `openQuestionRun`
+  preso ao personagem (`askerIsOwner: false`) com `allowedChangeTypes = MADDOX_REST_EXCHANGE_CHANGE_TYPES` e o título "Trocas de X
+  depois do descanso longo:"; as trocas só abrem com `prep.status === "ready"` (servidor `REST_PREP_PENDING`, `can.exchange` e o
+  Opex): a preparação grava `resourceCharges`/`spellSlots` inteiros. A resposta é `kind: "answer"` com `replyToId` no pedido. A parte só fecha em "Concluir trocas" ou
+  "Nada a trocar" (até `MADDOX_REST_EXCHANGE_REQUESTS_MAX` pedidos).
+- **Turno**: `restBlocksTurn` (em `evaluateTurn`, antes de qualquer declaração) segura a vez dos jogadores enquanto um personagem
+  online (ou Opex) tem parte aberta; offline (presença do Pusher) conclui sem rolar nem trocar (`doneReason: "offline"`); quem sai
+  conclui (`left`); quem entra depois não é esperado. Fechar (`running → closed`) audita e reavalia o turno. Faixa "Descanso —
+  aguardando …" (`restBannerText`) e assento "Descansando". O narrador recebe o resumo `[descanso]` (`restTranscriptLine`).
+- **Personagem Opex**: `autoRestOpex` (no `driveOpex`) decide com `opexRestTask`/`opexRestSchema` (`dadosDeVida`, `trocas`); o servidor
+  rola um a um e a troca roda INLINE no job do Opex (um job não espera outro); esclarecimento do Maddox → até 2 respostas; se o Maddox falhar ao avaliar a troca, a parte não fecha e vai ao dono. Falha →
+  `answeredBy: "owner"`: o dono vê os controles ("responda por ele") e só mexe naquela ficha.
+
+### Exaustão (DND-58)
+
+Campo `exhaustion` (0–6) da ficha (linha "Exaustão" no card de dados de vida, editável; também na lista do reinício). Ferramenta
+`update_character_exhaustion` (`personagem`, `variacao` ≠ 0, `motivo`; narração e "Pergunte ao mestre"): grava na ficha (auditoria
+`origin: "narrator-exhaustion"`), linha `sheet-change` "Exaustão de X: 1 → 2 (motivo)" e, no nível 6, o personagem fica `dead`
+("Morreu de exaustão.") e sai do combate tático. O 6 marcado direto na ficha tem o mesmo efeito: o PATCH da ficha chama
+`applySheetExhaustionDeath` (import sob demanda em `character-sheets-service.ts`). `apply_effect` com a condição exaustão num personagem jogador passa pela ficha.
+Penalidade −2 × nível (parcela "Exaustão") em todo d20: `checkModifier` (perícia, atributo, resistência), iniciativa, salvaguarda,
+concentração, teste contra a morte (`deathSave(d20, …, penalidade)`: o natural decide 1/20, o total decide o 10) e ataque de
+oportunidade; no combate, o nível vem da ficha (`exhaustionOfSheet`).
+
 ## Testes
+
+Descanso e exaustão (DND-58): `tests/backend/maddox/rest-rules.test.ts` (tabela, dados de vida, trecho do catálogo, exaustão, teste
+contra a morte), `rest-interpret.test.ts` (fonte do catálogo da preparação), `rest.test.ts` (fluxo completo com mestre falso: balão,
+dados de vida um a um, turno travado, offline, longo uma vez só, falha → dono, interrompido, recusas do `start_rest`, trocas pela lista
+fechada, Opex e dono por ele, exaustão até a morte; mocka `rest-prep-ai`, `opex-player` e o motor de dados) e
+`tests/frontend/maddox/maddox-rest.test.tsx` (balão).
 
 `tests/backend/maddox/*` (configuração, roteiros, avatar, sessões, rotas, `campaigns.test.ts` com MongoDB em
 memória, `campaign-routes.test.ts`, `grant-maddox-play.test.ts`; Personagens Opex: `opex-interview.test.ts`,

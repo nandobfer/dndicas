@@ -27,6 +27,14 @@ describe('character sheets backend', () => {
         }).success).toBe(false);
     });
 
+    it('PatchSheetSchema accepts exhaustion from 0 to 6 (DND-58)', () => {
+        expect(PatchSheetSchema.safeParse({ exhaustion: 0 }).success).toBe(true);
+        expect(PatchSheetSchema.safeParse({ exhaustion: 6 }).success).toBe(true);
+        expect(PatchSheetSchema.safeParse({ exhaustion: 7 }).success).toBe(false);
+        expect(PatchSheetSchema.safeParse({ exhaustion: -1 }).success).toBe(false);
+        expect(PatchSheetSchema.safeParse({ exhaustion: 1.5 }).success).toBe(false);
+    });
+
     it('PatchSheetSchema accepts additional note pages and rejects invalid page payloads', () => {
         expect(PatchSheetSchema.safeParse({
             notePages: [{
@@ -241,28 +249,5 @@ describe('character sheets backend', () => {
 
         expect(response.status).toBe(400);
         expect(payload.error).toBe('Dados inválidos');
-    });
-
-    it('POST /api/character-sheets/[id]/long-rest forwards pusher origin and maps missing sheets to 404', async () => {
-        const applyLongRest = vi.fn().mockResolvedValue(null);
-
-        vi.doMock('@/core/auth/server', () => ({
-            auth: vi.fn().mockResolvedValue({ userId: 'clerk-1' }),
-        }));
-        vi.doMock('@/core/realtime/pusher-origin', () => ({
-            PUSHER_ORIGIN_HEADER: 'x-pusher-origin',
-        }));
-        vi.doMock('@/features/character-sheets/api/character-sheets-service', () => ({
-            applyLongRest,
-        }));
-
-        const mod = await importFresh<typeof import('@/app/api/character-sheets/[id]/long-rest/route')>('@/app/api/character-sheets/[id]/long-rest/route');
-        const response = await mod.POST(makeRequest('http://localhost/api/character-sheets/sheet-1/long-rest', {
-            method: 'POST',
-            headers: { 'x-pusher-origin': 'origin-1' },
-        }), { params: Promise.resolve({ id: 'sheet-1' }) });
-
-        expect(response.status).toBe(404);
-        expect(applyLongRest).toHaveBeenCalledWith('sheet-1', 'clerk-1', 'origin-1');
     });
 });

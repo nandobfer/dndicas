@@ -30,7 +30,7 @@ import { excerptOf } from "../rewind-plan"
 const log = loggerFor({ module: "maddox", feature: "rewind" })
 
 /** Mensagens que mudam depois de gravadas (situação de testes, rolagens, reações, ações e lembranças). */
-const MUTABLE_KINDS = ["check", "combat-roll", "combat-reaction", "combat-action", "reminder"] as const
+const MUTABLE_KINDS = ["check", "combat-roll", "combat-reaction", "combat-action", "reminder", "rest"] as const
 
 type Doc = Record<string, unknown> & { _id: Types.ObjectId }
 
@@ -95,7 +95,7 @@ async function collect(campaign: IMaddoxCampaign, turnNumber: number): Promise<O
               campaignId,
               _id: { $lte: last._id },
               kind: { $in: MUTABLE_KINDS },
-              $or: [{ turnNumber: { $gte: turnNumber - 1 } }, { "reminder.status": "pending" }, { "check.status": "pending" }, { "combatRoll.status": "pending" }, { "combatReaction.status": "pending" }, { "combatAction.status": "pending" }],
+              $or: [{ turnNumber: { $gte: turnNumber - 1 } }, { "reminder.status": "pending" }, { "check.status": "pending" }, { "combatRoll.status": "pending" }, { "combatReaction.status": "pending" }, { "combatAction.status": "pending" }, { "rest.status": "running" }],
           }).lean<Doc[]>()
         : []
     const preps = combats.length ? await MaddoxCombatPrepModel.find({ combatId: { $in: combats.map((combat) => combat._id) } }).lean<Doc[]>() : []

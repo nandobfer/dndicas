@@ -309,6 +309,7 @@ const baseSheet: CharacterSheet = {
     hitDiceUsed: 0,
     deathSavesSuccess: 0,
     deathSavesFailure: 0,
+    exhaustion: 0,
     armorClassOverride: null,
     armorClassBonus: null,
     unarmoredDefense: { enabled: false, base: 10, attributes: [] },
@@ -384,6 +385,25 @@ describe("SheetHeader", () => {
 
         fireEvent.click(screen.getByRole("button", { name: "remove" }))
         expect(form.patchField).toHaveBeenCalledWith("photo", null)
+    })
+
+    it("DND-58: shows the exhaustion level (0–6) and toggles it in editable mode", () => {
+        const { sheet, form } = createHarness({ exhaustion: 2 })
+        render(<SheetHeader sheet={sheet} form={form} />)
+        const exhaustion = screen.getByTestId("sheet-exhaustion")
+        expect(exhaustion).toHaveTextContent("Exaustão 2")
+        expect(screen.getByRole("button", { name: "Exaustão nível 2" })).toHaveAttribute("aria-pressed", "true")
+        expect(screen.getByRole("button", { name: "Exaustão nível 3" })).toHaveAttribute("aria-pressed", "false")
+        fireEvent.click(screen.getByRole("button", { name: "Exaustão nível 3" }))
+        expect(form.patchField).toHaveBeenCalledWith("exhaustion", 3)
+        fireEvent.click(screen.getByRole("button", { name: "Exaustão nível 2" }))
+        expect(form.patchField).toHaveBeenCalledWith("exhaustion", 1)
+    })
+
+    it("DND-58: exhaustion is read-only in read-only mode", () => {
+        const { sheet, form } = createHarness({ exhaustion: 1 })
+        render(<SheetHeader sheet={sheet} form={form} isReadOnly />)
+        expect(screen.getByRole("button", { name: "Exaustão nível 2" })).toBeDisabled()
     })
 
     it("passes character context to the uploader AI action", () => {

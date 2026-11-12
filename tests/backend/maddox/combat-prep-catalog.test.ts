@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 import { buildCombatOptions, type CombatOptionsInput, type OptionWeapon } from "@/features/maddox/combat-options"
 import { detectSneakAttack } from "@/features/maddox/combat-prep"
 import { attackMode, freshEconomy, modeReasonText } from "@/features/maddox/combat-rules"
-import { applyHitPointsChange, availableHitDice, hitPointsLine, parseHitDice, type SheetHitPoints } from "@/features/maddox/hit-points-ops"
+import { MADDOX_HIT_POINT_OPERATIONS, applyHitPointsChange, hitPointsLine, type SheetHitPoints } from "@/features/maddox/hit-points-ops"
 import { isWeaponMasteryFeature, masteryKeyFromName, masteryLimit } from "@/features/maddox/weapon-mastery"
 import { CATALOG_SOURCE_MISSING, CATALOG_SOURCE_NOT_READ, CATALOG_SOURCE_QUOTE, CATALOG_SOURCE_SHORT, catalogRefKey, checkCatalogSource, createCatalogReadLog, recordCatalogRead, recordCatalogToolResult } from "@/features/maddox/server/catalog-reads"
 import { CATALOG_NOT_CONSULTED_NOTICE, interpretPrep, orderedChanges } from "@/features/maddox/server/combat-prep"
@@ -262,7 +262,7 @@ describe("DND-49 — nomes e limite das maestrias", () => {
 })
 
 describe("DND-49 — PV fora do combate", () => {
-    const zero: SheetHitPoints = { hp: 0, hpMax: 10, tempHp: 2, deathSuccess: 1, deathFailure: 2, hitDiceUsed: 0, hitDiceTotal: "3d8" }
+    const zero: SheetHitPoints = { hp: 0, hpMax: 10, tempHp: 2, deathSuccess: 1, deathFailure: 2 }
 
     it("curar acorda (testes contra a morte zerados) e nunca passa do máximo; definir limita entre 0 e o máximo", () => {
         expect(applyHitPointsChange(zero, { op: "curar", amount: 50 }).next).toMatchObject({ hp: 10, deathSuccess: 0, deathFailure: 0 })
@@ -278,12 +278,8 @@ describe("DND-49 — PV fora do combate", () => {
         expect(applyHitPointsChange({ ...zero, hp: 4 }, { op: "estabilizar" }).error).toContain("não está a 0 PV")
     })
 
-    it("descanso curto gasta dados de vida; descanso longo recupera os PV máximos e zera os testes contra a morte", () => {
-        expect(parseHitDice("3d8")).toEqual({ count: 3, die: "d8" })
-        expect(availableHitDice({ hitDiceTotal: "3d8", hitDiceUsed: 1 })).toBe(2)
-        expect(applyHitPointsChange(zero, { op: "descanso-curto", healed: 7, spent: 1 }).next).toMatchObject({ hp: 7, hitDiceUsed: 1 })
-        // F2: o descanso longo não inventa a recuperação dos dados de vida (fica como está).
-        expect(applyHitPointsChange({ ...zero, hitDiceUsed: 2 }, { op: "descanso-longo" }).next).toMatchObject({ hp: 10, tempHp: 0, deathSuccess: 0, deathFailure: 0, hitDiceUsed: 2 })
+    it("DND-58: o descanso saiu das operações de PV (é do start_rest); a linha da mesa segue igual", () => {
+        expect(MADDOX_HIT_POINT_OPERATIONS).toEqual(["curar", "definir", "estabilizar", "acordar"])
         expect(hitPointsLine("Nala", 0, 1, "acordou na caverna")).toBe("PV de Nala: 0 → 1 (acordou na caverna)")
     })
 })

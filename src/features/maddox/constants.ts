@@ -345,7 +345,7 @@ export const MADDOX_GAME_CHANGED_EVENT = "maddox.game.changed"
  * reação (`combat-reaction`). `rewind` (DND-44) é a linha de aviso "O dono voltou a mesa para o turno X" / "O dono retomou o
  * turno N": nunca é descartada e fica fora da transcrição do narrador, do Opex e da busca do Diário.
  */
-export const MADDOX_GAME_MESSAGE_KINDS = ["narration", "declaration", "pass", "question", "answer", "check", "combat", "combat-action", "combat-roll", "combat-reaction", "reminder", "combat-prep", "rewind", "hit-points", "sheet-change"] as const
+export const MADDOX_GAME_MESSAGE_KINDS = ["narration", "declaration", "pass", "question", "answer", "check", "combat", "combat-action", "combat-roll", "combat-reaction", "reminder", "combat-prep", "rewind", "hit-points", "sheet-change", "rest", "rest-request"] as const
 export type MaddoxGameMessageKind = (typeof MADDOX_GAME_MESSAGE_KINDS)[number]
 
 /** O que o jogador envia no próprio turno. */
@@ -753,6 +753,19 @@ export const MADDOX_COMBAT_PREP_TRAIT_TEXT_MAX = 400
  * DND-51: ferramentas de leitura e correção da ficha do "Pergunte ao mestre" (só na resposta a uma pergunta, nos graus
  * com ficha).
  */
+/** DND-58: ferramenta do descanso (só nas narrações dos graus com ficha) e a da exaustão. */
+export const MADDOX_REST_TOOL_NAME = "start_rest"
+export const MADDOX_EXHAUSTION_TOOL_NAME = "update_character_exhaustion"
+/** DND-58: teto de pedidos de troca por personagem num descanso e de idas e voltas do Personagem Opex. */
+export const MADDOX_REST_EXCHANGE_REQUESTS_MAX = 8
+export const MADDOX_REST_OPEX_EXCHANGE_ROUNDS = 2
+/** DND-58: tentativas automáticas da preparação da ficha antes de ir para o dono ("Tentar de novo" / "Seguir sem"). */
+export const MADDOX_REST_PREP_ATTEMPTS = 2
+export const MADDOX_REST_PREP_TIMEOUT_MS = 4 * 60_000
+export const MADDOX_REST_PREP_MAX_STEPS = 10
+export const MADDOX_REST_PREP_CONSUMPTION_ORIGIN = "maddox-rest-prep"
+export const MADDOX_OPEX_REST_CONSUMPTION_ORIGIN = "maddox-opex-rest"
+
 export const MADDOX_SHEET_FIX_TOOL_NAMES = ["get_character_sheet", "get_character_interview", "update_character_sheet"] as const
 
 /** DND-51: prazo da resposta do jogador a uma pergunta da preparação do combate; depois, a preparação conclui sem a escolha. */

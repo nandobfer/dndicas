@@ -43,6 +43,8 @@ import {
     MADDOX_OPEX_NPC_CONSULTS_PER_NARRATION,
     MADDOX_SHEET_FIX_TOOL_NAMES,
     MADDOX_CATALOG_TOOL_NAMES,
+    MADDOX_EXHAUSTION_TOOL_NAME,
+    MADDOX_REST_TOOL_NAME,
 } from "../constants"
 import { SHEET_CHANGE_CONTRACT } from "../sheet-change-contract"
 import { normalizeCatalogName } from "../catalog-markup"
@@ -395,16 +397,15 @@ export const MADDOX_MASTER_TOOLS: readonly MaddoxMasterTool[] = [
     define({
         name: "update_character_hit_points",
         description: [
-            "Muda os PV de um personagem jogador NA FICHA fora do combate tático (graus com ficha): curar (`dados` que o servidor rola, ou `valor` fixo), definir o PV, estabilizar quem está a 0 PV, acordar o estabilizado com 1 PV, descanso curto (gasta `dadosDeVida`) e descanso longo (PV máximos e testes contra a morte zerados).",
+            "Muda os PV de um personagem jogador NA FICHA fora do combate tático (graus com ficha): curar (`dados` que o servidor rola, ou `valor` fixo), definir o PV, estabilizar quem está a 0 PV e acordar o estabilizado com 1 PV. Descanso NÃO é por aqui: use start_rest.",
             "Chame ANTES de narrar um personagem a 0 PV acordando, agindo ou se recuperando: sem isso, ele continua a 0 PV na ficha. O `motivo` é obrigatório e aparece na mesa (\"PV de X: 0 → 1 (motivo)\"). Durante o combate tático, use `apply_effect`.",
         ].join(" "),
         readOnly: false,
         input: z.object({
             personagem: z.string().min(1).describe("Nome do personagem jogador"),
-            operacao: z.enum(MADDOX_HIT_POINT_OPERATIONS).describe("curar | definir | estabilizar | acordar | descanso-curto | descanso-longo"),
+            operacao: z.enum(MADDOX_HIT_POINT_OPERATIONS).describe("curar | definir | estabilizar | acordar"),
             dados: z.string().max(40).optional().describe("curar: dados de cura que o servidor rola (ex.: 2d4+2)"),
             valor: z.number().int().min(0).max(999).optional().describe("curar: cura fixa; definir: o novo PV"),
-            dadosDeVida: z.number().int().min(1).max(30).optional().describe("descanso-curto: quantos dados de vida gasta"),
             motivo: z.string().min(1).describe("Por que os PV mudam, curto (os jogadores leem)"),
         }),
         async execute(context, input) {
@@ -416,10 +417,63 @@ export const MADDOX_MASTER_TOOLS: readonly MaddoxMasterTool[] = [
                 if (!own || keyOf(own.name) !== keyOf(input.personagem)) throw new MaddoxToolError("Quem perguntou só pode corrigir os PV do próprio personagem.")
             }
             try {
-                const result = await changeCharacterHitPoints({ campaignId: context.campaignId, characterName: input.personagem, operation: input.operacao, dice: input.dados ?? null, value: input.valor ?? null, hitDice: input.dadosDeVida ?? null, reason: clip(input.motivo, MADDOX_TOOL_NAME_MAX * 2), turnNumber: context.turnNumber, origin: run ? "question" : "narrator", requestedBy: run?.askerUserId ?? null, ownerRequest: Boolean(run?.askerIsOwner) })
+                const result = await changeCharacterHitPoints({ campaignId: context.campaignId, characterName: input.personagem, operation: input.operacao, dice: input.dados ?? null, value: input.valor ?? null, reason: clip(input.motivo, MADDOX_TOOL_NAME_MAX * 2), turnNumber: context.turnNumber, origin: run ? "question" : "narrator", requestedBy: run?.askerUserId ?? null, ownerRequest: Boolean(run?.askerIsOwner) })
                 return { saved: true, personagem: result.characterName, pv: `${result.after}/${result.hpMax}`, antes: result.before }
             } catch (error) {
                 if (error instanceof HitPointsError) throw new MaddoxToolError(error.message)
+                throw error
+            }
+        },
+    }),
+    define({
+        name: MADDOX_EXHAUSTION_TOOL_NAME,
+        description: [
+            "Muda a EXAUSTÃO (0 a 6) de um personagem jogador NA FICHA (graus com ficha), quando a história causa ou alivia o cansaço extremo (marcha forçada, fome, frio, magia). Cada nível tira 2 de todo teste de d20; no nível 6 o personagem morre.",
+            "Use `variacao` positiva para ganhar níveis e negativa para perder; o `motivo` é obrigatório e aparece na mesa. O descanso longo concluído já tira 1 nível sozinho.",
+        ].join(" "),
+        readOnly: false,
+        input: z.object({
+            personagem: z.string().min(1).describe("Nome do personagem jogador"),
+            variacao: z.number().int().min(-6).max(6).refine((value) => value !== 0, "a variação não pode ser 0").describe("+1 ganha um nível, -1 perde um nível"),
+            motivo: z.string().min(1).describe("Por que a exaustão muda, curto (os jogadores leem)"),
+        }),
+        async execute(context, input) {
+            const [{ changeCharacterExhaustion, ExhaustionError }, { questionRun }] = await Promise.all([import("./exhaustion"), import("./question-runs")])
+            const run = questionRun(context.jobId)
+            if (run && !run.askerIsOwner) {
+                const own = run.askerCharacterId ? await MaddoxCharacterModel.findById(run.askerCharacterId).select("name").lean<{ name: string }>() : null
+                if (!own || keyOf(own.name) !== keyOf(input.personagem)) throw new MaddoxToolError("Quem perguntou só pode corrigir a exaustão do próprio personagem.")
+            }
+            try {
+                const result = await changeCharacterExhaustion({ campaignId: context.campaignId, characterName: input.personagem, delta: input.variacao, reason: clip(input.motivo, MADDOX_TOOL_NAME_MAX * 2), turnNumber: context.turnNumber, origin: run ? "question" : "narrator", requestedBy: run?.askerUserId ?? null })
+                return { saved: true, personagem: result.characterName, exaustao: result.after, antes: result.before, ...(result.dead ? { morreu: true, nota: "Exaustão 6: o personagem morreu. Narre a morte." } : {}) }
+            } catch (error) {
+                if (error instanceof ExhaustionError) throw new MaddoxToolError(error.message)
+                throw error
+            }
+        },
+    }),
+    define({
+        name: MADDOX_REST_TOOL_NAME,
+        description: [
+            "Descanso curto ou longo do grupo (ou de alguns personagens), quando a cena permite e os jogadores pedem. Chame ANTES de escrever, já com o desfecho: `concluido` (o descanso chega ao fim) ou `interrompido` (emboscada, alarme… com o motivo em `interrupcao`).",
+            "No concluído, o SERVIDOR prepara a ficha de cada um pela regra e pelo catálogo (PV, dados de vida, espaços de magia, recursos, testes contra a morte, exaustão), abre a rolagem dos dados de vida (curto) e a conversa das trocas; você só narra o momento do descanso. No interrompido, nada é recuperado.",
+            "Não use durante um combate. Um descanso por narração. Sem `personagens`, descansa o grupo todo.",
+        ].join(" "),
+        readOnly: false,
+        input: z.object({
+            tipo: z.enum(["curto", "longo"]).describe("curto (1 hora) ou longo (8 horas)"),
+            personagens: z.array(z.string().min(1)).max(12).optional().describe("Nomes dos personagens que descansam (vazio = o grupo)"),
+            desfecho: z.enum(["concluido", "interrompido"]).describe("concluido = o descanso termina; interrompido = algo o corta antes do fim"),
+            interrupcao: z.string().optional().describe("Obrigatório no interrompido: o que interrompeu (os jogadores leem)"),
+            descricao: z.string().min(1).describe("Uma frase do momento do descanso para o balão da mesa (os jogadores leem)"),
+        }),
+        async execute(context, input) {
+            const { draftRest, RestError } = await import("./rest")
+            try {
+                return await draftRest(context, input)
+            } catch (error) {
+                if (error instanceof RestError) throw new MaddoxToolError(error.message)
                 throw error
             }
         },
@@ -1277,11 +1331,12 @@ export const MADDOX_CHECK_TOOL_NAME = "request_check"
  * imagem da cena (Maddox 10); `actionOptions: false` tira a das sugestões de ação (DND-30); `opexNpcs: false` tira a consulta
  * aos NPCs Opex (DND-27; respostas a perguntas).
  */
-export async function buildMaddoxAiTools(context: MaddoxToolContext, options: { checks?: boolean; combat?: boolean; tactical?: boolean; sceneImages?: boolean; actionOptions?: boolean; opexNpcs?: boolean; sheetFix?: boolean } = {}): Promise<ToolSet> {
+export async function buildMaddoxAiTools(context: MaddoxToolContext, options: { checks?: boolean; combat?: boolean; tactical?: boolean; sceneImages?: boolean; actionOptions?: boolean; opexNpcs?: boolean; sheetFix?: boolean; rest?: boolean } = {}): Promise<ToolSet> {
     const { dynamicTool } = await import("ai")
     const tools: ToolSet = {}
     for (const def of MADDOX_NARRATOR_TOOLS) {
         if (def.name === MADDOX_CHECK_TOOL_NAME && !options.checks) continue
+        if (def.name === MADDOX_REST_TOOL_NAME && !options.rest) continue
         if ((MADDOX_COMBAT_TOOL_NAMES as readonly string[]).includes(def.name) && !options.combat) continue
         if ((MADDOX_TACTICAL_TOOL_NAMES as readonly string[]).includes(def.name) && !options.tactical) continue
         if (def.name === MADDOX_SCENE_IMAGE_TOOL_NAME && !options.sceneImages) continue

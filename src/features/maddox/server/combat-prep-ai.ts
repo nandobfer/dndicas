@@ -64,7 +64,7 @@ const SOURCE_RULES = [
     "O servidor confere cada fonte: sem source, com ref não lido ou com trecho que não está no texto, a alteração é recusada. Sem a regra no catálogo, não altere: deixe o valor do servidor e diga, no reason, que falta cadastro.",
 ].join("\n")
 
-interface CatalogGeneration {
+export interface CatalogGeneration {
     campaign: PrepCampaign
     instructions: string
     prompt: string
@@ -76,6 +76,8 @@ interface CatalogGeneration {
     /** Job da fila da campanha (o token do MCP só vale enquanto ele roda). */
     jobId: string
     maxSteps: number
+    /** Chave da sessão do provedor (padrão: a da preparação do combate). */
+    sessionKey?: string
 }
 
 /** Geração curta do narrador, sem ferramentas (condição do ataque furtivo, checagem de quem está a 0 PV). */
@@ -101,7 +103,7 @@ async function narratorText(campaign: PrepCampaign, instructions: string, prompt
  * no OpenCode, pelo MCP `dndicas-maddox` com o token de catálogo desta execução. Cada leitura entra em `reads`.
  * Devolve o texto do último passo (o JSON da resposta).
  */
-async function catalogGeneration(input: CatalogGeneration): Promise<string> {
+export async function catalogGeneration(input: CatalogGeneration): Promise<string> {
     const { loadNarrator } = await import("./narrator")
     const { settings, model } = await loadNarrator(input.campaign.rigor)
     if (model.provider === "opencode") {
@@ -140,7 +142,7 @@ async function catalogGeneration(input: CatalogGeneration): Promise<string> {
         import("@/lib/ai/consumption"),
         import("@/lib/ai/step-cost"),
     ])
-    const prepared = await prepareModel({ provider: model.provider, model: model.model, variant: model.variant, sessionKey: `maddox:${String(input.campaign._id)}:combat-prep` })
+    const prepared = await prepareModel({ provider: model.provider, model: model.model, variant: model.variant, sessionKey: input.sessionKey ?? `maddox:${String(input.campaign._id)}:combat-prep` })
     try {
         const tools = await buildCatalogAiTools({
             onResult: (_tool, output) => recordCatalogToolResult(input.reads, output),
@@ -307,7 +309,7 @@ export async function reviewDownedCharacter(input: DownedCharacterInput): Promis
         "Você é Maddox, o mestre da campanha. Um combate tático vai começar e um personagem jogador está com 0 PV na ficha. Pela condição dele na história e pelo que aconteceu recentemente, decida pelas regras do D&D se ele já se recuperou antes desta luta (foi curado, estabilizado e acordou, descansou) ou se segue caído.",
         rigorBlock(input.campaign.rigor),
         "Só aplique uma recuperação que a história mostre e que a regra permita; na dúvida, mantenha caído.",
-        'Responda SOMENTE com um objeto JSON: {"decisao":"manter"|"aplicar","operacao":"curar|definir|estabilizar|acordar|descanso-curto|descanso-longo" (quando aplicar),"dados":"2d4+2" (curar com dados, opcional),"valor":n (curar fixo ou definir, opcional),"dadosDeVida":n (descanso curto),"motivo":"o que na história justifica, curto (os jogadores leem)"}.',
+        'Responda SOMENTE com um objeto JSON: {"decisao":"manter"|"aplicar","operacao":"curar|definir|estabilizar|acordar" (quando aplicar),"dados":"2d4+2" (curar com dados, opcional),"valor":n (curar fixo ou definir, opcional),"motivo":"o que na história justifica, curto (os jogadores leem)"}.',
     ].join("\n\n")
     const prompt = [`Personagem: ${input.characterName}`, `## Condição atual na história\n${input.currentState.trim() || "(sem registro)"}`, `## Acontecimentos recentes\n${input.recent.trim() || "(nenhum)"}`].join("\n\n")
     const text = await withTimeout(MADDOX_COMBAT_DOWNED_CHECK_TIMEOUT_MS, "a checagem de quem está a 0 PV", (signal) => narratorText(input.campaign, instructions, prompt, `Maddox · PV antes do combate · ${input.campaign.name}`, MADDOX_COMBAT_PREP_CONSUMPTION_ORIGIN, signal))

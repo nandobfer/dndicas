@@ -676,7 +676,6 @@ const downedDecisionSchema = z.object({
     operacao: z.enum(MADDOX_HIT_POINT_OPERATIONS).optional(),
     dados: z.string().trim().max(40).optional(),
     valor: z.number().int().min(0).max(999).optional(),
-    dadosDeVida: z.number().int().min(1).max(30).optional(),
     motivo: z.string().trim().min(1).max(600),
 })
 
@@ -705,7 +704,7 @@ async function checkDownedCharacter(campaign: IMaddoxCampaign, prep: PrepDoc, st
         const decision = downedDecisionSchema.parse(await reviewDownedCharacter({ campaign, characterName: character.name, currentState: character.currentState ?? "", recent }))
         const { changeCharacterHitPoints, postStillDown } = await import("./hit-points")
         if (decision.decisao === "aplicar" && decision.operacao) {
-            const result = await changeCharacterHitPoints({ campaignId: campaign._id, characterName: character.name, operation: decision.operacao, dice: decision.dados ?? null, value: decision.valor ?? null, hitDice: decision.dadosDeVida ?? null, reason: decision.motivo, turnNumber: prep.turnNumber, origin: "combat-open" })
+            const result = await changeCharacterHitPoints({ campaignId: campaign._id, characterName: character.name, operation: decision.operacao, dice: decision.dados ?? null, value: decision.valor ?? null, reason: decision.motivo, turnNumber: prep.turnNumber, origin: "combat-open" })
             log.info({ campaignId: String(campaign._id), character: character.name, before: result.before, after: result.after }, "[maddox] PV corrigidos pela história antes da iniciativa")
         } else {
             await postStillDown(campaign._id, prep.turnNumber, { id: character._id, name: character.name }, decision.motivo)

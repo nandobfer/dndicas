@@ -249,11 +249,15 @@ export interface DeathSaveResult extends DeathSaves {
     dead: boolean
 }
 
-/** Teste contra a morte (2024): 10+ sucesso; 20 natural = 1 PV; 1 natural = duas falhas; 3 sucessos estável; 3 falhas morto. */
-export function deathSave(d20: number, current: DeathSaves): DeathSaveResult {
+/**
+ * Teste contra a morte (2024): 10+ sucesso; 20 natural = 1 PV; 1 natural = duas falhas; 3 sucessos estável; 3 falhas morto.
+ * `modifier` (DND-58) = a penalidade de exaustão: o total (d20 + modificador) decide o 10+; os naturais seguem o d20.
+ */
+export function deathSave(d20: number, current: DeathSaves, modifier = 0): DeathSaveResult {
     if (d20 === 20) return { success: 0, failure: 0, revived: true, stable: false, dead: false }
-    const failure = Math.min(3, current.failure + (d20 === 1 ? 2 : d20 < 10 ? 1 : 0))
-    const success = Math.min(3, current.success + (d20 >= 10 ? 1 : 0))
+    const passed = d20 !== 1 && d20 + modifier >= 10
+    const failure = Math.min(3, current.failure + (d20 === 1 ? 2 : passed ? 0 : 1))
+    const success = Math.min(3, current.success + (passed ? 1 : 0))
     return { success, failure, revived: false, stable: success >= 3 && failure < 3, dead: failure >= 3 }
 }
 

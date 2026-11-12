@@ -21,6 +21,12 @@ export interface QuestionRun {
     /** Mensagens do próprio jogador: as perguntas desta conversa e as falas dele na entrevista do personagem. */
     playerTexts: string[]
     reads: CatalogReadLog
+    /** DND-58 (trocas depois do descanso): só estes tipos da lista fechada passam; os demais são recusados. */
+    allowedChangeTypes?: readonly string[]
+    /** DND-58: título da linha pública das mudanças ("Trocas de X depois do descanso longo:"). */
+    sheetChangeTitle?: string
+    /** DND-58: avisado com as linhas aplicadas (o resumo do descanso guarda as trocas). */
+    onSheetChanged?: (lines: string[]) => Promise<void>
 }
 
 const runs = ((globalThis as unknown as { __maddoxQuestionRuns?: Map<string, QuestionRun> }).__maddoxQuestionRuns ??= new Map<string, QuestionRun>())

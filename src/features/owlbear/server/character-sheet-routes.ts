@@ -14,7 +14,6 @@ import {
     type PatchSheetBody,
 } from "@/features/character-sheets/types/character-sheet.types"
 import {
-    applyLongRestWithAccess,
     createAttack,
     createBlankSheet,
     createFeat,
@@ -102,18 +101,6 @@ export async function patchOwlbearSheet(req: NextRequest, id: string) {
         return NextResponse.json(sheet)
     } catch (error) {
         return owlbearErrorResponse(error, "[API] PATCH /api/owlbear/character-sheets/[id] error:")
-    }
-}
-
-export async function postOwlbearLongRest(req: NextRequest, id: string) {
-    try {
-        await requireOwlbearSheetAccess(req, id)
-        const originId = req.headers.get(PUSHER_ORIGIN_HEADER) ?? undefined
-        const sheet = await applyLongRestWithAccess(id, originId)
-        if (!sheet) return NextResponse.json({ error: "Ficha não encontrada" }, { status: 404 })
-        return NextResponse.json(sheet)
-    } catch (error) {
-        return owlbearErrorResponse(error, "[API] POST /api/owlbear/character-sheets/[id]/long-rest error:")
     }
 }
 

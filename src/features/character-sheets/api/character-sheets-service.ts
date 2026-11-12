@@ -335,6 +335,13 @@ export async function getSheetById(id: string): Promise<CharacterSheetFull | nul
     } as unknown as CharacterSheetFull
 }
 
+/** DND-58: exaustão 6 marcada na ficha mata o personagem de campanha Maddox ligado a ela (import sob demanda). */
+async function applyExhaustionDeath(id: string, data: PatchSheetBody) {
+    if ((data.exhaustion ?? 0) < 6) return
+    const { applySheetExhaustionDeath } = await import('@/features/maddox/server/exhaustion')
+    await applySheetExhaustionDeath(id)
+}
+
 export async function patchSheet(id: string, userId: string, data: PatchSheetBody, originId?: string) {
     await dbConnect()
 
@@ -359,6 +366,7 @@ export async function patchSheet(id: string, userId: string, data: PatchSheetBod
     await publishCharacterSheetRealtime(async () => {
         await getCharacterSheetPusherService().publishSheetPatched({ sheet: plainSheet, originId })
     })
+    await applyExhaustionDeath(id, data)
     return plainSheet
 }
 
@@ -385,6 +393,7 @@ export async function patchSheetWithAccess(id: string, data: PatchSheetBody, ori
     await publishCharacterSheetRealtime(async () => {
         await getCharacterSheetPusherService().publishSheetPatched({ sheet: plainSheet, originId })
     })
+    await applyExhaustionDeath(id, data)
     return plainSheet
 }
 
@@ -404,83 +413,6 @@ export async function deleteSheet(id: string, userId: string): Promise<boolean> 
     await CharacterSheet.deleteOne({ _id: id })
     return true
 }
-
-export async function applyLongRest(id: string, userId: string, originId?: string) {
-    await dbConnect()
-
-    const sheet = await CharacterSheet.findOne({ _id: id, userId })
-    if (!sheet) return null
-
-    // Restore all HP (current ← max)
-    sheet.hpCurrent = sheet.hpMax
-
-    // Restore all spell slots
-    const slots = sheet.spellSlots as unknown as Map<string, { max: number; used: number }>
-    for (const [circle, slot] of slots.entries()) {
-        slots.set(circle, { max: slot.max, used: 0 })
-    }
-    sheet.markModified("spellSlots")
-
-    // Unmark all exhausted items  
-    await CharacterSpell.updateMany({ sheetId: id }, { $set: { prepared: false } })
-
-    await sheet.save()
-    const plainSheet = toPlainSheet(sheet.toObject())
-    const spells = await getSpells(id)
-
-    await publishCharacterSheetRealtime(async () => {
-        await Promise.all([
-            getCharacterSheetPusherService().publishSheetPatched({ sheet: plainSheet, originId }),
-            getCharacterSheetPusherService().publishCollectionChanged({
-                sheetId: id,
-                collection: "spells",
-                action: "reloaded",
-                originId,
-                records: spells,
-            }),
-        ])
-    })
-
-    return plainSheet
-}
-
-export async function applyLongRestWithAccess(id: string, originId?: string) {
-    await dbConnect()
-
-    const sheet = await CharacterSheet.findById(id)
-    if (!sheet) return null
-
-    sheet.hpCurrent = sheet.hpMax
-
-    const slots = sheet.spellSlots as unknown as Map<string, { max: number; used: number }>
-    for (const [circle, slot] of slots.entries()) {
-        slots.set(circle, { max: slot.max, used: 0 })
-    }
-    sheet.markModified("spellSlots")
-
-    await CharacterSpell.updateMany({ sheetId: id }, { $set: { prepared: false } })
-
-    await sheet.save()
-    const plainSheet = toPlainSheet(sheet.toObject())
-    const spells = await getSpells(id)
-
-    await publishCharacterSheetRealtime(async () => {
-        await Promise.all([
-            getCharacterSheetPusherService().publishSheetPatched({ sheet: plainSheet, originId }),
-            getCharacterSheetPusherService().publishCollectionChanged({
-                sheetId: id,
-                collection: "spells",
-                action: "reloaded",
-                originId,
-                records: spells,
-            }),
-        ])
-    })
-
-    return plainSheet
-}
-
-// ─── Items ────────────────────────────────────────────────────────────────────
 
 export async function getItems(sheetId: string) {
     await dbConnect()
