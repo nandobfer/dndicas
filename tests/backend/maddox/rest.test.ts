@@ -17,6 +17,7 @@ const dice: number[] = []
 
 vi.mock("@/lib/db", () => ({ dbConnect: vi.fn(async () => undefined), recordAudit, AcaoAuditoria: { CRIAR: "CRIAR", ATUALIZAR: "ATUALIZAR", EXCLUIR: "EXCLUIR", ATRIBUIR: "ATRIBUIR" } }))
 vi.mock("@/lib/pusher/channels", () => ({ publishToChannels }))
+vi.mock("@/core/database/db", () => ({ default: vi.fn(async () => undefined) }))
 vi.mock("@/features/maddox/server/settings", () => ({
     loadMaddoxSettings: vi.fn(async () => ({ settings: { enabled: true, avatar: { url: null } }, isDefault: false, updatedAt: null })),
     maddoxAvailability: vi.fn(async () => ({ available: true, reason: null })),
@@ -459,5 +460,57 @@ describe("DND-58 — exaustão pela ferramenta do Maddox", () => {
         expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({ entidade: "FichaPersonagem", depois: expect.objectContaining({ origin: "narrator-exhaustion", exhaustion: 6 }) }))
         await expect(run({ personagem: "Lyra", variacao: 1, motivo: "x" })).rejects.toThrow("está morto")
         await expect(run({ personagem: "Thorn", variacao: 0, motivo: "x" })).rejects.toThrow("Entrada inválida")
+    })
+})
+
+describe("DND-58 — revisão: trocas só com a ficha preparada, falhas do Maddox e exaustão marcada na ficha", () => {
+    it("trocas antes da ficha preparada: recusadas no servidor, sem botão na tela e sem a vez do Opex", { timeout: 30_000 }, async () => {
+        opexAi.decide.mockImplementation(async (input) => (input.prompt.includes("o seu turno") ? { acao: "nada", texto: "", memorias: [] } : { dadosDeVida: 0, trocas: null, memorias: [] }))
+        const t = await table({}, { opex: {} })
+        const message = (await restTurn(t, { tipo: "longo", desfecho: "concluido", descricao: "Noite." }))!
+        const collection = MaddoxCampaignMessageModel.collection
+        const reopen = (characterId: string, prep: string) => collection.updateOne({ _id: message._id }, { $set: { "rest.characters.$[c].prep.status": prep, "rest.characters.$[c].exchange.status": "open" } }, { arrayFilters: [{ "c.characterId": new Types.ObjectId(characterId) }] })
+        await reopen(t.lyra.characterId, "running")
+        await expect(rest.submitRestExchange(t.id, String(message._id), t.lyra.characterId, "Troco uma magia.", t.player)).rejects.toMatchObject({ status: 409, code: "REST_PREP_PENDING" })
+        const dto = (await game.getGameState(t.id, t.player)).messages.find((item) => item.kind === "rest")!.rest!
+        expect(dto.characters.find((entry) => entry.name === "Lyra")!.can.exchange).toBe(false)
+        expect(await MaddoxCampaignMessageModel.countDocuments({ campaignId: t.id, kind: "rest-request" })).toBe(0)
+
+        // O Opex também espera a ficha: com a preparação em curso, o agente não é chamado para o descanso.
+        await reopen(t.opex!.characterId, "running")
+        opexAi.decide.mockClear()
+        await rest.scheduleOpexRests(new Types.ObjectId(t.id))
+        await waitForCampaignIdle(t.id)
+        expect(opexAi.decide.mock.calls.filter(([input]) => input.prompt.includes("descanso"))).toHaveLength(0)
+        await reopen(t.opex!.characterId, "ready")
+        await rest.scheduleOpexRests(new Types.ObjectId(t.id))
+        await waitForCampaignIdle(t.id)
+        expect(opexAi.decide).toHaveBeenCalled()
+        expect((await entryOf(t, t.opex!.characterId)).exchange.status).toBe("nothing")
+    })
+
+    it("o Maddox falha ao avaliar a troca do Opex: a parte não fecha; o dono responde por ele", { timeout: 30_000 }, async () => {
+        opexAi.decide.mockImplementation(async (input) => (input.prompt.includes("o seu turno") ? { acao: "nada", texto: "", memorias: [] } : { dadosDeVida: 0, trocas: "Troco Escudo por Mísseis.", memorias: [] }))
+        script.exchange = async () => {
+            throw new Error("tempo esgotado")
+        }
+        const t = await table({}, { opex: {} })
+        await restTurn(t, { tipo: "longo", desfecho: "concluido", descricao: "Noite." })
+        const eco = await entryOf(t, t.opex!.characterId)
+        expect(eco).toMatchObject({ answeredBy: "owner", exchange: { status: "open", requests: 1 } })
+        expect(eco.opexError).toContain("O Maddox não avaliou a troca")
+        const ownerView = (await game.getGameState(t.id, t.owner)).messages.find((item) => item.kind === "rest")!.rest!
+        expect(ownerView.characters.find((entry) => entry.name === "Eco")!.can.exchange).toBe(true)
+        expect((await restOf(t)).rest!.status).toBe("running")
+    })
+
+    it("exaustão 6 marcada direto na ficha mata o personagem da campanha", { timeout: 30_000 }, async () => {
+        const t = await table()
+        const { patchSheetWithAccess, patchSheet } = await import("@/features/character-sheets/api/character-sheets-service")
+        await patchSheet(t.lyra.sheetId, t.player, { exhaustion: 5 })
+        expect((await MaddoxCharacterModel.findById(t.lyra.characterId).lean())!.status).toBe("active")
+        await patchSheetWithAccess(t.lyra.sheetId, { exhaustion: 6 })
+        expect(await MaddoxCharacterModel.findById(t.lyra.characterId).lean()).toMatchObject({ status: "dead", currentState: "Morreu de exaustão." })
+        expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({ entidade: "CampanhaMaddox", depois: expect.objectContaining({ cause: "exhaustion" }) }))
     })
 })

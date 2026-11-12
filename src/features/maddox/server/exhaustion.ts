@@ -79,6 +79,29 @@ export async function changeCharacterExhaustion(request: ExhaustionRequest): Pro
     return { characterName: character.name, before, after, dead, line }
 }
 
+/**
+ * Exaustão 6 marcada direto na ficha (edição da ficha, fora da ferramenta do Maddox): o personagem de campanha Maddox
+ * ligado à ficha morre do mesmo jeito. Chamado pelo PATCH da ficha; nunca lança.
+ */
+export async function applySheetExhaustionDeath(sheetId: string): Promise<void> {
+    try {
+        if (!Types.ObjectId.isValid(sheetId)) return
+        const characters = await MaddoxCharacterModel.find({ sheetId: new Types.ObjectId(sheetId), status: "active" }).select("campaignId").lean<{ _id: Types.ObjectId; campaignId: Types.ObjectId }[]>()
+        for (const character of characters) {
+            const campaign = await MaddoxCampaignModel.findById(character.campaignId).select("rigor ownerId status").lean<Pick<IMaddoxCampaign, "_id" | "rigor" | "ownerId" | "status">>()
+            if (!campaign || !MADDOX_SHEET_RIGORS.includes(campaign.rigor)) continue
+            await killByExhaustion(campaign, character._id)
+            log.info({ campaignId: String(campaign._id), characterId: String(character._id) }, "[maddox] exaustão 6 marcada na ficha: personagem morto")
+            if (campaign.status === "active") {
+                const { publishGameChanged } = await import("./game")
+                await publishGameChanged(campaign._id)
+            }
+        }
+    } catch (error) {
+        log.warn({ sheetId, err: error instanceof Error ? error.message : String(error) }, "[maddox] falha ao aplicar a morte por exaustão marcada na ficha")
+    }
+}
+
 /** Nível 6: o personagem da campanha fica `dead` (e, no combate tático, sai da luta). */
 async function killByExhaustion(campaign: Pick<IMaddoxCampaign, "_id" | "ownerId">, characterId: Types.ObjectId): Promise<void> {
     const killed = await MaddoxCharacterModel.updateOne({ _id: characterId, campaignId: campaign._id, status: { $ne: "dead" } }, { $set: { status: "dead", currentState: "Morreu de exaustão.", currentStatePublic: true } })

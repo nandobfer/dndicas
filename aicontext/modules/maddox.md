@@ -2181,14 +2181,15 @@ desfecho. Regra pura em `rest-rules.ts` (tabela de recuperação, dados de vida,
   `rest-exchange` chama `MaddoxMaster.restExchange` (tarefa `rest-exchange`, regras `MADDOX_REST_EXCHANGE_TASK_RULES`: consultar a
   classe no catálogo, aplicar só o que a regra permite, recusar com motivo, PERGUNTAR sem aplicar quando ambíguo). Abre `openQuestionRun`
   preso ao personagem (`askerIsOwner: false`) com `allowedChangeTypes = MADDOX_REST_EXCHANGE_CHANGE_TYPES` e o título "Trocas de X
-  depois do descanso longo:"; a resposta é `kind: "answer"` com `replyToId` no pedido. A parte só fecha em "Concluir trocas" ou
+  depois do descanso longo:"; as trocas só abrem com `prep.status === "ready"` (servidor `REST_PREP_PENDING`, `can.exchange` e o
+  Opex): a preparação grava `resourceCharges`/`spellSlots` inteiros. A resposta é `kind: "answer"` com `replyToId` no pedido. A parte só fecha em "Concluir trocas" ou
   "Nada a trocar" (até `MADDOX_REST_EXCHANGE_REQUESTS_MAX` pedidos).
 - **Turno**: `restBlocksTurn` (em `evaluateTurn`, antes de qualquer declaração) segura a vez dos jogadores enquanto um personagem
   online (ou Opex) tem parte aberta; offline (presença do Pusher) conclui sem rolar nem trocar (`doneReason: "offline"`); quem sai
   conclui (`left`); quem entra depois não é esperado. Fechar (`running → closed`) audita e reavalia o turno. Faixa "Descanso —
   aguardando …" (`restBannerText`) e assento "Descansando". O narrador recebe o resumo `[descanso]` (`restTranscriptLine`).
 - **Personagem Opex**: `autoRestOpex` (no `driveOpex`) decide com `opexRestTask`/`opexRestSchema` (`dadosDeVida`, `trocas`); o servidor
-  rola um a um e a troca roda INLINE no job do Opex (um job não espera outro); esclarecimento do Maddox → até 2 respostas. Falha →
+  rola um a um e a troca roda INLINE no job do Opex (um job não espera outro); esclarecimento do Maddox → até 2 respostas; se o Maddox falhar ao avaliar a troca, a parte não fecha e vai ao dono. Falha →
   `answeredBy: "owner"`: o dono vê os controles ("responda por ele") e só mexe naquela ficha.
 
 ### Exaustão (DND-58)
@@ -2196,7 +2197,8 @@ desfecho. Regra pura em `rest-rules.ts` (tabela de recuperação, dados de vida,
 Campo `exhaustion` (0–6) da ficha (linha "Exaustão" no card de dados de vida, editável; também na lista do reinício). Ferramenta
 `update_character_exhaustion` (`personagem`, `variacao` ≠ 0, `motivo`; narração e "Pergunte ao mestre"): grava na ficha (auditoria
 `origin: "narrator-exhaustion"`), linha `sheet-change` "Exaustão de X: 1 → 2 (motivo)" e, no nível 6, o personagem fica `dead`
-("Morreu de exaustão.") e sai do combate tático. `apply_effect` com a condição exaustão num personagem jogador passa pela ficha.
+("Morreu de exaustão.") e sai do combate tático. O 6 marcado direto na ficha tem o mesmo efeito: o PATCH da ficha chama
+`applySheetExhaustionDeath` (import sob demanda em `character-sheets-service.ts`). `apply_effect` com a condição exaustão num personagem jogador passa pela ficha.
 Penalidade −2 × nível (parcela "Exaustão") em todo d20: `checkModifier` (perícia, atributo, resistência), iniciativa, salvaguarda,
 concentração, teste contra a morte (`deathSave(d20, …, penalidade)`: o natural decide 1/20, o total decide o 10) e ataque de
 oportunidade; no combate, o nível vem da ficha (`exhaustionOfSheet`).

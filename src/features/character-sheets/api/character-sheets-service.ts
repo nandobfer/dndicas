@@ -335,6 +335,13 @@ export async function getSheetById(id: string): Promise<CharacterSheetFull | nul
     } as unknown as CharacterSheetFull
 }
 
+/** DND-58: exaustão 6 marcada na ficha mata o personagem de campanha Maddox ligado a ela (import sob demanda). */
+async function applyExhaustionDeath(id: string, data: PatchSheetBody) {
+    if ((data.exhaustion ?? 0) < 6) return
+    const { applySheetExhaustionDeath } = await import('@/features/maddox/server/exhaustion')
+    await applySheetExhaustionDeath(id)
+}
+
 export async function patchSheet(id: string, userId: string, data: PatchSheetBody, originId?: string) {
     await dbConnect()
 
@@ -359,6 +366,7 @@ export async function patchSheet(id: string, userId: string, data: PatchSheetBod
     await publishCharacterSheetRealtime(async () => {
         await getCharacterSheetPusherService().publishSheetPatched({ sheet: plainSheet, originId })
     })
+    await applyExhaustionDeath(id, data)
     return plainSheet
 }
 
@@ -385,6 +393,7 @@ export async function patchSheetWithAccess(id: string, data: PatchSheetBody, ori
     await publishCharacterSheetRealtime(async () => {
         await getCharacterSheetPusherService().publishSheetPatched({ sheet: plainSheet, originId })
     })
+    await applyExhaustionDeath(id, data)
     return plainSheet
 }
 

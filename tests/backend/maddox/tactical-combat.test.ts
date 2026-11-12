@@ -1987,3 +1987,51 @@ describe("DND-53 — PV dos inimigos e dos aliados NPC", () => {
         expect(card.combatAction!.summary).toContain("1 natural")
     })
 })
+
+describe("DND-58 — exaustão nas rolagens do combate tático", () => {
+    const exhaust = (sheetId: string, level: number) => CharacterSheet.collection.updateOne({ _id: new mongoose.Types.ObjectId(sheetId) }, { $set: { exhaustion: level } })
+
+    it("ataque: a expressão do passo leva −2 por nível com a parcela 'Exaustão'", async () => {
+        const { id, kael } = await scene()
+        const sword = (await game.getGameState(id, kael.userId)).me.combat!.options!.action.find((option) => option.label === "Espada")!
+        await exhaust(kael.sheetId, 2)
+        await actions.submitCombatAction(id, { economy: "action", optionId: sword.id, targets: ["npc:gob"] }, kael.userId)
+        const step = (await MaddoxCampaignMessageModel.findOne({ campaignId: id, kind: "combat-action" }).lean())!.combatAction!.steps[0]!
+        expect(step.dice).toBe(tactical.d20Expression(sword.attack!.bonus - 4))
+        expect(step.modifierParts).toEqual(expect.arrayContaining([expect.objectContaining({ label: "Exaustão", value: -4 })]))
+    })
+
+    it("iniciativa: o card do personagem com exaustão leva a penalidade da ficha; o sem exaustão não", async () => {
+        const { kael, lyra, cardOf } = await initiativeScene(null, {
+            beforeCombat: async ({ id }) => {
+                const kaelDoc = (await MaddoxCharacterModel.findOne({ campaignId: id, name: "Kael" }).lean())!
+                await exhaust(String(kaelDoc.sheetId), 2)
+            },
+        })
+        // Kael e Lyra têm a mesma Destreza (12): só a exaustão separa os dois cards.
+        const lyraCard = (await cardOf(lyra.userId)).combatRoll!
+        const kaelCard = (await cardOf(kael.userId)).combatRoll!
+        const base = Number(lyraCard.dice.replace("1d20", "") || 0)
+        expect(kaelCard.dice).toBe(tactical.d20Expression(base - 4))
+        expect(kaelCard.modifierParts).toEqual(expect.arrayContaining([expect.objectContaining({ label: "Exaustão", value: -4 })]))
+        expect(lyraCard.modifierParts ?? []).not.toEqual(expect.arrayContaining([expect.objectContaining({ label: "Exaustão" })]))
+    })
+
+    it("teste contra a morte: com exaustão 1, 11 no d20 (total 9) é falha — no texto, na ficha e no `success` do card", async () => {
+        const { id, kael } = await scene({ kaelHp: 0 })
+        await exhaust(kael.sheetId, 1)
+        await MaddoxCampaignModel.updateOne({ _id: id }, { $set: { "turn.phase": "master", "turn.combatActor": null } })
+        await MaddoxCombatModel.updateOne({ campaignId: id }, { $set: { "tactical.activeIndex": 2, "tactical.nextKey": kael.actorKey } })
+        await tactical.advanceToNextCharacter(new mongoose.Types.ObjectId(id), 2)
+        await MaddoxCampaignModel.updateOne({ _id: id }, { $set: { "turn.phase": "players", "turn.eligibleMemberIds": [new mongoose.Types.ObjectId(kael.memberId)], "turn.combatActor": { combatId: (await MaddoxCombatModel.findOne({ campaignId: id }).lean())!._id, actorKey: kael.actorKey, memberId: new mongoose.Types.ObjectId(kael.memberId), offlineSince: null } } })
+        const roll = (await MaddoxCampaignMessageModel.findOne({ campaignId: id, kind: "combat-roll", "combatRoll.kind": "death-save" }).lean())!
+        expect(roll.combatRoll!.dice).toBe("1d20-2")
+        dice.players.set(kael.userId, [[11]])
+        await actions.rollCombatRoll(id, String(roll._id), kael.userId)
+        await waitForCampaignIdle(id)
+        const done = (await MaddoxCampaignMessageModel.findById(roll._id).lean())!.combatRoll!
+        expect(done).toMatchObject({ total: 9, success: false })
+        expect(done.outcome).toMatch(/^falha/)
+        expect((await CharacterSheet.findById(kael.sheetId).lean())!.deathSavesFailure).toBe(1)
+    })
+})

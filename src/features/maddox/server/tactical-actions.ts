@@ -878,7 +878,8 @@ async function performClaimedRoll(campaign: CampaignDoc, message: MessageDoc, re
                         hp.deathSaves = { success: 0, failure: 0 }
                         outcome = "três sucessos: está estável"
                     } else outcome = `${d20 !== 1 && roll.total >= 10 ? "sucesso" : d20 === 1 ? "1 natural: duas falhas" : "falha"} (${result.success} sucesso(s), ${result.failure} falha(s))`
-                    success = d20 >= 10
+                    // Mesmo critério do `deathSave`: o 20 natural sempre passa, o 1 sempre falha, e o total (com a exaustão) decide o 10.
+                    success = d20 === 20 || (d20 !== 1 && roll.total >= 10)
                     hpWrites.push({ state: me.state, hp })
                 }
                 endsTurn = true

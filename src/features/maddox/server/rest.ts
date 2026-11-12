@@ -458,12 +458,15 @@ export async function declineRestHitDice(campaignId: string, messageId: string, 
 
 /** Reserva a vez do pedido de troca (um por vez, até o teto). */
 async function claimExchange(message: RestMessage, entry: IMaddoxRestCharacter): Promise<void> {
+    // As trocas só abrem com a ficha preparada: a preparação grava `resourceCharges`/`spellSlots` inteiros e apagaria o
+    // que uma troca feita no meio dela tivesse criado (uma carga de talento novo, por exemplo).
     const claimed = await messages().updateOne(
         { _id: message._id, "rest.status": "running" },
         { $set: { "rest.characters.$[c].exchange.status": "processing" }, $inc: { "rest.characters.$[c].exchange.requests": 1 } },
-        arrayFilter(entry.characterId, { "exchange.status": "open", "exchange.requests": { $lt: MADDOX_REST_EXCHANGE_REQUESTS_MAX } }),
+        arrayFilter(entry.characterId, { "prep.status": "ready", "exchange.status": "open", "exchange.requests": { $lt: MADDOX_REST_EXCHANGE_REQUESTS_MAX } }),
     )
     if (claimed.modifiedCount > 0) return
+    if (entry.prep.status !== "ready" && entry.exchange.status === "open") throw new DomainError(409, "O Maddox ainda está preparando a ficha deste personagem: as trocas abrem em seguida.", "REST_PREP_PENDING")
     if (entry.exchange.status === "processing") throw new DomainError(409, "O Maddox ainda está avaliando o pedido anterior.", "REST_EXCHANGE_BUSY")
     if (entry.exchange.status === "open") throw new DomainError(409, `Limite de ${MADDOX_REST_EXCHANGE_REQUESTS_MAX} pedidos de troca neste descanso: conclua as trocas.`, "REST_EXCHANGE_LIMIT")
     throw new DomainError(409, "As trocas deste personagem já foram concluídas neste descanso.", "REST_PART_CLOSED")
@@ -750,7 +753,7 @@ export async function restDtos(messages: readonly MessageDoc[], viewer: RestView
                     answeredBy: entry.answeredBy,
                     doneReason: entry.doneReason,
                     done: restEntryDone(entry),
-                    can: { roll: answering && entry.hitDice.status === "open", exchange: answering && entry.exchange.status === "open", retryPrep: running && viewer.isOwner && entry.prep.status === "failed" },
+                    can: { roll: answering && entry.hitDice.status === "open", exchange: answering && entry.prep.status === "ready" && entry.exchange.status === "open", retryPrep: running && viewer.isOwner && entry.prep.status === "failed" },
                 }
             }),
         })
@@ -769,6 +772,8 @@ export async function scheduleOpexRests(campaignId: Types.ObjectId): Promise<voi
     for (const entry of message.rest.characters) {
         if (!entry.opex || entry.answeredBy !== "player" || entry.doneReason) continue
         if (entry.hitDice.status !== "open" && entry.exchange.status !== "open") continue
+        // O Opex só decide com a ficha preparada (as trocas não podem correr junto com a preparação).
+        if (entry.prep.status !== "ready") continue
         const key = opexKey(message._id, entry.characterId)
         if (active.has(key)) continue
         active.add(key)
@@ -844,7 +849,16 @@ async function runOpexRest(campaignId: Types.ObjectId, messageId: Types.ObjectId
             const requestId = await createRequest(campaign, fresh.message, fresh.entry, clip(text, 4_000))
             const answer = await runRestExchange(campaignId, jobId, messageId, characterId, requestId, member.userId)
             rounds += 1
-            if (answer.error || rounds >= MADDOX_REST_OPEX_EXCHANGE_ROUNDS) break
+            if (answer.error) {
+                // O Maddox não conseguiu avaliar o pedido: a parte não fecha sem troca nenhuma; o dono responde pelo
+                // personagem (as trocas voltam a ficar abertas para ele).
+                log.warn({ campaignId: String(campaignId), character: entry.name, err: answer.error }, "[maddox] troca do Personagem Opex não avaliada: o dono responde")
+                await messages().updateOne({ _id: messageId }, { $set: { "rest.characters.$[c].answeredBy": "owner", "rest.characters.$[c].opexError": clip(`O Maddox não avaliou a troca: ${answer.error}`, 500) } }, arrayFilter(characterId))
+                await messages().updateOne({ _id: messageId }, { $set: { "rest.characters.$[c].exchange.status": "open" } }, arrayFilter(characterId, { "exchange.status": "processing" }))
+                await afterRestProgress(campaignId)
+                return
+            }
+            if (rounds >= MADDOX_REST_OPEX_EXCHANGE_ROUNDS) break
             const reply = await decideOpex({ ...base, schema: opexRestReplySchema, prompt: opexRestReplyTask({ request: text, answer: answer.content }) })
             text = reply.resposta?.trim() || null
         }
