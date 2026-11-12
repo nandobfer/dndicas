@@ -4,7 +4,7 @@ import { dbConnect } from "@/lib/db"
 import {
     AGENT_TOKEN_FIELDS,
     AGENT_TOKEN_SCOPES,
-    CAMPAIGN_CATEGORY_LIST,
+    ENGRAMIND_CATEGORY_LIST,
     ENGRAMIND_APP,
     FIXED_CHANNELS,
     IDENTITY_LABELS,
@@ -198,7 +198,7 @@ async function ensureWebhook(client: EngramindClient, connection: EngramindConne
 }
 
 async function ensureCampaignSide(client: EngramindClient, actorId: string): Promise<StepResult> {
-    const outcomes = await ensureCategories(CAMPAIGN_CATEGORY_LIST, client)
+    const outcomes = await ensureCategories(ENGRAMIND_CATEGORY_LIST, client)
     const problems = outcomes.filter((item) => item.status !== "exists" && item.status !== "created")
     await EngramindState.updateOne({ _id: ENGRAMIND_STATE_ID }, { $set: { categoryWarnings: problems.map((item) => item.message) } }, { upsert: true })
     const created = outcomes.filter((item) => item.status === "created").length

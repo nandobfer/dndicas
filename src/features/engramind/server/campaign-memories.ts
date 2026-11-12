@@ -18,7 +18,7 @@ import {
     type RemoteCampaignMemory,
 } from "../campaign-memory-format"
 import type { CampaignSyncDto } from "../types"
-import { invalidateCategoryCache, listCategoryKeys } from "./categories"
+import { invalidateCategoryCache, listCategoryKeys, postWithCategoryFallback } from "./categories"
 import { engramindAgentClient, engramindAppClient, engramindConnection } from "./client"
 import { provisionCampaignMemoryNetworkSafely } from "./campaign-channels"
 import { PendingWrite, pendingWriteId } from "./pending-writes"
@@ -381,7 +381,9 @@ export async function flushPendingWrites(): Promise<{ delivered: number; failed:
                 const text = String(entry.body.text ?? "")
                 const max = await textMaxOf(client, entry.channel)
                 const body = text.length > max ? { ...entry.body, text: text.slice(0, max).trimEnd() } : entry.body
-                await writer.call("POST", "/v1/memories", { body })
+                // Opex (DND-57): a categoria escolhida pode não existir mais na entrega; cai em OUTRO em vez de falhar.
+                if (entry.agentMemberId || entry.agentNpcId) await postWithCategoryFallback(writer, body)
+                else await writer.call("POST", "/v1/memories", { body })
                 await PendingWrite.deleteOne({ _id: entry._id, updatedAt: entry.updatedAt })
                 delivered++
             } catch (error) {

@@ -1,4 +1,4 @@
-import { CAMPAIGN_CATEGORY_LIST } from "../constants"
+import { ENGRAMIND_CATEGORY_LIST } from "../constants"
 import { fail, warnResult, type TesterContext, type TesterResult } from "@/features/integrations/testers/types"
 import { assertAppToken } from "./bootstrap"
 import { clientFor, engramindConnection, webhookUrlOf } from "./client"
@@ -34,8 +34,8 @@ export async function testEngramind({ emit, signal }: TesterContext): Promise<Te
     else if (steps.some((step) => step.status === "error" || step.status === "pending")) problems.push("configuração automática com passo pendente (use \"Repetir configuração automática\")")
     try {
         const { categories } = await client.categories.list()
-        const missing = CAMPAIGN_CATEGORY_LIST.filter((def) => !categories.some((item) => item.key === def.key)).map((def) => def.key)
-        if (missing.length) problems.push(`categorias das campanhas faltando: ${missing.join(", ")}`)
+        const missing = ENGRAMIND_CATEGORY_LIST.filter((def) => !categories.some((item) => item.key === def.key)).map((def) => def.key)
+        if (missing.length) problems.push(`categorias das campanhas e dos Opex faltando: ${missing.join(", ")}`)
     } catch (error) {
         problems.push(`categorias indisponíveis (${messageOf(error)})`)
     }

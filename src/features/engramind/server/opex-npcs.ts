@@ -3,12 +3,14 @@ import { Types } from "mongoose"
 import { dbConnect } from "@/lib/db"
 import { decryptSecret, encryptSecret, isEncryptedSecret, isSecretBoxConfigured } from "@/lib/crypto/secretBox"
 import { MaddoxCampaignModel, MaddoxNpcModel } from "@/features/maddox/models"
-import { AGENT_TOKEN_SCOPES, ENGRAMIND_APP, OPEX_NPC_GLOBAL_CHANNEL, opexNpcAgentSlug, opexNpcChannel } from "../constants"
+import { AGENT_TOKEN_SCOPES, ENGRAMIND_APP, OPEX_MEMORY_FALLBACK_CATEGORY, OPEX_NPC_GLOBAL_CHANNEL, opexNpcAgentSlug, opexNpcChannel } from "../constants"
 import { clientFor, engramindAppClient, engramindConnection } from "./client"
 import { ensureAgentSubscription, tidyChannel } from "./bootstrap"
 import { globalMemoriesFor, type OpexGlobalMemory, type OpexGlobalMemoryInput } from "./global-memories"
 import { PendingWrite, pendingWriteId } from "./pending-writes"
 import { rewindTags } from "../campaign-memory-format"
+import { resolveOpexCategory } from "../opex-memory-category"
+import { listCategoryKeys, postWithCategoryFallback } from "./categories"
 import { AcaoAuditoria, auditEngramind, engramindLog, messageOf } from "./shared"
 
 /**
@@ -38,6 +40,8 @@ export interface OpexNpcRef {
 export interface OpexNpcMemoryInput {
     title: string
     text: string
+    /** Categoria escolhida pelo agente, já normalizada (DND-57); ausente = OUTRO. */
+    category?: string
 }
 
 /** Memória inicial: chaves fixas, atualizadas a cada promoção. */
@@ -147,6 +151,7 @@ interface KeyedMemory {
     key: string
     title: string
     text: string
+    category: string
 }
 
 /** Grava (upsert pela chave) no canal individual; sem token ou com a rede fora, vai para a fila com `agentNpcId`. */
@@ -158,11 +163,22 @@ async function writeKeyed(ref: OpexNpcRef, memories: readonly KeyedMemory[], lab
     const client = await opexNpcClient(ref.npcId)
     const { textMaxOf } = await import("./campaign-memories")
     const max = client ? await textMaxOf(client, channel).catch(() => null) : null
+    const categories = client ? await listCategoryKeys(client) : null
     for (const memory of memories) {
-        const body = { channel, key: memory.key, upsert: true, title: memory.title.slice(0, 120), text: max && memory.text.length > max ? memory.text.slice(0, max).trimEnd() : memory.text, tags: ["npc-opex", ...rewindTags(turnNumber)], origin: { source: "maddox", label } }
+        const category = resolveOpexCategory(memory.category, categories)
+        const body = {
+            channel,
+            key: memory.key,
+            upsert: true,
+            title: memory.title.slice(0, 120),
+            text: max && memory.text.length > max ? memory.text.slice(0, max).trimEnd() : memory.text,
+            ...(category ? { category } : {}),
+            tags: ["npc-opex", ...rewindTags(turnNumber)],
+            origin: { source: "maddox", label },
+        }
         try {
             if (!client) throw new Error("Token do NPC Opex indisponível")
-            await client.call("POST", "/v1/memories", { body })
+            await postWithCategoryFallback(client, body)
             saved++
         } catch (error) {
             const id = pendingWriteId(ref.campaignId, `npc:${ref.npcId}:${memory.key}`)
@@ -182,15 +198,15 @@ async function writeKeyed(ref: OpexNpcRef, memories: readonly KeyedMemory[], lab
  * então o mesmo assunto atualiza em vez de duplicar. Nunca lança.
  */
 export async function saveOpexNpcMemories(ref: OpexNpcRef, memories: readonly OpexNpcMemoryInput[], label = ref.npcName || "NPC Opex", turnNumber: number | null = null): Promise<{ saved: number; pending: number }> {
-    const keyed = memories.map((memory) => ({ key: opexNpcMemoryKey(memory.title), title: memory.title, text: memory.text })).filter((memory) => memory.key !== "opex:" && memory.text.trim())
+    const keyed = memories.map((memory) => ({ key: opexNpcMemoryKey(memory.title), title: memory.title, text: memory.text, category: memory.category ?? OPEX_MEMORY_FALLBACK_CATEGORY })).filter((memory) => memory.key !== "opex:" && memory.text.trim())
     return writeKeyed(ref, keyed, label, turnNumber)
 }
 
 /** Memória inicial na promoção: a descrição pública ("Quem eu sou") e as notas do mestre ("Meus segredos"), se houver. */
 export async function seedOpexNpcInitialMemories(ref: OpexNpcRef, input: { publicDescription: string; masterNotes: string }, turnNumber: number | null = null): Promise<{ saved: number; pending: number }> {
     const memories: KeyedMemory[] = []
-    if (input.publicDescription.trim()) memories.push({ key: OPEX_NPC_INITIAL_KEYS.description, title: "Quem eu sou", text: input.publicDescription.trim() })
-    if (input.masterNotes.trim()) memories.push({ key: OPEX_NPC_INITIAL_KEYS.secrets, title: "Meus segredos", text: input.masterNotes.trim() })
+    if (input.publicDescription.trim()) memories.push({ key: OPEX_NPC_INITIAL_KEYS.description, title: "Quem eu sou", text: input.publicDescription.trim(), category: "FATO" })
+    if (input.masterNotes.trim()) memories.push({ key: OPEX_NPC_INITIAL_KEYS.secrets, title: "Meus segredos", text: input.masterNotes.trim(), category: "FATO" })
     return writeKeyed(ref, memories, "Promoção a NPC Opex", turnNumber)
 }
 

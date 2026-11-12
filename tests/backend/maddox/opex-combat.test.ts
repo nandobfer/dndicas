@@ -45,7 +45,7 @@ vi.mock("@/lib/ai/stream", () => ({
         return { text: next, usage: null, durationMs: 1 }
     }),
 }))
-vi.mock("@/features/engramind/server/opex-characters", () => ({ opexCharacterMemoryBlock: vi.fn(async () => "") }))
+vi.mock("@/features/engramind/server/opex-characters", () => ({ opexCharacterMemoryBlock: vi.fn(async () => ({ guidance: "", memories: "" })) }))
 vi.mock("@/features/maddox/server/narrator", () => ({ loadSheetSummaries: vi.fn(async () => new Map()), checkResultOf: () => null }))
 vi.mock("@/features/maddox/server/game-checks", () => ({ rollCheck }))
 vi.mock("@/features/maddox/server/tactical-actions", () => ({ rollCombatRoll, rollCombatAction, submitCombatAction, endCombatTurn, skipCombatTurn, chooseSneakAttack }))

@@ -1756,8 +1756,32 @@ Remover usa `removeMember` (a mesma confirmação) e chama `onOpexRemoved` (arqu
 - Retrato: o fluxo da DND-31; "Gerar retrato de novo" do dono em `POST …/opex/[memberId]/portrait`.
 
 **Decisões** (`server/opex-player.ts`, `server/opex-prompt.ts` puro): geração efêmera com JSON validado por Zod e uma nova tentativa,
-teto `MADDOX_OPEX_GENERATION_TIMEOUT_MS`. Instruções = configuração + papel de jogador + memórias dos 3 canais + campanha + personagem
-(ficha) + prompt base. Consumo: `maddox-opex-interview`, `maddox-opex-turn`, `maddox-opex-combat`.
+teto `MADDOX_OPEX_GENERATION_TIMEOUT_MS`. Instruções (`buildOpexInstructions`, as mesmas na mesa, no combate, nas reações e na
+entrevista) = configuração + papel de jogador + **quem está na mesa** + **orientações do dono** + regra de memórias (só na mesa) +
+memórias (canais Jogadores e individual) + campanha + personagem (ficha) + prompt base. Consumo: `maddox-opex-interview`,
+`maddox-opex-turn`, `maddox-opex-combat`.
+
+**Orientações do dono e protagonismo (DND-57).** As memórias globais do Personagem Opex chegavam ao prompt, mas o Opex se via como
+"o jogador" e a transcrição não dizia quem era humano: "deixe os jogadores conduzirem" o incluía. Elas também ficavam no meio do bloco
+"Memórias", abaixo das memórias do próprio Opex, que caíam em PROJECT_RULES. Correção, sem regra fixa nova sobre holofote (o
+comportamento vem só das memórias do dono):
+- `## Quem está na mesa` (`opexTableSection`): membros `joined` com personagem nomeado (`loadOpexTableRoster`, `opex-player.ts`),
+  `— personagem de jogador humano` ou `— Personagem Opex`, com `(você)` só no próprio; diz que, nas orientações do dono,
+  "jogadores" e "protagonistas" são os personagens dos humanos. Sem humano: "Não há personagem de jogador humano nesta mesa". Personagem
+  ainda sem nome aparece como "(o seu personagem, ainda em criação)".
+- `## Orientações do dono para todo Personagem Opex` (`ownerGuidanceSection`): só o contexto do canal global
+  (`OpexPromptContext.ownerGuidance`), separado do bloco `## Memórias (campanha e as suas)`, declarando que **prevalece** sobre a
+  personalidade, o prompt base e as memórias do personagem. O título "Memórias" do Engramind sai e os subtítulos são rebaixados
+  (`nestedContext`). Sem memórias globais, a seção não aparece.
+- Turno da mesa: `opexTableTask({ ownerGuidance })` repete as orientações em texto integral (`### Lembre: orientações do dono…`) logo
+  antes de `Responda só com:`.
+- Transcrição do Opex (`opexTranscript`): perguntas, declarações e "não fez nada" levam `Nome (Personagem Opex)` ou
+  `Nome (jogador humano)` (`markedCharacterName`); linha de quem saiu da campanha fica sem marca; as declarações ocultas (DND-36)
+  continuam fora. A transcrição e as declarações do narrador não mudam.
+- Categoria das memórias: cada item de `memorias` leva `categoria` (`SENTIMENTO`, `PLANO`, `OPINIAO`, `RELACAO`, `FATO`, `EVENTO`,
+  `OUTRO`, explicadas em `MADDOX_OPEX_MEMORY_CATEGORY_RULE`, também na regra do NPC Opex; categorias de regra proibidas). O schema
+  aceita qualquer valor e `opexMemoriesOf` normaliza (`opexMemoryCategoryOf`): ausente, de regra ou desconhecida = `OUTRO`, sem
+  invalidar a decisão. Gravação e reclassificação das antigas: `aicontext/modules/engramind.md` › Categorias.
 
 **Mesa** (`server/opex-table.ts`): `driveOpex` roda depois de cada `publishGameChanged` (single-flight por campanha):
 - turno fora do combate: em `evaluateTurn`, quando os humanos presentes terminam (com ao menos uma ação humana), o primeiro Opex
@@ -1827,7 +1851,7 @@ do mesmo passo também reaproveitam e a vaga no teto é reservada na hora) e tem
 Prompt do narrador: `[NPC Opex]` no bloco dos NPCs e a seção "NPCs Opex" na tarefa das narrações (`opexNpcsTaskSection`).
 
 **Agente** (`opex-prompt.ts`, `opex-player.ts`): instruções da seção Personagem Opex + `MADDOX_OPEX_NPC_ROLE_RULE` (papel de NPC) +
-regra de memórias + memórias dos 2 canais + campanha + nome e descrição pública (as notas do mestre só pela memória inicial).
+regra de memórias (com `categoria`, DND-57) + memórias dos 2 canais + campanha + nome e descrição pública (as notas do mestre só pela memória inicial).
 Consumo: `maddox-opex-npc` e `maddox-opex-npc-combat`.
 
 **Combate tático**: no bloco `npc` não retomado de um combatente ligado a NPC Opex vivo, `consultTacticalOpexNpc` (`narrator.ts`)
@@ -2126,7 +2150,7 @@ sem retrato e imagem quebrada, propagação bloqueada, `className`, painel de NP
 `tests/backend/maddox/*` (configuração, roteiros, avatar, sessões, rotas, `campaigns.test.ts` com MongoDB em
 memória, `campaign-routes.test.ts`, `grant-maddox-play.test.ts`; Personagens Opex: `opex-interview.test.ts`,
 `opex-table.test.ts`, `opex-combat.test.ts`, `opex-prompt.test.ts`, `grant-maddox-opex.test.ts`; NPCs Opex: `opex-npc-tools.test.ts`,
-`opex-npc-combat.test.ts`, `opex-npc-routes.test.ts` e `tests/backend/engramind/opex-npcs.test.ts`) e `tests/frontend/maddox/*`
+`opex-npc-combat.test.ts`, `opex-npc-routes.test.ts` e `tests/backend/engramind/opex-npcs.test.ts`; orientações do dono, mesa e categorias (DND-57): `opex-prompt.test.ts`, `opex-table.test.ts` e `tests/backend/engramind/opex-memory-reclassify.test.ts`) e `tests/frontend/maddox/*`
 (`maddox-tab.test.tsx`, `maddox-campaigns.test.tsx`, `maddox-member-avatar.test.tsx`, `maddox-campaigns-realtime.test.tsx`, `maddox-opex.test.tsx`, `maddox-opex-npc.test.tsx`; happy-dom).
 Reiniciar campanha (DND-50): `campaign-reset.test.ts` (reinício completo — o que apaga e o que preserva —, só o dono, fases aceitas,
 duas vezes seguidas, limpeza interrompida retomada, Engramind fora com início recusado e rotina, narração em andamento interrompida

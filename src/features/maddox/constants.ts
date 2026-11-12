@@ -1111,6 +1111,8 @@ export const MADDOX_OPEX_NPC_CONSULTS_PER_NARRATION = 3
 /** Origens do consumo medido dos NPCs Opex. */
 export const MADDOX_OPEX_NPC_CONSUMPTION_ORIGIN = "maddox-opex-npc"
 export const MADDOX_OPEX_NPC_COMBAT_CONSUMPTION_ORIGIN = "maddox-opex-npc-combat"
+/** Origem do consumo da reclassificação única das memórias dos Opex (DND-57). */
+export const MADDOX_OPEX_MEMORY_RECLASSIFY_CONSUMPTION_ORIGIN = "maddox-opex-memory-reclassify"
 /** Autor das promoções feitas pelo próprio Maddox (ferramenta do narrador). */
 export const MADDOX_OPEX_NPC_SYSTEM_ACTOR = "system:maddox"
 /** Por que um NPC deixou de ser Opex. */

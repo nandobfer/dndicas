@@ -48,6 +48,7 @@ export const AI_CONSUMPTION_ORIGIN_LABELS: Record<string, string> = {
     "maddox-opex-combat": "Personagens Opex (combate)",
     "maddox-opex-npc": "NPCs Opex (narração)",
     "maddox-opex-npc-combat": "NPCs Opex (combate)",
+    "maddox-opex-memory-reclassify": "Opex (reclassificação das memórias)",
 }
 
 export function aiConsumptionOriginLabel(origin: string): string {
