@@ -112,7 +112,7 @@ async function seedUser(username: string) {
 async function table(players: number) {
     const owner = await seedUser("dono")
     const created = await campaigns.createCampaign({ name: "Brumas", rigor: "narrativo" }, owner)
-    await MaddoxCampaignModel.updateOne({ _id: created.id }, { $set: { "scenarioInterview.status": "done", setting: "Um reino em brumas.", openingSituation: "Uma taverna.", density: "rica", combatDifficulty: "dificil", hidePlayerActions: true, startingStage: "Novatos" } })
+    await MaddoxCampaignModel.updateOne({ _id: created.id }, { $set: { "scenarioInterview.status": "done", setting: "Um reino em brumas.", openingSituation: "Uma taverna.", density: "rica", combatDifficulty: "dificil", hidePlayerActions: true, showEnemyHp: true, startingStage: "Novatos" } })
     const token = (await campaigns.getInviteLink(created.id, owner)).token
     const users = [owner]
     for (let index = 1; index < players; index++) {
@@ -243,7 +243,7 @@ describe("reinício completo", () => {
         const before = await campaignOf(id)
         await settle(id, reset.resetCampaign(id, owner))
         const after = await campaignOf(id)
-        for (const key of ["name", "rigor", "setting", "openingSituation", "density", "combatDifficulty", "hidePlayerActions", "showCheckDc", "sceneImages", "startingStage", "scriptVersions"] as const) expect(after![key]).toEqual(before![key])
+        for (const key of ["name", "rigor", "setting", "openingSituation", "density", "combatDifficulty", "hidePlayerActions", "showEnemyHp", "showAllyHp", "showCheckDc", "sceneImages", "startingStage", "scriptVersions"] as const) expect(after![key]).toEqual(before![key])
         expect(after!.scenarioInterview.status).toBe("done")
         expect(after!.invite.token).toBe(token)
         expect(await MaddoxCampaignMemberModel.countDocuments({ campaignId: id, status: "joined" })).toBe(seats.length)

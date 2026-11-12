@@ -1913,3 +1913,77 @@ describe("DND-41 — revisão (rodada 1 do revisor)", () => {
         expect(vi.mocked(recordAudit)).toHaveBeenCalledWith(expect.objectContaining({ userId: lyra.userId, entidade: "FichaPersonagem", entidadeId: lyra.sheetId, depois: expect.objectContaining({ requestedBy: lyra.userId, origin: "combat-adjust" }) }))
     })
 })
+
+/** Aliado NPC na ordem, depois da Lyra (DND-53). */
+async function addAlly(id: string) {
+    const ally = tactical.combatantState("npc:guard", "guarda", monsterStatsFromCustom({ ca: 14, pv: 11, acoes: [{ nome: "Lança", tipo: "ataque", bonus: 3, dano: "1d6+1", tipoDano: "perfurante" }] }))
+    Object.assign(ally, { stats: { ...ally.stats, hp: 8 } })
+    const combat = (await MaddoxCombatModel.findOne({ campaignId: id }).lean())!
+    await MaddoxCombatModel.updateOne(
+        { campaignId: id },
+        { $push: { combatants: { name: "Guarda", nameKey: "guarda", side: "aliado", quantity: 1, description: "", condition: "", npcId: null, outcome: null, tactical: ally } }, $set: { "tactical.order": [...combat.tactical!.order, { actorKey: "npc:guard", kind: "combatant", name: "Guarda", total: 3, d20: 2, modifier: 1, dexterity: 12, joinIndex: 3, groupKey: "guarda" }] } },
+    )
+}
+
+describe("DND-53 — PV dos inimigos e dos aliados NPC", () => {
+    const slotsOf = async (id: string, userId: string) => {
+        const order = (await game.getGameState(id, userId)).combat!.tactical!.order
+        return Object.fromEntries(order.filter((slot) => slot.kind === "combatant").map((slot) => [slot.name, slot]))
+    }
+
+    it("desligado (padrão): o servidor não envia os números dos combatentes do mestre, só a faixa; nunca a CA", async () => {
+        const { id, kael, lyra } = await scene()
+        await addSecondGoblin(id, { defeated: true })
+        await addAlly(id)
+        for (const userId of [kael.userId, lyra.userId]) {
+            const slots = await slotsOf(id, userId)
+            expect(slots.Goblin).toMatchObject({ hp: null, band: "ileso", defeated: false })
+            expect(slots["Goblin 2"]).toMatchObject({ hp: null, band: "caido", defeated: true })
+            expect(slots.Guarda).toMatchObject({ side: "aliado", hp: null, band: "ferido" })
+            expect(JSON.stringify(slots)).not.toMatch(/"ac"|"armorClass"|"hpMax"/)
+        }
+    })
+
+    it("cada lado tem a sua escolha e vale na hora, no meio do combate, sem reiniciá-lo; 0 PV continua Caído", async () => {
+        const { id, kael, lyra } = await scene()
+        await addSecondGoblin(id, { defeated: true })
+        await addAlly(id)
+        const round = (await MaddoxCombatModel.findOne({ campaignId: id }).lean())!.tactical!.round
+        await campaigns.updateCampaign(id, { showEnemyHp: true }, kael.userId)
+        let slots = await slotsOf(id, lyra.userId)
+        expect(slots.Goblin).toMatchObject({ hp: { current: 7, max: 7, temp: 0 }, band: "ileso" })
+        expect(slots["Goblin 2"]).toMatchObject({ hp: { current: 0, max: 7, temp: 0 }, band: "caido", defeated: true })
+        expect(slots.Guarda).toMatchObject({ hp: null, band: "ferido" })
+        await campaigns.updateCampaign(id, { showEnemyHp: false, showAllyHp: true }, kael.userId)
+        slots = await slotsOf(id, lyra.userId)
+        expect(slots.Goblin).toMatchObject({ hp: null, band: "ileso" })
+        expect(slots.Guarda).toMatchObject({ hp: { current: 8, max: 11, temp: 0 }, band: "ferido" })
+        const combat = (await MaddoxCombatModel.findOne({ campaignId: id }).lean())!
+        expect(combat.tactical!.round).toBe(round)
+        expect(combat.tactical!.phase).toBe("running")
+    })
+
+    it("o card da ordem de iniciativa (mensagem) nunca leva os números dos adversários", async () => {
+        const { id, kael } = await scene()
+        await campaigns.updateCampaign(id, { showEnemyHp: true, showAllyHp: true }, kael.userId)
+        const { combatEventDto } = await import("@/features/maddox/server/combat")
+        const combat = (await MaddoxCombatModel.findOne({ campaignId: id }).lean())!
+        const order = combatEventDto(combat, "order").tactical!.order
+        expect(order.filter((slot) => slot.kind === "combatant").every((slot) => slot.hp === null && slot.band !== null)).toBe(true)
+    })
+
+    it("1 natural do adversário: erra como sempre e o dado ao vivo chega com o veredito de falha crítica", async () => {
+        const { id, kael } = await scene()
+        const lines: { type: string; roll?: { step: string; verdict: string | null; actorName: string } }[] = []
+        const unsubscribe = subscribeGameLive(id, (line) => lines.push(line as never))
+        dice.server.push([1])
+        script.push([{ text: "Kael recua." }], [{ tools: [{ name: "monster_action", input: { combatente: "Goblin", acao: "Faca", alvos: ["Kael"] } }], text: "O goblin tropeça." }])
+        await actions.endCombatTurn(id, {}, kael.userId)
+        await settleCampaign(id)
+        unsubscribe()
+        expect(lines.filter((line) => line.type === "live-roll").map((line) => [line.roll!.actorName, line.roll!.step, line.roll!.verdict])).toEqual([["Goblin", "attack", "fumble"]])
+        const card = (await MaddoxCampaignMessageModel.findOne({ campaignId: id, kind: "combat-action", "combatAction.actorName": "Goblin" }).lean())!
+        expect(card.combatAction!.steps[0]).toMatchObject({ kind: "attack", hit: false, critical: false })
+        expect(card.combatAction!.summary).toContain("1 natural")
+    })
+})

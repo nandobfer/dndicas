@@ -145,9 +145,12 @@ export interface MaddoxTacticalSlotDto {
     /** `null` = ainda não rolou. */
     initiative: number | null
     active: boolean
-    /** PV dos personagens (o grupo vê). */
+    /**
+     * PV dos personagens (o grupo vê). Nos combatentes do mestre, só quando a campanha liga o PV do lado (DND-53:
+     * `showEnemyHp`/`showAllyHp`); desligado, `null` e só a faixa.
+     */
     hp: { current: number; max: number; temp: number } | null
-    /** Faixa de PV dos adversários. */
+    /** Faixa de PV dos combatentes do mestre (sempre presente, com ou sem os números). */
     band: HpBand | null
     conditions: { key: MaddoxConditionKey; label: string }[]
     concentration: string | null
@@ -447,7 +450,8 @@ export interface MaddoxLiveRollDto {
     label: string
     step: "attack" | "damage" | "save" | "heal"
     targetName: string | null
-    verdict: "hit" | "miss" | "critical" | "success" | "fail" | null
+    /** `fumble` = 1 natural no ataque (DND-53): erra como `miss`, com o tratamento visual da falha crítica. */
+    verdict: "hit" | "miss" | "critical" | "fumble" | "success" | "fail" | null
     amount: number | null
     damageType: string | null
     roll: DiceRollResponse

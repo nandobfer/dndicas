@@ -60,6 +60,8 @@ const detail = (over: Partial<MaddoxCampaignDetailDto> = {}): MaddoxCampaignDeta
     showCheckDc: false,
     sceneImages: true,
     hidePlayerActions: false,
+    showEnemyHp: false,
+    showAllyHp: false,
     density: "equilibrada",
     combatDifficulty: "equilibrado",
     startingLevel: null,

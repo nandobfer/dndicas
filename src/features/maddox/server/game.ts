@@ -1155,7 +1155,7 @@ export async function getGameState(campaignId: string, userId: string): Promise<
         npcs: npcs.map((npc) => ({ id: String(npc._id), name: npc.name, portraitUrl: npc.portraitUrl ?? null, status: npc.status ?? "active", portraitGenerating: portraitsGenerating.has(String(npc._id)), ...(npc.opex?.active ? { opex: true } : {}) })),
         canManageOpexNpcs: await (await import("./opex-npcs")).canManageOpexNpcsAs(campaign.ownerId, userId),
         sceneImages: sceneImageControl,
-        combat: activeCombat ? { ...(await import("./combat")).combatDto(activeCombat, await (await import("./opex-npcs")).knownOpexNpcIds((activeCombat.combatants ?? []).map((item) => item.npcId))), ...(tacticalCombat && tacticalModule ? { tactical: await tacticalModule.loadTacticalDto(tacticalCombat, { isOwner: campaign.ownerId === userId }) } : {}) } : null,
+        combat: activeCombat ? { ...(await import("./combat")).combatDto(activeCombat, await (await import("./opex-npcs")).knownOpexNpcIds((activeCombat.combatants ?? []).map((item) => item.npcId))), ...(tacticalCombat && tacticalModule ? { tactical: await tacticalModule.loadTacticalDto(tacticalCombat, { isOwner: campaign.ownerId === userId, hpVisibility: tacticalModule.combatantHpVisibilityOf(campaign) }) } : {}) } : null,
         participants,
         me: {
             memberId: String(loaded.member._id),

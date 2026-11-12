@@ -354,6 +354,26 @@ describe("Campanhas Maddox — edição e personagem", () => {
         expect(createMaddoxCampaignSchema.safeParse({ name: "Mesa", rigor: "narrativo", hidePlayerActions: "sim" }).error?.issues[0]?.message).toBe("Escolha se as ações dos outros jogadores ficam visíveis")
     })
 
+    it("PV dos inimigos e dos aliados NPC (DND-53): faixa por padrão, escolhidos na criação, editáveis pelo dono mesmo em andamento (auditado)", async () => {
+        expect(await service.createCampaign({ name: "Padrão", rigor: "fiel-dnd" }, ids.owner)).toMatchObject({ showEnemyHp: false, showAllyHp: false })
+        const campaign = await service.createCampaign({ name: "Às claras", rigor: "rigoroso", showEnemyHp: true }, ids.owner)
+        expect(campaign).toMatchObject({ showEnemyHp: true, showAllyHp: false })
+        expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({ acao: "CRIAR", depois: expect.objectContaining({ showEnemyHp: true, showAllyHp: false }) }))
+        await service.joinByInvite(await tokenOf(campaign.id), ids.ana)
+        await expect(service.updateCampaign(campaign.id, { showAllyHp: true }, ids.ana)).rejects.toMatchObject({ status: 403 })
+        await MaddoxCampaignModel.updateOne({ _id: campaign.id }, { $set: { status: "active" } })
+        recordAudit.mockClear()
+        expect(await service.updateCampaign(campaign.id, { showAllyHp: true }, ids.owner)).toMatchObject({ showEnemyHp: true, showAllyHp: true })
+        expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({ acao: "ATUALIZAR", antes: expect.objectContaining({ showEnemyHp: true, showAllyHp: false }), depois: { showAllyHp: true } }))
+        expect(await service.updateCampaign(campaign.id, { showEnemyHp: false }, ids.owner)).toMatchObject({ showEnemyHp: false, showAllyHp: true })
+        expect((await service.getCampaignDetail(campaign.id, ids.ana)).showEnemyHp).toBe(false)
+        const { createMaddoxCampaignSchema, updateMaddoxCampaignSchema } = await import("@/features/maddox/campaign-schemas")
+        expect(updateMaddoxCampaignSchema.safeParse({ showEnemyHp: true }).success).toBe(true)
+        expect(updateMaddoxCampaignSchema.safeParse({ showAllyHp: false }).success).toBe(true)
+        expect(createMaddoxCampaignSchema.safeParse({ name: "Mesa", rigor: "fiel-dnd", showEnemyHp: "sim" }).error?.issues[0]?.message).toBe("Escolha como o PV dos inimigos aparece")
+        expect(createMaddoxCampaignSchema.safeParse({ name: "Mesa", rigor: "fiel-dnd", showAllyHp: 1 }).error?.issues[0]?.message).toBe("Escolha como o PV dos aliados aparece")
+    })
+
     it("densidade das narrações (DND-22): Equilibrada por padrão, escolhida na criação, editável pelo dono a qualquer momento (auditado)", async () => {
         expect(await service.createCampaign({ name: "Padrão", rigor: "fiel-dnd" }, ids.owner)).toMatchObject({ density: "equilibrada" })
         const campaign = await service.createCampaign({ name: "Curtinha", rigor: "narrativo", density: "concisa" }, ids.owner)

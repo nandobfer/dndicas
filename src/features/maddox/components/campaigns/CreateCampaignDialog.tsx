@@ -16,10 +16,11 @@ import { CheckDcField } from "./CheckDcField"
 import { SceneImagesField } from "./SceneImagesField"
 import { PlayerActionsField } from "./PlayerActionsField"
 import { CombatDifficultyCard } from "./CombatDifficultyCard"
+import { CombatantHpField } from "./CombatantHpField"
 import { DensityCard } from "./DensityCard"
 import { RigorCard } from "./RigorCard"
 
-const DEFAULTS: CreateMaddoxCampaignInput = { name: "", rigor: "equilibrado", showCheckDc: false, sceneImages: true, hidePlayerActions: false, density: MADDOX_DEFAULT_DENSITY, combatDifficulty: MADDOX_COMBAT_DIFFICULTY_DEFAULT }
+const DEFAULTS: CreateMaddoxCampaignInput = { name: "", rigor: "equilibrado", showCheckDc: false, sceneImages: true, hidePlayerActions: false, showEnemyHp: false, showAllyHp: false, density: MADDOX_DEFAULT_DENSITY, combatDifficulty: MADDOX_COMBAT_DIFFICULTY_DEFAULT }
 
 /** Criação da campanha: nome, grau de rigor, densidade das narrações e (graus táticos) dificuldade dos combates. Nasce no lobby, com o criador como dono. */
 export function CreateCampaignDialog({ open, onOpenChange, onCreated }: { open: boolean; onOpenChange: (open: boolean) => void; onCreated: (campaign: MaddoxCampaignDetailDto) => void }) {
@@ -38,7 +39,7 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated }: { open: 
     }
 
     const submit = form.handleSubmit((values) =>
-        create.mutate({ name: values.name, rigor: values.rigor, density: values.density ?? MADDOX_DEFAULT_DENSITY, ...(MADDOX_TACTICAL_COMBAT_RIGORS.includes(values.rigor) ? { combatDifficulty: values.combatDifficulty ?? MADDOX_COMBAT_DIFFICULTY_DEFAULT } : {}), ...(MADDOX_CHECK_RIGORS.includes(values.rigor) ? { showCheckDc: values.showCheckDc ?? false } : {}), ...(values.sceneImages === false ? { sceneImages: false } : {}), ...(values.hidePlayerActions ? { hidePlayerActions: true } : {}) }, {
+        create.mutate({ name: values.name, rigor: values.rigor, density: values.density ?? MADDOX_DEFAULT_DENSITY, ...(MADDOX_TACTICAL_COMBAT_RIGORS.includes(values.rigor) ? { combatDifficulty: values.combatDifficulty ?? MADDOX_COMBAT_DIFFICULTY_DEFAULT } : {}), ...(MADDOX_CHECK_RIGORS.includes(values.rigor) ? { showCheckDc: values.showCheckDc ?? false } : {}), ...(values.sceneImages === false ? { sceneImages: false } : {}), ...(values.hidePlayerActions ? { hidePlayerActions: true } : {}), ...(MADDOX_TACTICAL_COMBAT_RIGORS.includes(values.rigor) && values.showEnemyHp ? { showEnemyHp: true } : {}), ...(MADDOX_TACTICAL_COMBAT_RIGORS.includes(values.rigor) && values.showAllyHp ? { showAllyHp: true } : {}) }, {
             onSuccess: (campaign) => {
                 form.reset(DEFAULTS)
                 onCreated(campaign)
@@ -64,6 +65,7 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated }: { open: 
                     <RigorCard form={form} />
                     <DensityCard form={form} />
                     {tactical && <CombatDifficultyCard form={form} />}
+                    {tactical && <CombatantHpField form={form} />}
                     <CheckDcField form={form} />
                     <SceneImagesField form={form} />
                     <PlayerActionsField form={form} />

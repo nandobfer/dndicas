@@ -108,6 +108,10 @@ export interface IMaddoxCampaign {
     sceneImages: boolean
     /** Declarações dos outros jogadores ocultas no chat (DND-36): só na leitura; o texto fica salvo e o Maddox recebe tudo. */
     hidePlayerActions: boolean
+    /** PV dos inimigos no combate tático (DND-53): `false` = só a faixa de estado (padrão); `true` = números atual/máximo. */
+    showEnemyHp: boolean
+    /** PV dos aliados NPC no combate tático (DND-53): `false` = só a faixa de estado (padrão); `true` = números. */
+    showAllyHp: boolean
     /** Densidade das narrações (DND-22): o dono muda a qualquer momento; vale a partir da próxima narração. */
     density: MaddoxDensityLevel
     /** Dificuldade dos combates (DND-42): só vale nos graus táticos; o dono muda a qualquer momento, vale a partir do próximo combate. */
@@ -224,6 +228,8 @@ const MaddoxCampaignSchema = new Schema<IMaddoxCampaign>(
         showCheckDc: { type: Boolean, default: false },
         sceneImages: { type: Boolean, default: true },
         hidePlayerActions: { type: Boolean, default: false },
+        showEnemyHp: { type: Boolean, default: false },
+        showAllyHp: { type: Boolean, default: false },
         density: { type: String, enum: MADDOX_DENSITY_LEVELS, default: MADDOX_DEFAULT_DENSITY },
         combatDifficulty: { type: String, enum: MADDOX_COMBAT_DIFFICULTY_LEVELS, default: MADDOX_COMBAT_DIFFICULTY_DEFAULT },
         startingLevel: { type: Number, default: null, min: 1, max: 20 },

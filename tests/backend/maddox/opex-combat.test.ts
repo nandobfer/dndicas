@@ -68,9 +68,9 @@ async function setup(phase: "players" | "master") {
     return { campaignId: campaign._id, memberId: _id, userId: opexUserIdFor(_id) }
 }
 
-function combatState(memberId: string, myTurn: boolean): MaddoxGameStateDto {
+function combatState(memberId: string, myTurn: boolean, goblinHp: { current: number; max: number; temp: number } | null = null): MaddoxGameStateDto {
     return {
-        combat: { title: "Emboscada", location: "Estrada", tactical: { phase: "running", round: 2, activeKey: "c:1", order: [{ actorKey: "c:1", kind: "character", side: "personagem", name: "Tork", portraitUrl: null, memberId, initiative: 15, active: true, hp: { current: 9, max: 12, temp: 0 }, band: null, conditions: [], concentration: null, defeated: false, dead: false, stable: false, dying: false }, { actorKey: "m:goblin-1", kind: "combatant", side: "inimigo", name: "Goblin", portraitUrl: null, memberId: null, initiative: 10, active: false, hp: null, band: "ferido" as never, conditions: [], concentration: null, defeated: false, dead: false, stable: false, dying: false }] } },
+        combat: { title: "Emboscada", location: "Estrada", tactical: { phase: "running", round: 2, activeKey: "c:1", order: [{ actorKey: "c:1", kind: "character", side: "personagem", name: "Tork", portraitUrl: null, memberId, initiative: 15, active: true, hp: { current: 9, max: 12, temp: 0 }, band: null, conditions: [], concentration: null, defeated: false, dead: false, stable: false, dying: false }, { actorKey: "m:goblin-1", kind: "combatant", side: "inimigo", name: "Goblin", portraitUrl: null, memberId: null, initiative: 10, active: false, hp: goblinHp, band: "ferido" as never, conditions: [], concentration: null, defeated: false, dead: false, stable: false, dying: false }] } },
         me: { memberId, isOwner: false, ready: true, eligible: true, declared: false, sheet: null, combat: { myTurn, actorKey: "c:1", economy: { action: true, bonus: true, reaction: true } as never, attacksPerAction: 1, dying: false, options: { action: [{ id: "weapon:machado", category: "weapon", economy: "action", label: "Machado de batalha", detail: "+5, 1d8+3", target: "enemy", multiTarget: false, resolution: "attack" } as never], bonus: [] } } },
     } as unknown as MaddoxGameStateDto
 }
@@ -153,6 +153,28 @@ describe("Personagens Opex — testes e combate (DND-26)", () => {
         expect(submitCombatAction).toHaveBeenCalledWith(String(campaignId), { economy: "action", optionId: "weapon:machado", targets: ["m:goblin-1"] }, userId)
         expect(rollCombatAction).toHaveBeenCalledTimes(1)
         expect(endCombatTurn).toHaveBeenCalledWith(String(campaignId), { movimento: "Avanço até o goblin." }, userId)
+    })
+
+    it("DND-53: vê o PV do adversário quando a campanha mostra os números; sem eles, só o estado", async () => {
+        for (const [goblinHp, expected, absent] of [
+            [null, "Goblin (inimigo, iniciativa 10) estado: ferido", "PV 4/7"],
+            [{ current: 4, max: 7, temp: 0 }, "Goblin (inimigo, iniciativa 10) PV 4/7", "estado: ferido"],
+        ] as const) {
+            opexCalls.length = 0
+            await Promise.all(Object.values(mongoose.connection.collections).map((collection) => collection.deleteMany({})))
+            const { campaignId, memberId, userId } = await setup("players")
+            await MaddoxCampaignModel.updateOne({ _id: campaignId }, { $set: { "turn.combatActor": { memberId, actorKey: "c:1", startedAt: new Date() } } })
+            gameState.value = combatState(String(memberId), true, goblinHp)
+            submitCombatAction.mockImplementation(async () => {
+                await MaddoxCampaignMessageModel.create({ campaignId, turnNumber: 3, phase: "players", kind: "combat-action", memberId, userId, content: "", combatAction: { status: "pending", summary: "" } })
+                return {}
+            })
+            opexReplies.push(JSON.stringify({ acoes: [{ economia: "action", opcao: "weapon:machado", alvos: ["m:goblin-1"] }], movimento: "" }))
+            await driveOpex(campaignId)
+            await settle()
+            expect(opexCalls[0]!.prompt).toContain(expected)
+            expect(opexCalls[0]!.prompt).not.toContain(absent)
+        }
     })
 
     it("DND-49: vê o ataque furtivo e o ajuste do Maddox na opção; não marca nada antes e soma o furtivo sozinho depois do acerto", async () => {

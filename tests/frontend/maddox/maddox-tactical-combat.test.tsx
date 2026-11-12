@@ -179,6 +179,33 @@ describe("combate tático — rastreador de iniciativa", () => {
     })
 })
 
+describe("combate tático — PV dos adversários pela configuração da campanha (DND-53)", () => {
+    const withHp: MaddoxTacticalCombatDto = {
+        ...combat,
+        order: combat.order.map((slot) => (slot.actorKey === "npc:g1" ? { ...slot, hp: { current: 3, max: 7, temp: 0 } } : slot.actorKey === "npc:g2" ? { ...slot, hp: { current: 0, max: 7, temp: 0 } } : slot)),
+    }
+
+    it("com os números (servidor envia hp): barra e atual/máximo no lugar da faixa; 0 PV continua Caído", () => {
+        render(<InitiativeTracker combat={withHp} title="Cripta" color="#3B82F6" />)
+        const slots = screen.getAllByTestId("initiative-slot")
+        expect(within(slots[1]!).getByTestId("initiative-hp")).toHaveTextContent("3/7")
+        expect(within(slots[1]!).queryByTestId("initiative-band")).not.toBeInTheDocument()
+        expect(within(slots[1]!).queryByTestId("initiative-fallen")).not.toBeInTheDocument()
+        expect(within(slots[2]!).getByTestId("initiative-hp")).toHaveTextContent("0/7")
+        expect(within(slots[2]!).getByTestId("initiative-fallen")).toHaveTextContent("Caído")
+        expect(slots[2]!.textContent).not.toMatch(/CA/)
+    })
+
+    it("faixa compacta: PV dos adversários na cor da barra só quando o servidor envia; sem ele, nada", () => {
+        const { rerender } = render(<InitiativeTracker combat={combat} title="Cripta" color="#3B82F6" compact />)
+        expect(screen.queryAllByTestId("initiative-strip-hp")).toHaveLength(0)
+        rerender(<InitiativeTracker combat={withHp} title="Cripta" color="#3B82F6" compact />)
+        const hp = screen.getAllByTestId("initiative-strip-hp")
+        expect(hp.map((item) => item.textContent)).toEqual(["3/7", "0/7"])
+        expect(hp[0]!.style.color.toLowerCase()).toBe(rarityColors.legendary.toLowerCase())
+    })
+})
+
 const baseMessage = (over: Partial<MaddoxGameMessageDto>): MaddoxGameMessageDto => ({
     id: "msg1",
     turnNumber: 3,
@@ -280,6 +307,41 @@ describe("combate tático — cards na conversa", () => {
         } finally {
             vi.useRealTimers()
         }
+    })
+})
+
+describe("combate tático — destaque do 20 e do 1 natural no card (DND-53)", () => {
+    const attackWith = (d20: number, over: { hit: boolean; critical: boolean }): MaddoxGameMessageDto => ({
+        ...pendingAttack,
+        combatAction: { ...pendingAttack.combatAction!, status: "resolved", cancellable: false, steps: [{ ...baseStep, kind: "attack", status: "done", dice: "1d20+6", roll: rollOf(`atk-${d20}`, d20), total: d20, ...over }, { ...baseStep, kind: "damage", status: over.hit ? "done" : "skipped", dice: "1d6+3", roll: over.hit ? damageRoll : null, total: over.hit ? 6 : null, amount: over.hit ? 6 : null }] },
+    })
+    const renderCard = (message: MaddoxGameMessageDto) => render(<CombatActionCard message={message} mine replay={null} onRoll={vi.fn()} onCancel={vi.fn()} />)
+
+    it("1 natural: destaque animado vermelho, '1 natural' em vermelho e o ataque continua errando", () => {
+        renderCard(attackWith(1, { hit: false, critical: false }))
+        expect(screen.getByTestId("critical-highlight")).toHaveAttribute("data-critical-state", "critical-failure")
+        expect(screen.getAllByTestId("critical-highlight")).toHaveLength(1)
+        const natural = screen.getByTestId("combat-step-natural")
+        expect(natural).toHaveTextContent("1 natural")
+        expect(natural).toHaveAttribute("data-state", "critical-failure")
+        expect(natural.style.color.toLowerCase()).toBe(rarityColors.artifact.toLowerCase())
+        expect(screen.getByTestId("combat-step-verdict")).toHaveTextContent("Errou")
+    })
+
+    it("20 natural continua verde, como antes", () => {
+        renderCard(attackWith(20, { hit: true, critical: true }))
+        expect(screen.getByTestId("critical-highlight")).toHaveAttribute("data-critical-state", "critical-success")
+        expect(screen.getByTestId("combat-step-natural")).toHaveTextContent("20 natural")
+        expect(screen.getByTestId("combat-step-verdict")).toHaveTextContent("Crítico!")
+    })
+
+    it("sem 1 nem 20 no ataque não há destaque; o dano não conta (só o ataque)", () => {
+        renderCard(resolvedAction)
+        expect(screen.queryByTestId("critical-highlight")).not.toBeInTheDocument()
+        const damageOne: MaddoxGameMessageDto = { ...resolvedAction, combatAction: { ...resolvedAction.combatAction!, steps: [resolvedAction.combatAction!.steps[0]!, { ...baseStep, kind: "damage", status: "done", dice: "1d20", roll: rollOf("dmg-1", 1), total: 1, amount: 1 }] } }
+        renderCard(damageOne)
+        expect(screen.queryByTestId("critical-highlight")).not.toBeInTheDocument()
+        expect(screen.queryByTestId("combat-step-natural")).not.toBeInTheDocument()
     })
 })
 

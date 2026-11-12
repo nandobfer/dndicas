@@ -1027,12 +1027,12 @@ tático em andamento" (estado do `get_combat`, com `agemAgora` = só o adversár
 `tacticalView` devolve a `descricao` (cortada em 200 caracteres) para a penalidade não se perder entre os blocos — a `condicao` em texto é
 sobrescrita pela faixa de PV depois do primeiro dano. Veja "Dificuldade dos combates (DND-42)".
 
-**DTO e tela.** `combat.tactical` (ordem com PV dos personagens, faixa "Ileso/Ferido/Muito ferido/Caído" dos adversários — sem PV nem
-CA —, condições, concentração, morrendo/estável/morto, quem age), `turn.combatActor`, `turn.pendingCombat`, `me.combat` (vez, economia,
+**DTO e tela.** `combat.tactical` (ordem com PV dos personagens, faixa "Ileso/Ferido/Muito ferido/Caído" dos adversários — sem PV,
+salvo quando a campanha mostra o PV do lado (DND-53), e nunca a CA —, condições, concentração, morrendo/estável/morto, quem age), `turn.combatActor`, `turn.pendingCombat`, `me.combat` (vez, economia,
 opções de Ação/Ação bônus, morrendo) e `combatAction`/`combatRoll`/`combatReaction` nas mensagens (rolagem pendente só para quem rola;
 opções da reação só para quem reage). Stream: `combat-rolled` (todos repetem o dado), **`live-roll { liveId, roll }`** (DND-25: cada dado
 de `monster_action`/`apply_effect` vai para a geração ao vivo do job — `MaddoxLiveGenerationDto.rolls`, também no `snapshot`; a bolha
-`LiveNpcRolls` anima um de cada vez, ataque com Acertou/Errou/Crítico e depois o dano, e só então mostra o texto da narração) e
+`LiveNpcRolls` anima um de cada vez, ataque com Acertou/Errou/Crítico/Falha crítica e depois o dano, e só então mostra o texto da narração) e
 **`combat-step-rolled { messageId, stepIndex, roll }`** (salvaguarda de um adversário rolada pelo servidor num card de ação de jogador:
 o passo anima antes do resultado). Dados do servidor repetidos com `ReplayDie` (`DiceRollerPanel` só com `externalResult`). Tela: `InitiativeTracker` (coluna da direita e
 faixa compacta no cabeçalho em telas pequenas), `CombatActionBar` (na minha vez substitui o campo: Ação, Ação bônus, economia,
@@ -1674,6 +1674,41 @@ marca são reconhecidos pelo começo do texto (`COMBAT_TURN_SUMMARY_PATTERN`, "V
 na consulta, antes do limite. Vale para todos os membros, inclusive o dono. Desligar devolve os textos a todos.
 
 Sem permissão nova: a configuração exige ser o dono e a leitura, `maddox.play` e ser membro.
+
+## PV dos adversários e destaque do 1 natural (DND-53)
+
+**Configuração.** `campaign.showEnemyHp` (inimigos) e `campaign.showAllyHp` (aliados NPC), ambos padrão `false` (campanha antiga sem o
+campo = só a faixa, sem migração). Card "PV nos combates" (`CombatantHpField`, um `GlassSelector` por lado: "Estado por texto" |
+"Mostrar PV") na criação e em "Editar campanha", **só nos graus táticos** (`MADDOX_TACTICAL_COMBAT_RIGORS`); o servidor aceita os campos
+em todo grau, para não perder o valor. O POST só envia o lado ligado; o PATCH, só o lado que mudou. O dono muda **a qualquer momento**,
+inclusive no meio de um combate, com auditoria (antes/depois); o detalhe da campanha devolve os dois campos.
+
+**Leitura no servidor.** `tacticalSnapshot(..., hpVisibility)` (`server/tactical-dto.ts`; `combatantHpVisibilityOf(campaign)` em
+`getGameState`) preenche `hp: { current, max, temp }` do combatente só quando o lado dele está ligado e mantém o `band`; desligado,
+`hp: null` e os números não saem do servidor. O card "Ordem de iniciativa" (`combatEventDto(..., "order")`) nunca leva os números. A CA
+nunca entra no DTO. 0 PV continua `defeated`/"Caído". Vale na próxima leitura do estado (o `updateCampaign` emite
+`maddox.campaign.changed` e a mesa recarrega), sem reiniciar o combate. O Personagem Opex lê o mesmo estado: a linha do adversário vira
+`PV atual/máximo` em vez de `estado: <faixa>` (`situationOf` em `server/opex-table.ts`). O mestre continua recebendo os números pelo
+`get_combat`, como sempre.
+
+**Tela.** `InitiativeTracker`: com `hp`, a mesma barra dos personagens (`HpBar`, cor `hpColor`) no lugar da faixa, e o chip "Caído"
+(`initiative-fallen`) quando o combatente está derrotado; na faixa compacta, `atual/máx` na cor da barra (`initiative-strip-hp`), só
+dos combatentes do mestre.
+
+**1 natural.** Sem mudança de regra (`attackOutcome().fumble` erra). No `CombatActionCard`, `attackFumbled(step)` (`combat-visuals.ts`:
+passo `attack` feito com o d20 mantido em 1, lido do próprio dado, vale para cards antigos) liga o `CriticalHighlight` em
+`critical-failure` e o `criticalBoxShadow` vermelho (`data-highlight` no card). O 20 natural continua verde e tem prioridade, mas
+cada ataque tem o próprio card. A linha "1 natural"/"20 natural" (`combat-step-natural`) usa a cor de `CRITICAL_STAGE_CONFIG`. Sem
+destaque para dano, teste contra a morte, iniciativa ou rolagens que não sejam de ataque; o `GameCheckCard` segue com o próprio
+destaque. Nos dados ao vivo, `monster_action` emite o veredito `fumble` e o `LiveNpcRolls` mostra "Falha crítica!" em vermelho
+(`live-roll-verdict`), separado de "Errou".
+
+Sem permissão nova: a configuração exige ser o dono da campanha e a leitura, `maddox.play` e ser membro.
+
+Testes: `campaigns.test.ts` (padrão, criação, edição auditada, 403), `tactical-combat.test.ts` ("DND-53": DTO desligado/por lado,
+mudança no meio do combate, card da ordem sem números, veredito `fumble`), `opex-combat.test.ts` (linha do adversário),
+`campaign-reset.test.ts` (campos preservados), `maddox-campaigns.test.tsx`, `maddox-tactical-combat.test.tsx` e
+`maddox-dnd25-combat.test.tsx`.
 
 ## Personagens Opex (DND-26)
 

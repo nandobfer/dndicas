@@ -56,6 +56,8 @@ const listItem = (over: Partial<MaddoxCampaignListItemDto> = {}): MaddoxCampaign
     showCheckDc: false,
     sceneImages: true,
     hidePlayerActions: false,
+    showEnemyHp: false,
+    showAllyHp: false,
     density: "equilibrada",
     combatDifficulty: "equilibrado",
     startingLevel: null,
@@ -279,6 +281,38 @@ describe("lista de campanhas", () => {
         fireEvent.change(screen.getByLabelText("Nome da campanha"), { target: { value: "Às Escuras" } })
         fireEvent.click(screen.getByRole("button", { name: "Criar campanha" }))
         await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns", expect.objectContaining({ name: "Às Escuras", hidePlayerActions: true })))
+    })
+
+    it("PV nos combates na criação (DND-53): só nos graus táticos; texto por padrão (não vai no POST); 'Mostrar PV' de cada lado vai separado", async () => {
+        post.mockResolvedValue(ok(detail({ id: "c9", name: "Às Claras", rigor: "fiel-dnd" })))
+        renderWithQueryClient(<CampaignsPage />)
+        fireEvent.click(await screen.findByRole("button", { name: /Nova campanha/ }))
+        const slider = await screen.findByRole("slider", { name: "Grau de rigor da campanha" })
+        expect(slider).toHaveAttribute("aria-valuetext", "Equilibrado")
+        expect(screen.queryByTestId("combatant-hp-field")).toBeNull()
+        fireEvent.keyDown(slider, { key: "End" })
+        await waitFor(() => expect(slider).toHaveAttribute("aria-valuetext", "Fiel ao D&D"))
+        const field = await screen.findByTestId("combatant-hp-field")
+        expect(within(within(field).getByTestId("enemy-hp-field")).getByRole("button", { name: "Estado por texto" })).toBeInTheDocument()
+        fireEvent.change(screen.getByLabelText("Nome da campanha"), { target: { value: "Às Claras" } })
+        fireEvent.click(screen.getByRole("button", { name: "Criar campanha" }))
+        await waitFor(() => expect(post).toHaveBeenCalledTimes(1))
+        expect(post.mock.calls[0]![1]).not.toHaveProperty("showEnemyHp")
+        expect(post.mock.calls[0]![1]).not.toHaveProperty("showAllyHp")
+    })
+
+    it("PV dos inimigos ligado na criação (DND-53) envia só showEnemyHp: true", async () => {
+        post.mockResolvedValue(ok(detail({ id: "c9", name: "Às Claras", rigor: "fiel-dnd", showEnemyHp: true })))
+        renderWithQueryClient(<CampaignsPage />)
+        fireEvent.click(await screen.findByRole("button", { name: /Nova campanha/ }))
+        const slider = await screen.findByRole("slider", { name: "Grau de rigor da campanha" })
+        fireEvent.keyDown(slider, { key: "End" })
+        const field = await screen.findByTestId("combatant-hp-field")
+        fireEvent.click(within(within(field).getByTestId("enemy-hp-field")).getByRole("button", { name: "Mostrar PV" }))
+        fireEvent.change(screen.getByLabelText("Nome da campanha"), { target: { value: "Às Claras" } })
+        fireEvent.click(screen.getByRole("button", { name: "Criar campanha" }))
+        await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns", expect.objectContaining({ name: "Às Claras", rigor: "fiel-dnd", showEnemyHp: true })))
+        expect(post.mock.calls[0]![1]).not.toHaveProperty("showAllyHp")
     })
 
     it("densidade na criação (DND-22): slider no modelo do rigor, com descrição e tamanho por passo, e o valor vai no POST", async () => {
@@ -537,6 +571,32 @@ describe("página da campanha (lobby)", () => {
         fireEvent.click(within(within(dialog).getByTestId("player-actions-field")).getByRole("button", { name: "Ocultas" }))
         fireEvent.click(within(dialog).getByRole("button", { name: "Salvar" }))
         await waitFor(() => expect(patch).toHaveBeenCalledWith("/maddox/campaigns/c1", { hidePlayerActions: true }))
+    })
+
+    it("editar o PV nos combates (DND-53, mesmo em andamento) envia só o lado alterado; sem mudança não envia nada; grau não tático não mostra o campo", async () => {
+        let current = detail({ rigor: "fiel-dnd", status: "active", rigorLocked: true, showEnemyHp: false, showAllyHp: false })
+        get.mockImplementation(async (url: string) => (url.endsWith("/invite") ? ok({ token: TOKEN, rotatedAt: null }) : ok(current)))
+        patch.mockImplementation(async (_url: string, body: Record<string, unknown>) => {
+            current = { ...current, ...body }
+            return ok(current)
+        })
+        renderWithQueryClient(<CampaignPage campaignId="c1" />)
+        let dialog = await openEdit()
+        fireEvent.click(within(dialog).getByRole("button", { name: "Salvar" }))
+        await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull())
+        expect(patch).not.toHaveBeenCalled()
+        dialog = await openEdit()
+        fireEvent.click(within(within(dialog).getByTestId("ally-hp-field")).getByRole("button", { name: "Mostrar PV" }))
+        fireEvent.click(within(dialog).getByRole("button", { name: "Salvar" }))
+        await waitFor(() => expect(patch).toHaveBeenCalledWith("/maddox/campaigns/c1", { showAllyHp: true }))
+    })
+
+    it("grau narrativo (DND-53): a edição não mostra o PV nos combates", async () => {
+        const current = detail({ rigor: "narrativo", status: "active", rigorLocked: true })
+        get.mockImplementation(async (url: string) => (url.endsWith("/invite") ? ok({ token: TOKEN, rotatedAt: null }) : ok(current)))
+        renderWithQueryClient(<CampaignPage campaignId="c1" />)
+        const dialog = await openEdit()
+        expect(within(dialog).queryByTestId("combatant-hp-field")).toBeNull()
     })
 
     it("editar a densidade (DND-22) com a campanha em andamento e o rigor travado envia só density; o chip mostra o nível", async () => {
