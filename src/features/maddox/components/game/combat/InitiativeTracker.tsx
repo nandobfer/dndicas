@@ -6,7 +6,7 @@ import { AlertTriangle, Brain, Check, Clock, HeartPulse, ListOrdered, Loader2, S
 import { cn } from "@/core/utils"
 import { rarityColors } from "@/lib/config/colors"
 import { HP_BAND_LABELS } from "../../../combat-rules"
-import type { MaddoxCombatPrepSlotDto, MaddoxTacticalCombatDto } from "../../../game-types"
+import type { MaddoxCombatPrepSlotDto, MaddoxTacticalCombatDto, MaddoxTacticalSlotDto } from "../../../game-types"
 import { MemberAvatar, OpexChip, RarityChip } from "../../campaigns/campaign-visuals"
 import { COMBAT_COLOR } from "../GameCombatCard"
 import { HP_BAND_COLORS, hpColor } from "./combat-visuals"
@@ -26,10 +26,30 @@ export function PrepSeal({ prep }: { prep: MaddoxCombatPrepSlotDto }) {
     )
 }
 
+type SlotHp = NonNullable<MaddoxTacticalSlotDto["hp"]>
+
+const hpPercent = (hp: SlotHp) => (hp.max ? Math.max(0, Math.min(100, (hp.current / hp.max) * 100)) : 0)
+
+/** Barra e números de PV (personagens; combatentes do mestre quando a campanha mostra o PV do lado, DND-53). */
+function HpBar({ hp }: { hp: SlotHp }) {
+    return (
+        <div className="flex items-center gap-2" data-testid="initiative-hp">
+            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10">
+                <div className="h-full rounded-full transition-all" style={{ width: `${hpPercent(hp)}%`, background: hpColor(hp.current, hp.max) }} />
+            </div>
+            <span className="text-[11px] font-semibold text-white/80">
+                {hp.current}/{hp.max}
+                {hp.temp ? ` +${hp.temp}` : ""}
+            </span>
+        </div>
+    )
+}
+
 /**
  * Rastreador de iniciativa (Maddox 7): rodada, ordem, quem age (destaque na cor do rigor), PV dos personagens (o grupo
- * vê os números), a faixa dos adversários ("Ileso / Ferido / Muito ferido / Caído", sem número nem CA), condições e
- * concentração. `compact` = faixa horizontal para telas pequenas.
+ * vê os números), a faixa dos adversários ("Ileso / Ferido / Muito ferido / Caído", sem CA) ou, quando a campanha mostra
+ * o PV daquele lado (DND-53), os números com a mesma barra dos personagens; condições e concentração. `compact` = faixa
+ * horizontal para telas pequenas (com o PV dos combatentes do mestre, quando visível).
  */
 export function InitiativeTracker({ combat, title, color, compact = false }: { combat: MaddoxTacticalCombatDto; title: string; color: string; compact?: boolean }) {
     const initiative = combat.phase === "initiative"
@@ -40,6 +60,11 @@ export function InitiativeTracker({ combat, title, color, compact = false }: { c
                     <span key={slot.actorKey} className={cn("flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[11px]", slot.defeated || slot.dead ? "text-white/40 line-through" : "text-white/80")} style={{ borderColor: slot.active ? color : "rgba(255,255,255,0.15)", background: slot.active ? `${color}22` : undefined }}>
                         {slot.name}
                         <span className="font-semibold">{slot.initiative ?? "…"}</span>
+                        {slot.kind === "combatant" && slot.hp && (
+                            <span className="text-[10px] font-semibold" style={{ color: hpColor(slot.hp.current, slot.hp.max) }} data-testid="initiative-strip-hp">
+                                {slot.hp.current}/{slot.hp.max}
+                            </span>
+                        )}
                         {slot.prep && <span className="text-[10px]" style={{ color: PREP_COLORS[slot.prep.status] }} data-testid="initiative-strip-prep" data-status={slot.prep.status}>· {PREP_LABELS[slot.prep.status]}</span>}
                     </span>
                 ))}
@@ -56,6 +81,8 @@ export function InitiativeTracker({ combat, title, color, compact = false }: { c
             <ol className="space-y-1.5">
                 {combat.order.map((slot) => {
                     const out = slot.defeated || slot.dead
+                    // Com os números à mostra, o 0 PV continua dizendo "Caído" (a faixa não aparece no lugar do número).
+                    const fallen = slot.kind === "combatant" && slot.defeated && Boolean(slot.hp)
                     return (
                         <motion.li
                             layout
@@ -83,22 +110,19 @@ export function InitiativeTracker({ combat, title, color, compact = false }: { c
                                 </p>
                                 {slot.prep && <PrepSeal prep={slot.prep} />}
                                 {slot.hp ? (
-                                    <div className="flex items-center gap-2" data-testid="initiative-hp">
-                                        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10">
-                                            <div className="h-full rounded-full transition-all" style={{ width: `${slot.hp.max ? Math.max(0, Math.min(100, (slot.hp.current / slot.hp.max) * 100)) : 0}%`, background: hpColor(slot.hp.current, slot.hp.max) }} />
-                                        </div>
-                                        <span className="text-[11px] font-semibold text-white/80">
-                                            {slot.hp.current}/{slot.hp.max}
-                                            {slot.hp.temp ? ` +${slot.hp.temp}` : ""}
-                                        </span>
-                                    </div>
+                                    <HpBar hp={slot.hp} />
                                 ) : slot.band ? (
                                     <span className="text-[11px] font-semibold" style={{ color: HP_BAND_COLORS[slot.band] }} data-testid="initiative-band">
                                         {HP_BAND_LABELS[slot.band]}
                                     </span>
                                 ) : null}
-                                {(slot.conditions.length > 0 || slot.concentration || slot.dying || slot.stable || slot.dead) && (
+                                {(fallen || slot.conditions.length > 0 || slot.concentration || slot.dying || slot.stable || slot.dead) && (
                                     <div className="flex flex-wrap gap-1">
+                                        {fallen && (
+                                            <span data-testid="initiative-fallen">
+                                                <RarityChip color={HP_BAND_COLORS.caido}>{HP_BAND_LABELS.caido}</RarityChip>
+                                            </span>
+                                        )}
                                         {slot.dead && <RarityChip color={rarityColors.common}>Morto</RarityChip>}
                                         {slot.dying && (
                                             <RarityChip color={rarityColors.artifact}>

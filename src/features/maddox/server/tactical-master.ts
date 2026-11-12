@@ -28,6 +28,7 @@ import {
     type RollMode,
 } from "../combat-rules"
 import type { CombatActionStep, IMaddoxCombatAction, IMaddoxCombatReaction, IMaddoxCombatRoll, MonsterActionStat, TacticalCharacterState } from "../combat-types"
+import type { MaddoxLiveRollDto } from "../game-types"
 import type { CombatOption } from "../combat-options"
 import { emitLiveRoll, jobWorkspace, maddoxJobMeta, setJobWorkspace, takeJobWorkspace } from "./game-live"
 import { d20Expression, remainingBlocks, findActiveTactical, findActor, findActorByName, keptD20Of, livingEnemies, consciousCharacters, rollExpression, saveTactical, type CombatActor, type TacticalCombat } from "./tactical-combat"
@@ -132,7 +133,7 @@ const canWait = (workspace: TacticalWorkspace) => {
 }
 
 /** Dado de um adversário rolado agora: vai para a bolha ao vivo da geração (todos veem rolar antes da narração). */
-function showRoll(campaignId: Types.ObjectId, jobId: string, roll: DiceRollResponse, input: { actorName: string; label: string; step: "attack" | "damage" | "save" | "heal"; targetName?: string | null; verdict?: "hit" | "miss" | "critical" | "success" | "fail" | null; amount?: number | null; damageType?: string | null }) {
+function showRoll(campaignId: Types.ObjectId, jobId: string, roll: DiceRollResponse, input: { actorName: string; label: string; step: "attack" | "damage" | "save" | "heal"; targetName?: string | null; verdict?: MaddoxLiveRollDto["verdict"]; amount?: number | null; damageType?: string | null }) {
     emitLiveRoll(String(campaignId), jobId, { id: roll.rollId, actorName: input.actorName, label: input.label, step: input.step, targetName: input.targetName ?? null, verdict: input.verdict ?? null, amount: input.amount ?? null, damageType: input.damageType ?? null, roll })
 }
 
@@ -381,7 +382,7 @@ export async function monsterAction(campaignId: Types.ObjectId, jobId: string, t
         if (attacker.state.flags.sapped) attacker.state.flags.sapped = null
         const d20 = keptD20Of(attackRoll)
         const outcome = attackOutcome(d20, attackRoll.total, ac, autoCritical(target.state, ranged))
-        showRoll(campaignId, jobId, attackRoll, { actorName: attacker.name, label: `${action.name} · ataque`, step: "attack", targetName: target.name, verdict: outcome.critical ? "critical" : outcome.hit ? "hit" : "miss" })
+        showRoll(campaignId, jobId, attackRoll, { actorName: attacker.name, label: `${action.name} · ataque`, step: "attack", targetName: target.name, verdict: outcome.critical ? "critical" : outcome.fumble ? "fumble" : outcome.hit ? "hit" : "miss" })
         const steps: CombatActionStep[] = [step({ kind: "attack", targetKey: target.key, targetName: target.name, dice: d20Expression(action.bonus ?? 0), mode, roll: attackRoll, total: attackRoll.total, hit: outcome.hit, critical: outcome.critical })]
         let summary = `${attacker.name} atacou ${target.name} com ${action.name}: ${outcome.hit ? (outcome.critical ? "CRÍTICO" : "acertou") : "errou"} (${attackRoll.total}${d20 === 20 || d20 === 1 ? `, ${d20} natural` : ""} contra CA ${ac})`
         const result: Record<string, unknown> = { ataque: { total: attackRoll.total, d20, ca: ac, acertou: outcome.hit, critico: outcome.critical, modo: mode } }

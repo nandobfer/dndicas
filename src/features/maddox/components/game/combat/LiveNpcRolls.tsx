@@ -11,6 +11,7 @@ const VERDICTS: Record<NonNullable<MaddoxLiveRollDto["verdict"]>, { label: strin
     hit: { label: "Acertou", color: rarityColors.uncommon },
     miss: { label: "Errou", color: rarityColors.artifact },
     critical: { label: "Crítico!", color: CRITICAL_STAGE_CONFIG["critical-success"].color },
+    fumble: { label: "Falha crítica!", color: CRITICAL_STAGE_CONFIG["critical-failure"].color },
     success: { label: "Passou", color: rarityColors.uncommon },
     fail: { label: "Falhou", color: rarityColors.artifact },
 }
@@ -29,9 +30,11 @@ function RollResult({ item }: { item: MaddoxLiveRollDto }) {
                 </DiceResultTooltip>
             </span>
             {verdict && (
-                <RarityChip color={verdict.color} className="text-[11px] font-semibold">
-                    {verdict.label}
-                </RarityChip>
+                <span data-testid="live-roll-verdict" data-verdict={item.verdict}>
+                    <RarityChip color={verdict.color} className="text-[11px] font-semibold">
+                        {verdict.label}
+                    </RarityChip>
+                </span>
             )}
             {item.step !== "attack" && item.step !== "save" && item.amount !== null && (
                 <span className="font-semibold" style={{ color: item.step === "heal" ? rarityColors.uncommon : rarityColors.artifact }}>

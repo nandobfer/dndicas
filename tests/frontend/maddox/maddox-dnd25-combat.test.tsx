@@ -165,6 +165,17 @@ describe("DND-25 — bloco de NPC ao vivo", () => {
         expect(screen.getByText("O goblin crava a faca.")).toBeTruthy()
     })
 
+    it("DND-53: 1 natural do adversário aparece como 'Falha crítica!' em vermelho, separado de 'Errou'", () => {
+        render(list(live([liveRoll("a", { verdict: "fumble", roll: d20(1, 4) }), liveRoll("b", { verdict: "miss", targetName: "Lyra" })])))
+        fireEvent.click(screen.getByText("parar"))
+        fireEvent.click(screen.getByText("parar"))
+        const verdicts = screen.getAllByTestId("live-roll-verdict")
+        expect(verdicts.map((item) => [item.dataset.verdict, item.textContent])).toEqual([
+            ["fumble", "Falha crítica!"],
+            ["miss", "Errou"],
+        ])
+    })
+
     it("NPC sem ataque: bloco só com a narração", () => {
         render(list(live([])))
         expect(screen.queryByTestId("live-npc-rolls")).toBeNull()

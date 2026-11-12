@@ -73,6 +73,10 @@ export interface MaddoxCampaignListItemDto {
     sceneImages: boolean
     /** Declarações dos outros jogadores ocultas no chat (DND-36). */
     hidePlayerActions: boolean
+    /** PV dos inimigos em números no combate tático (DND-53). */
+    showEnemyHp: boolean
+    /** PV dos aliados NPC em números no combate tático (DND-53). */
+    showAllyHp: boolean
     /** Densidade das narrações (DND-22). */
     density: MaddoxDensityLevel
     /** Dificuldade dos combates (DND-42; só vale nos graus táticos). */

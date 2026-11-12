@@ -17,12 +17,13 @@ import { SceneImagesField } from "./SceneImagesField"
 import { PlayerActionsField } from "./PlayerActionsField"
 import { StartingLevelField } from "./StartingLevelField"
 import { CombatDifficultyCard } from "./CombatDifficultyCard"
+import { CombatantHpField } from "./CombatantHpField"
 import { DensityCard } from "./DensityCard"
 import { RigorCard } from "./RigorCard"
 
 /** Dono edita o nome, a densidade e a dificuldade dos combates (a qualquer momento) e, só antes da entrevista de cenário, o grau de rigor. */
 export function EditCampaignDialog({ campaign, open, onOpenChange }: { campaign: MaddoxCampaignDetailDto; open: boolean; onOpenChange: (open: boolean) => void }) {
-    const form = useForm<CreateMaddoxCampaignInput>({ resolver: zodResolver(createMaddoxCampaignSchema), defaultValues: { name: campaign.name, rigor: campaign.rigor, showCheckDc: campaign.showCheckDc, sceneImages: campaign.sceneImages, hidePlayerActions: campaign.hidePlayerActions, density: campaign.density ?? MADDOX_DEFAULT_DENSITY, combatDifficulty: campaign.combatDifficulty ?? MADDOX_COMBAT_DIFFICULTY_DEFAULT } })
+    const form = useForm<CreateMaddoxCampaignInput>({ resolver: zodResolver(createMaddoxCampaignSchema), defaultValues: { name: campaign.name, rigor: campaign.rigor, showCheckDc: campaign.showCheckDc, sceneImages: campaign.sceneImages, hidePlayerActions: campaign.hidePlayerActions, showEnemyHp: campaign.showEnemyHp, showAllyHp: campaign.showAllyHp, density: campaign.density ?? MADDOX_DEFAULT_DENSITY, combatDifficulty: campaign.combatDifficulty ?? MADDOX_COMBAT_DIFFICULTY_DEFAULT } })
     const update = useUpdateMaddoxCampaign(campaign.id)
     const rigorLocked = campaign.rigorLocked
     // Rascunho do nível enquanto o diálogo está aberto (`undefined` = o valor atual da campanha).
@@ -34,8 +35,8 @@ export function EditCampaignDialog({ campaign, open, onOpenChange }: { campaign:
     const tactical = MADDOX_TACTICAL_COMBAT_RIGORS.includes(formRigor)
 
     useEffect(() => {
-        if (open) form.reset({ name: campaign.name, rigor: campaign.rigor, showCheckDc: campaign.showCheckDc, sceneImages: campaign.sceneImages, hidePlayerActions: campaign.hidePlayerActions, density: campaign.density ?? MADDOX_DEFAULT_DENSITY, combatDifficulty: campaign.combatDifficulty ?? MADDOX_COMBAT_DIFFICULTY_DEFAULT })
-    }, [open, campaign.name, campaign.rigor, campaign.showCheckDc, campaign.sceneImages, campaign.hidePlayerActions, campaign.density, campaign.combatDifficulty, form])
+        if (open) form.reset({ name: campaign.name, rigor: campaign.rigor, showCheckDc: campaign.showCheckDc, sceneImages: campaign.sceneImages, hidePlayerActions: campaign.hidePlayerActions, showEnemyHp: campaign.showEnemyHp, showAllyHp: campaign.showAllyHp, density: campaign.density ?? MADDOX_DEFAULT_DENSITY, combatDifficulty: campaign.combatDifficulty ?? MADDOX_COMBAT_DIFFICULTY_DEFAULT })
+    }, [open, campaign.name, campaign.rigor, campaign.showCheckDc, campaign.sceneImages, campaign.hidePlayerActions, campaign.showEnemyHp, campaign.showAllyHp, campaign.density, campaign.combatDifficulty, form])
 
     const close = () => {
         setLevelDraft(undefined)
@@ -49,6 +50,8 @@ export function EditCampaignDialog({ campaign, open, onOpenChange }: { campaign:
             ...((values.showCheckDc ?? false) !== campaign.showCheckDc ? { showCheckDc: values.showCheckDc ?? false } : {}),
             ...((values.sceneImages ?? true) !== campaign.sceneImages ? { sceneImages: values.sceneImages ?? true } : {}),
             ...((values.hidePlayerActions ?? false) !== campaign.hidePlayerActions ? { hidePlayerActions: values.hidePlayerActions ?? false } : {}),
+            ...(tactical && (values.showEnemyHp ?? false) !== campaign.showEnemyHp ? { showEnemyHp: values.showEnemyHp ?? false } : {}),
+            ...(tactical && (values.showAllyHp ?? false) !== campaign.showAllyHp ? { showAllyHp: values.showAllyHp ?? false } : {}),
             ...(values.density !== undefined && values.density !== (campaign.density ?? MADDOX_DEFAULT_DENSITY) ? { density: values.density } : {}),
             ...(MADDOX_TACTICAL_COMBAT_RIGORS.includes(values.rigor) && values.combatDifficulty !== undefined && values.combatDifficulty !== (campaign.combatDifficulty ?? MADDOX_COMBAT_DIFFICULTY_DEFAULT) ? { combatDifficulty: values.combatDifficulty } : {}),
             ...(levelEditable && MADDOX_SHEET_RIGORS.includes(values.rigor) && startingLevel !== null && startingLevel !== campaign.startingLevel ? { startingLevel } : {}),
@@ -73,6 +76,7 @@ export function EditCampaignDialog({ campaign, open, onOpenChange }: { campaign:
                     <RigorCard form={form} disabled={rigorLocked} />
                     <DensityCard form={form} disabled={update.isPending} />
                     {tactical && <CombatDifficultyCard form={form} disabled={update.isPending} />}
+                    {tactical && <CombatantHpField form={form} />}
                     <CheckDcField form={form} />
                     <SceneImagesField form={form} />
                     <PlayerActionsField form={form} />

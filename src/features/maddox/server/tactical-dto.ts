@@ -7,11 +7,25 @@ import { MaddoxCharacterModel, type IMaddoxCombatPrep } from "../models"
 import { findActor, type TacticalCombat } from "./tactical-combat"
 import { isOpexUserId } from "./opex-members"
 
-/** DTOs do combate tático (Maddox 7): o que todos veem (ordem, faixa de PV dos adversários) e o que só eu vejo (opções). */
+/**
+ * DTOs do combate tático (Maddox 7): o que todos veem (ordem, faixa de PV dos adversários) e o que só eu vejo (opções).
+ * Os números de PV dos combatentes do mestre só saem do servidor quando a campanha liga a opção do lado (DND-53); a CA
+ * nunca sai.
+ */
 
 type HpMap = Map<string, { hp: number; hpMax: number; tempHp: number }>
 
-export function tacticalSnapshot(combat: TacticalCombat, hp: HpMap = new Map(), portraits: Map<string, string | null> = new Map(), opexNpcIds: ReadonlySet<string> = new Set()): MaddoxTacticalCombatDto {
+/** Configuração da campanha (DND-53): quais lados dos combatentes do mestre mostram o PV em números. */
+export interface CombatantHpVisibility {
+    enemies: boolean
+    allies: boolean
+}
+
+export const HIDDEN_COMBATANT_HP: CombatantHpVisibility = { enemies: false, allies: false }
+
+export const combatantHpVisibilityOf = (campaign: { showEnemyHp?: boolean | null; showAllyHp?: boolean | null }): CombatantHpVisibility => ({ enemies: Boolean(campaign.showEnemyHp), allies: Boolean(campaign.showAllyHp) })
+
+export function tacticalSnapshot(combat: TacticalCombat, hp: HpMap = new Map(), portraits: Map<string, string | null> = new Map(), opexNpcIds: ReadonlySet<string> = new Set(), hpVisibility: CombatantHpVisibility = HIDDEN_COMBATANT_HP): MaddoxTacticalCombatDto {
     const activeKey = combat.tactical.phase === "running" ? (combat.tactical.order[combat.tactical.activeIndex]?.actorKey ?? null) : null
     return {
         phase: combat.tactical.phase,
@@ -44,18 +58,21 @@ export function tacticalSnapshot(combat: TacticalCombat, hp: HpMap = new Map(), 
                         dying: actor.state.hpZero && !actor.state.stable && !actor.state.dead,
                     }
                 }
+                const side = actor.combatant.side === "aliado" ? ("aliado" as const) : ("inimigo" as const)
+                const showHp = side === "aliado" ? hpVisibility.allies : hpVisibility.enemies
+                const stats = actor.state.stats
                 return {
                     actorKey: slot.actorKey,
                     kind: "combatant" as const,
-                    side: actor.combatant.side === "aliado" ? ("aliado" as const) : ("inimigo" as const),
+                    side,
                     name: actor.name,
                     portraitUrl: null,
                     memberId: null,
                     ...(actor.combatant.npcId && opexNpcIds.has(String(actor.combatant.npcId)) ? { opex: true } : {}),
                     initiative: slot.total,
                     active: slot.actorKey === activeKey,
-                    hp: null,
-                    band: hpBand(actor.state.stats.hp, actor.state.stats.hpMax),
+                    hp: showHp ? { current: Math.max(0, stats.hp), max: stats.hpMax, temp: stats.tempHp } : null,
+                    band: hpBand(stats.hp, stats.hpMax),
                     conditions,
                     concentration: actor.state.concentration?.spell ?? null,
                     defeated: actor.state.defeated,
@@ -96,7 +113,7 @@ export function withPreparation(dto: MaddoxTacticalCombatDto, preps: readonly IM
 }
 
 /** Ordem com os PV dos personagens (da ficha) e os retratos. */
-export async function loadTacticalDto(combat: TacticalCombat, viewer: { isOwner: boolean } = { isOwner: false }): Promise<MaddoxTacticalCombatDto> {
+export async function loadTacticalDto(combat: TacticalCombat, viewer: { isOwner: boolean; hpVisibility?: CombatantHpVisibility } = { isOwner: false }): Promise<MaddoxTacticalCombatDto> {
     const states = combat.tactical.characters
     const [{ loadCombatSheets }, characters] = await Promise.all([
         import("./combat-sheet"),
@@ -112,7 +129,7 @@ export async function loadTacticalDto(combat: TacticalCombat, viewer: { isOwner:
     const opexNpcIds = await knownOpexNpcIds(combat.combatants.map((item) => item.npcId))
     const portraitById = new Map(characters.map((character) => [String(character._id), character.portraitUrl ?? null]))
     const { loadCombatPreps } = await import("./combat-prep")
-    return withPreparation(tacticalSnapshot(combat, hp, portraitById, opexNpcIds), await loadCombatPreps(combat._id), viewer.isOwner)
+    return withPreparation(tacticalSnapshot(combat, hp, portraitById, opexNpcIds, viewer.hpVisibility ?? HIDDEN_COMBATANT_HP), await loadCombatPreps(combat._id), viewer.isOwner)
 }
 
 /** A minha vez: economia e as opções (só a Ação e a Ação bônus; as reações chegam na janela). */

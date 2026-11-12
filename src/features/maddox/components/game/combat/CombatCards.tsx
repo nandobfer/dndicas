@@ -19,7 +19,7 @@ import type { MaddoxCombatPreparationDto, MaddoxGameCombatEventDto, MaddoxGameMe
 import { MemberAvatar, OpexChip, RarityChip } from "../../campaigns/campaign-visuals"
 import { COMBAT_COLOR } from "../GameCombatCard"
 import { ReplayDie } from "./ReplayDie"
-import { ECONOMY_COLORS, ECONOMY_LABELS, HP_BAND_COLORS } from "./combat-visuals"
+import { ECONOMY_COLORS, ECONOMY_LABELS, HP_BAND_COLORS, attackFumbled } from "./combat-visuals"
 import { useHeldRoll, type HeldRoll } from "./use-held-roll"
 
 /**
@@ -171,7 +171,7 @@ export function StepResult({ step }: { step: CombatActionStep }) {
                 </span>
             )}
             {step.kind === "attack" && step.status === "done" && <KeptDice roll={step.roll} />}
-            {critical && <span className="text-[11px]" style={{ color: CRITICAL_STAGE_CONFIG[critical].color }}>{critical === "critical-success" ? "20 natural" : "1 natural"}</span>}
+            {critical && <span className="text-[11px] font-semibold" style={{ color: CRITICAL_STAGE_CONFIG[critical].color }} data-testid="combat-step-natural" data-state={critical}>{critical === "critical-success" ? "20 natural" : "1 natural"}</span>}
             {step.kind === "attack" && step.status !== "skipped" && <ModeReasons step={step} />}
             {verdict && (
                 <span data-testid="combat-step-verdict">
@@ -213,12 +213,15 @@ export function CombatActionCard({ message, mine, replay, stepReplays, onRoll, o
     const held = useHeldRoll({ rolls: action.steps.map((step) => step.roll), pendingIndex: next ? action.steps.indexOf(next) : -1, replay: mine ? null : replay })
     const rollerStep = held.index >= 0 ? action.steps[held.index] : undefined
     const critical = action.steps.some((step) => step.kind === "attack" && step.critical)
+    // DND-53: o 1 natural ganha o mesmo destaque, em vermelho (cada ataque tem o próprio card).
+    const fumble = !critical && action.steps.some(attackFumbled)
+    const highlight = critical ? ("critical-success" as const) : fumble ? ("critical-failure" as const) : null
     const cancelled = action.status === "cancelled"
     const Icon = action.actorKind === "character" ? (action.category === "spells" ? HeartPulse : Swords) : Crosshair
     return (
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="pb-4" data-testid="combat-action-card" data-status={action.status}>
-            <div className="relative space-y-2.5 overflow-hidden rounded-2xl border bg-white/[0.03] p-3.5" style={{ borderColor: `${accent}55`, boxShadow: critical ? `inset 3px 0 0 ${accent}, ${criticalBoxShadow(CRITICAL_STAGE_CONFIG["critical-success"].color)}` : `inset 3px 0 0 ${accent}`, opacity: cancelled ? 0.6 : 1 }}>
-                {critical && <CriticalHighlight state="critical-success" rounded={{ inner: "rounded-xl", border: "rounded-xl" }} />}
+            <div className="relative space-y-2.5 overflow-hidden rounded-2xl border bg-white/[0.03] p-3.5" style={{ borderColor: `${accent}55`, boxShadow: highlight ? `inset 3px 0 0 ${accent}, ${criticalBoxShadow(CRITICAL_STAGE_CONFIG[highlight].color)}` : `inset 3px 0 0 ${accent}`, opacity: cancelled ? 0.6 : 1 }} data-highlight={highlight ?? undefined}>
+                {highlight && <CriticalHighlight state={highlight} rounded={{ inner: "rounded-xl", border: "rounded-xl" }} />}
                 <div className="relative z-10 flex flex-col gap-3 sm:flex-row sm:items-stretch">
                     <div className="flex min-w-0 flex-1 items-start gap-2.5">
                         {action.actorKind === "character" ? <MemberAvatar name={action.actorName} imageUrl={message.portraitUrl} color={accent} context={messageAvatarContext({ opex: message.opex, mine })} className="mt-0.5 h-8 w-8 shrink-0" /> : <Icon className="mt-1 h-5 w-5 shrink-0" style={{ color: accent }} aria-hidden />}
