@@ -1,9 +1,8 @@
 import { Types } from "mongoose"
 import { AcaoAuditoria, recordAudit } from "@/lib/db"
 import { loggerFor } from "@/lib/logger"
-import { abilityModifier } from "../combat-rules"
 import { MADDOX_SHEET_AUDIT_ENTITY, MADDOX_SHEET_RIGORS } from "../constants"
-import { applyHitPointsChange, availableHitDice, hitPointsLine, parseHitDice, type HitPointsChange, type MaddoxHitPointOperation, type SheetHitPoints } from "../hit-points-ops"
+import { applyHitPointsChange, hitPointsLine, type HitPointsChange, type MaddoxHitPointOperation, type SheetHitPoints } from "../hit-points-ops"
 import { normalizeCatalogName } from "../catalog-markup"
 import { MaddoxCampaignMessageModel, MaddoxCampaignModel, MaddoxCharacterModel, type IMaddoxCampaign } from "../models"
 
@@ -27,8 +26,6 @@ export interface HitPointsRequest {
     dice?: string | null
     /** curar: valor fixo; definir: o novo PV. */
     value?: number | null
-    /** descanso-curto: quantos dados de vida gasta. */
-    hitDice?: number | null
     reason: string
     turnNumber: number
     /** `narrator`: ferramenta do narrador (recusada no combate tático ativo); `combat-open`: checagem antes da iniciativa. */
@@ -47,7 +44,7 @@ export interface HitPointsResult {
     line: string
 }
 
-type StoredSheet = { _id: Types.ObjectId; hpCurrent?: number | null; hpMax?: number | null; hpTemp?: number | null; deathSavesSuccess?: number; deathSavesFailure?: number; hitDiceUsed?: number; hitDiceTotal?: string; constitution?: number }
+type StoredSheet = { _id: Types.ObjectId; hpCurrent?: number | null; hpMax?: number | null; hpTemp?: number | null; deathSavesSuccess?: number; deathSavesFailure?: number }
 
 export async function changeCharacterHitPoints(request: HitPointsRequest): Promise<HitPointsResult> {
     const campaign = await MaddoxCampaignModel.findById(request.campaignId).select("rigor ownerId").lean<Pick<IMaddoxCampaign, "_id" | "rigor" | "ownerId">>()
@@ -76,8 +73,6 @@ export async function changeCharacterHitPoints(request: HitPointsRequest): Promi
         tempHp: Math.max(0, sheet.hpTemp ?? 0),
         deathSuccess: sheet.deathSavesSuccess ?? 0,
         deathFailure: sheet.deathSavesFailure ?? 0,
-        hitDiceUsed: sheet.hitDiceUsed ?? 0,
-        hitDiceTotal: sheet.hitDiceTotal ?? "",
     }
 
     const { rollExpression } = await import("./tactical-combat")
@@ -98,19 +93,6 @@ export async function changeCharacterHitPoints(request: HitPointsRequest): Promi
             if (request.value === undefined || request.value === null) throw new HitPointsError("Para definir, envie `valor` com o novo PV.")
             change = { op: "definir", value: request.value }
             break
-        case "descanso-curto": {
-            const spend = Math.max(0, Math.floor(request.hitDice ?? 0))
-            const parsed = parseHitDice(current.hitDiceTotal)
-            if (!parsed) throw new HitPointsError(`A ficha de ${character.name} não tem dados de vida registrados.`)
-            if (spend <= 0) throw new HitPointsError("Informe em `dadosDeVida` quantos dados de vida o personagem gasta no descanso curto.")
-            if (spend > availableHitDice(current)) throw new HitPointsError(`${character.name} só tem ${availableHitDice(current)} dado(s) de vida disponível(is).`)
-            const con = abilityModifier(sheet.constitution ?? 10)
-            const roll = await rollExpression(`${spend}${parsed.die}`, { label: `${character.name} · dados de vida` })
-            const healed = Math.max(0, roll.total + con * spend)
-            rolled = `${spend}${parsed.die}${con ? `${con > 0 ? "+" : ""}${con * spend}` : ""} = ${healed}`
-            change = { op: "descanso-curto", healed, spent: spend }
-            break
-        }
         default:
             change = { op: request.operation }
     }
@@ -119,7 +101,7 @@ export async function changeCharacterHitPoints(request: HitPointsRequest): Promi
 
     await CharacterSheet.updateOne(
         { _id: sheet._id },
-        { $set: { hpCurrent: next.hp, hpTemp: next.tempHp, deathSavesSuccess: next.deathSuccess, deathSavesFailure: next.deathFailure, hitDiceUsed: next.hitDiceUsed } },
+        { $set: { hpCurrent: next.hp, hpTemp: next.tempHp, deathSavesSuccess: next.deathSuccess, deathSavesFailure: next.deathFailure } },
     )
     const { publishPatched } = await import("./combat-sheet")
     await publishPatched(String(sheet._id))
@@ -128,8 +110,8 @@ export async function changeCharacterHitPoints(request: HitPointsRequest): Promi
         entidade: MADDOX_SHEET_AUDIT_ENTITY,
         entidadeId: String(sheet._id),
         acao: AcaoAuditoria.ATUALIZAR,
-        antes: { hpCurrent: current.hp, hpTemp: current.tempHp, deathSaves: { success: current.deathSuccess, failure: current.deathFailure }, hitDiceUsed: current.hitDiceUsed },
-        depois: { by: "maddox", origin: request.origin === "narrator" ? "narrator-hit-points" : request.origin === "question" ? "question-hit-points" : "combat-open-hit-points", requestedBy: request.requestedBy ?? null, campaign: String(request.campaignId), character: character.name, operation: request.operation, reason, ...(rolled ? { rolled } : {}), hpCurrent: next.hp, hpTemp: next.tempHp, deathSaves: { success: next.deathSuccess, failure: next.deathFailure }, hitDiceUsed: next.hitDiceUsed },
+        antes: { hpCurrent: current.hp, hpTemp: current.tempHp, deathSaves: { success: current.deathSuccess, failure: current.deathFailure } },
+        depois: { by: "maddox", origin: request.origin === "narrator" ? "narrator-hit-points" : request.origin === "question" ? "question-hit-points" : "combat-open-hit-points", requestedBy: request.requestedBy ?? null, campaign: String(request.campaignId), character: character.name, operation: request.operation, reason, ...(rolled ? { rolled } : {}), hpCurrent: next.hp, hpTemp: next.tempHp, deathSaves: { success: next.deathSuccess, failure: next.deathFailure } },
     })
     // Na abertura do combate (fase de iniciativa), o estado do personagem no combate acompanha a ficha.
     if (combat) {

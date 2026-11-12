@@ -1658,15 +1658,15 @@ describe("DND-49 — PV fora do combate (ferramenta do narrador)", () => {
         expect(view.messages.find((message) => message.kind === "hit-points")!.content).toBe(line.content)
     })
 
-    it("estabilizar e acordar com 1 PV; descanso longo volta ao máximo", async () => {
+    it("estabilizar e acordar com 1 PV; o descanso não é mais operação de PV (DND-58)", async () => {
         const { id, kael } = await scene({ kaelHp: 0 })
         await MaddoxCombatModel.deleteMany({ campaignId: id })
         await run(id, { personagem: "Kael", operacao: "estabilizar", motivo: "Atadura" })
         expect(await sheetOf(kael.sheetId)).toMatchObject({ hpCurrent: 0, deathSavesSuccess: 3 })
         await run(id, { personagem: "Kael", operacao: "acordar", motivo: "Acordou depois de uma hora" })
         expect((await sheetOf(kael.sheetId)).hpCurrent).toBe(1)
-        await run(id, { personagem: "Kael", operacao: "descanso-longo", motivo: "Noite na estalagem" })
-        expect((await sheetOf(kael.sheetId)).hpCurrent).toBe(20)
+        await expect(run(id, { personagem: "Kael", operacao: "descanso-longo", motivo: "Noite na estalagem" })).rejects.toThrow("Entrada inválida")
+        expect((await sheetOf(kael.sheetId)).hpCurrent).toBe(1)
     })
 
     it("recusada no combate tático ativo (usar apply_effect), sem motivo, em campanha narrativa e para personagem morto", async () => {

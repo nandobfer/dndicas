@@ -67,7 +67,57 @@ export interface MaddoxGameMessageDto {
     combatPrep?: MaddoxCombatPrepCardDto | null
     /** Linha de aviso da volta a um turno (DND-44, `kind: "rewind"`). */
     rewindNotice?: { event: "goto" | "resume"; turnNumber: number; originTurn: number } | null
+    /** Balão do descanso (`kind: "rest"`, DND-58). */
+    rest?: MaddoxRestDto | null
+    /** Pedido de troca depois do descanso (`kind: "rest-request"`, DND-58): o descanso a que pertence. */
+    restId?: string | null
     createdAt: string
+}
+
+/** Rolagem de um dado de vida no descanso curto (DND-58). */
+export interface MaddoxRestHitDieRollDto {
+    roll: DiceRollResponse
+    total: number
+    healed: number
+    hpBefore: number
+    hpAfter: number
+}
+
+/** Um personagem no balão do descanso (DND-58). `can` vale para quem vê (o jogador dele ou o dono pelo Opex). */
+export interface MaddoxRestCharacterDto {
+    characterId: string
+    name: string
+    portraitUrl: string | null
+    opex: boolean
+    prep: {
+        status: "pending" | "running" | "applying" | "ready" | "failed"
+        recovered: { label: string; before: string; after: string }[]
+        notRecovered: { label: string; reason: string }[]
+        skippedCatalog: boolean
+        /** Motivo técnico da falha: só o dono da campanha recebe. */
+        error: string | null
+    }
+    hitDice: { status: "none" | "open" | "done" | "declined" | "skipped"; die: string | null; available: number; hp: number; hpMax: number; constitution: number; rolls: MaddoxRestHitDieRollDto[] }
+    exchange: { status: "open" | "processing" | "done" | "nothing" | "skipped"; applied: string[]; requests: number }
+    /** Personagem Opex cujo agente falhou: o dono responde por ele. */
+    answeredBy: "player" | "owner"
+    doneReason: "offline" | "left" | "dead" | null
+    done: boolean
+    can: { roll: boolean; exchange: boolean; retryPrep: boolean }
+}
+
+export interface MaddoxRestDto {
+    type: "short" | "long"
+    status: "interrupted" | "running" | "closed"
+    description: string
+    interruption: string | null
+    characters: MaddoxRestCharacterDto[]
+}
+
+/** Quem a mesa espera no descanso aberto (DND-58), para a faixa do turno. */
+export interface MaddoxRestWaitDto {
+    characterName: string
+    parts: ("prep" | "hit-dice" | "exchange")[]
 }
 
 /** Situação de uma lembrança: esperando a próxima narração, guardada como memória ou usada só naquela narração. */
@@ -382,6 +432,8 @@ export interface MaddoxGameStateDto {
          * Com `failed`, a mesa espera o dono ("Tentar de novo" ou "Pular"). No combate, `combat: true`.
          */
         opexActor?: { memberId: string; characterName: string; failed: boolean; error: string | null; combat: boolean } | null
+        /** DND-58: personagens que o descanso aberto ainda espera (a mesa só avança quando todos concluírem). */
+        restWaiting?: MaddoxRestWaitDto[]
         /** Volta pendente (DND-44), para toda a mesa: a faixa e o aviso das declarações novas nos modais. */
         rewind?: { atTurn: number; originTurn: number; hasNewActions: boolean } | null
         /** O dono está levando a mesa a outro turno agora (trava da volta). */
@@ -467,6 +519,7 @@ export type MaddoxGameStreamLine =
     | { type: "tool"; liveId: string; running: boolean }
     | { type: "live-end"; liveId: string; messageId: string | null; error: string | null }
     | { type: "check-rolled"; messageId: string; roll: DiceRollResponse }
+    | { type: "rest-rolled"; messageId: string; characterId: string; roll: DiceRollResponse }
     | { type: "combat-rolled"; messageId: string; roll: DiceRollResponse }
     | { type: "combat-step-rolled"; messageId: string; stepIndex: number; roll: DiceRollResponse }
     | { type: "live-roll"; liveId: string; roll: MaddoxLiveRollDto }

@@ -253,6 +253,41 @@ const MEMORY_FORMAT = `{"titulo": "...", "texto": "...", "categoria": "${OPEX_ME
 
 /** `categoria` nunca invalida a decisão: ausente, nula ou estranha vira OUTRO em `opexMemoriesOf`. */
 export const opexMemorySchema = z.object({ titulo: textField.min(1).max(MADDOX_OPEX_MEMORY_TITLE_MAX * 2), texto: textField.min(1), categoria: z.unknown().optional() })
+
+/** DND-58: a parte do Personagem Opex no descanso (dados de vida e trocas). */
+export interface OpexRestTask {
+    restType: "short" | "long"
+    hitDice: { open: boolean; die: string | null; available: number; hp: number; hpMax: number; constitution: number }
+    exchange: boolean
+    recovered: string[]
+    character: string
+}
+
+export function opexRestTask(task: OpexRestTask): string {
+    const rest = task.restType === "long" ? "descanso longo" : "descanso curto"
+    return [
+        `## Tarefa: o fim do ${rest}`,
+        `O Maddox concluiu o ${rest} de ${task.character}.${task.recovered.length ? ` A ficha já recuperou: ${task.recovered.join("; ")}.` : ""}`,
+        task.hitDice.open
+            ? `"dadosDeVida": quantos dados de vida (${task.hitDice.die} + Constituição ${task.hitDice.constitution >= 0 ? "+" : ""}${task.hitDice.constitution}) você quer gastar para curar agora. Você está com ${task.hitDice.hp}/${task.hitDice.hpMax} PV e tem ${task.hitDice.available} dado(s); cada um é rolado de verdade, um por vez (para no máximo de PV). 0 = não gastar.`
+            : '"dadosDeVida": 0 (não há dados de vida a gastar agora).',
+        task.exchange
+            ? '"trocas": em primeira pessoa, o que o personagem quer trocar depois deste descanso (magias preparadas, truques, invocações, manobras, maestrias), pelo que a classe permite e pelas suas motivações; null quando não quer trocar nada. O Maddox confere pelas regras.'
+            : '"trocas": null.',
+        `Responda só com: {"dadosDeVida": n, "trocas": "texto" | null, "memorias": [${MEMORY_FORMAT}]}`,
+    ].join("\n\n")
+}
+
+/** DND-58: o Maddox pediu esclarecimento (ou recusou) uma troca do Opex. */
+export function opexRestReplyTask(input: { request: string; answer: string }): string {
+    return [
+        "## Tarefa: a resposta do Maddox às suas trocas",
+        `Você pediu: ${input.request}`,
+        `O Maddox respondeu: ${input.answer}`,
+        'Se ele pediu esclarecimento ou recusou algo que você ainda quer tentar de outro jeito, responda em primeira pessoa; se não há mais nada a trocar, responda null. Responda só com: {"resposta": "texto" | null}',
+    ].join("\n\n")
+}
+
 export const opexTableActionSchema = z.object({
     acao: z.enum(["perguntar", "declarar", "nada"]),
     texto: z.string().optional().default(""),

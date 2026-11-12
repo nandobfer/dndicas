@@ -45,11 +45,33 @@ export interface MaddoxAnswerContext {
     signal?: AbortSignal
 }
 
+/** DND-58: um pedido de troca depois do descanso. */
+export interface MaddoxRestExchangeContext {
+    campaignId: string
+    jobId: string
+    turnNumber: number
+    /** Mensagem do pedido (`kind: "rest-request"`); a resposta liga a ela. */
+    requestId: string
+    characterId: string
+    characterName: string
+    restType: "short" | "long"
+    request: string
+    /** Quem pediu (o jogador ou o dono, pelo Personagem Opex): vai na auditoria. */
+    requesterUserId: string
+    /** Pedidos e respostas anteriores desta troca (do mais antigo ao atual, sem o pedido atual). */
+    thread: { role: "player" | "maddox"; characterName: string | null; content: string; id: string }[]
+    /** Linhas das mudanças aplicadas na ficha (o resumo do descanso as guarda). */
+    onSheetChanged?: (lines: string[]) => Promise<void>
+    signal?: AbortSignal
+}
+
 export interface MaddoxMaster {
     /** Narração do turno do mestre (Markdown, com as menções do catálogo resolvidas). Lança em caso de falha. */
     narrate(context: MaddoxNarrationContext, sink: MaddoxMasterSink): Promise<string>
     /** Resposta a uma pergunta feita no turno dos jogadores; não muda o turno. Lança em caso de falha. */
     answer(context: MaddoxAnswerContext, sink: MaddoxMasterSink): Promise<string>
+    /** DND-58: avalia e aplica as trocas pedidas depois de um descanso (catálogo + ficha). Lança em caso de falha. */
+    restExchange(context: MaddoxRestExchangeContext, sink: MaddoxMasterSink): Promise<string>
 }
 
 export async function getMaddoxMaster(): Promise<MaddoxMaster> {

@@ -212,3 +212,41 @@ export function restNeedsCatalog(sheet: Pick<RestSheet, "resourceCharges" | "spe
 
 export const restLineText = (line: RestLine) => `${line.label}: ${line.before} → ${line.after}`
 export const restMissText = (line: RestMissLine) => `${line.label} (${line.reason})`
+
+/** Estado de um personagem no descanso, no que o resumo e a espera precisam. */
+export interface RestEntryView {
+    name: string
+    prep: { status: string; recovered: RestLine[]; notRecovered: RestMissLine[] }
+    hitDice: { status: string; rolls: { healed: number }[] }
+    exchange: { status: string; applied: string[] }
+    doneReason: string | null
+}
+
+/** A parte do personagem acabou: ficha preparada, dados de vida fechados e trocas concluídas (ou puladas). */
+export const restEntryDone = (entry: Pick<RestEntryView, "prep" | "hitDice" | "exchange">) => entry.prep.status === "ready" && entry.hitDice.status !== "open" && ["done", "nothing", "skipped"].includes(entry.exchange.status)
+
+/** O que o descanso ainda espera de um personagem (faixa do turno). */
+export function restEntryWaits(entry: Pick<RestEntryView, "prep" | "hitDice" | "exchange">): ("prep" | "hit-dice" | "exchange")[] {
+    const parts: ("prep" | "hit-dice" | "exchange")[] = []
+    if (entry.prep.status !== "ready") parts.push("prep")
+    if (entry.hitDice.status === "open") parts.push("hit-dice")
+    if (entry.exchange.status === "open" || entry.exchange.status === "processing") parts.push("exchange")
+    return parts
+}
+
+/** Linha da transcrição do narrador (e do Diário): o tipo, quem descansou e o que cada um recuperou. */
+export function restTranscriptLine(rest: { type: MaddoxRestType; status: string; description: string; interruption: string | null; characters: RestEntryView[] }): string {
+    const label = MADDOX_REST_TYPE_LABELS[rest.type]
+    const names = rest.characters.map((entry) => entry.name).join(", ")
+    if (rest.status === "interrupted") return `${label} interrompido (${rest.interruption ?? "sem motivo"}) — ${names}: nada foi recuperado.`
+    const lines = rest.characters.map((entry) => {
+        const parts = [
+            entry.prep.recovered.length ? `recuperou ${entry.prep.recovered.map(restLineText).join("; ")}` : null,
+            entry.prep.notRecovered.length ? `não recuperou ${entry.prep.notRecovered.map(restMissText).join("; ")}` : null,
+            entry.hitDice.rolls.length ? `gastou ${entry.hitDice.rolls.length} dado(s) de vida (+${entry.hitDice.rolls.reduce((sum, roll) => sum + roll.healed, 0)} PV)` : null,
+            entry.exchange.applied.length ? `trocou ${entry.exchange.applied.join("; ")}` : null,
+        ].filter(Boolean)
+        return `${entry.name}: ${parts.join(", ") || "nada a recuperar"}`
+    })
+    return `${label} ${rest.status === "closed" ? "concluído" : "em andamento"} — ${rest.description}\n${lines.join("\n")}`
+}

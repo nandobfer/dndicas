@@ -16,6 +16,7 @@ import { isHiddenPlayerAction } from "../player-actions-visibility"
 import { isMemberReadyToPlay } from "./campaigns"
 import { enqueueMaddoxJob, maddoxJobSignal } from "./game-live"
 import { narratorTranscript, checkResultLine } from "./narrator-prompt"
+import { restTranscriptLine } from "../rest-rules"
 import { isOpexMember } from "./opex-members"
 import { decideOpex, loadOpexModel, loadOpexTableRoster, OpexDecisionInterruptedError, opexPromptContext } from "./opex-player"
 import {
@@ -92,6 +93,7 @@ async function opexTranscript(campaign: CampaignDoc, member: MemberDoc): Promise
                 if (message.combatReaction) return { turnNumber: message.turnNumber, kind: message.kind, characterName: null, content: `${message.characterName ?? "Personagem"} — reação (${message.combatReaction.description}): ${message.combatReaction.outcome ?? message.combatReaction.status}` }
                 if (message.kind === "check") return { turnNumber: message.turnNumber, kind: message.kind, characterName: null, content: check ? checkResultLine(check) : "" }
                 if (message.kind === "combat") return { turnNumber: message.turnNumber, kind: message.kind, characterName: null, content: "" }
+                if (message.kind === "rest" && message.rest) return { turnNumber: message.turnNumber, kind: message.kind, characterName: null, content: restTranscriptLine(message.rest) }
                 const controller = MARKED_KINDS.has(message.kind) && message.memberId ? kindOf.get(String(message.memberId)) : undefined
                 const characterName = controller && message.characterName ? markedCharacterName(message.characterName, controller) : message.characterName
                 return { turnNumber: message.turnNumber, kind: message.kind, characterName, content: message.content }
@@ -474,6 +476,8 @@ async function driveOnce(id: string): Promise<void> {
     const opex = new Map(members.map((member) => [String(member._id), member]))
     await autoRolls(campaign, opex)
     await autoReactions(campaign, opex)
+    // Descanso aberto (DND-58): a parte de cada Personagem Opex (dados de vida e trocas) entra na fila.
+    await (await import("./rest")).scheduleOpexRests(campaignId).catch((error: unknown) => log.warn({ campaignId: id, err: errorText(error) }, "[maddox] descanso do Personagem Opex não agendado"))
     const fresh = await MaddoxCampaignModel.findById(campaignId).lean<CampaignDoc>()
     if (!fresh || fresh.status !== "active" || fresh.turn?.phase !== "players") return
     const combatActor = fresh.turn.combatActor

@@ -2,7 +2,8 @@ import { Types } from "mongoose"
 import { loggerFor } from "@/lib/logger"
 import type { AttributeType, SkillName } from "@/features/character-sheets/types/character-sheet.types"
 import type { CalcPart } from "@/features/character-sheets/utils/dnd-calculations"
-import { MADDOX_ABILITIES, checkModifier, proficiencyOf, type MaddoxCheckSheet } from "../check-modifier"
+import { MADDOX_ABILITIES, checkModifier, exhaustionCalcParts, proficiencyOf, type MaddoxCheckSheet } from "../check-modifier"
+import { exhaustionLevel, exhaustionPenaltyOf } from "../exhaustion-rules"
 import { plainText, weaponProperties, type OptionAbility, type OptionItem, type OptionSheet, type OptionSpell, type OptionWeapon } from "../combat-options"
 import type { DeathSaves, HitPoints } from "../combat-rules"
 import { masteryKeyFromName } from "../weapon-mastery"
@@ -26,6 +27,8 @@ export interface CombatSheet {
     deathSaves: DeathSaves
     armorClass: number
     initiative: { value: number; parts: CalcPart[] }
+    /** DND-58: nível de exaustão da ficha (−2 por nível em todo d20; as salvaguardas e perícias já o incluem). */
+    exhaustion: number
     dexterity: number
     check: MaddoxCheckSheet
     option: OptionSheet
@@ -56,6 +59,14 @@ interface StoredSheet extends MaddoxCheckSheet {
     armorClassOverride?: number | null
     armorClassBonus?: number | null
     unarmoredDefense?: { enabled: boolean; base: number; attributes: AttributeType[] }
+}
+
+/** DND-58: penalidade de exaustão da ficha de um personagem (0 sem ficha). */
+export async function characterExhaustionPenalty(sheetId: string | null | undefined): Promise<number> {
+    if (!sheetId || !Types.ObjectId.isValid(sheetId)) return 0
+    const { CharacterSheet } = await import("@/features/character-sheets/models/character-sheet")
+    const doc = await CharacterSheet.findById(sheetId).select("exhaustion").lean<{ exhaustion?: number }>()
+    return exhaustionPenaltyOf(doc?.exhaustion)
 }
 
 /** Salvaguarda e perícia pela ficha (as mesmas contas do teste do Maddox 5). */
@@ -122,8 +133,9 @@ export async function loadCombatSheets(sheetIds: readonly string[]): Promise<Map
             armorClass: computeSheetArmorClass(sheet as unknown as Parameters<typeof computeSheetArmorClass>[0], ownItems),
             initiative: (() => {
                 const value = calc.getInitiative(abilities.dexterity, sheet.initiativeOverride ?? null, prof, Boolean(sheet.initiativeProficiency))
-                return { value: value.value, parts: value.parts ?? [] }
+                return { value: value.value + exhaustionPenaltyOf(sheet.exhaustion), parts: [...(value.parts ?? []), ...exhaustionCalcParts(sheet.exhaustion)] }
             })(),
+            exhaustion: exhaustionLevel(sheet.exhaustion),
             dexterity: abilities.dexterity,
             check: sheet,
             option: {
