@@ -560,6 +560,9 @@ export async function evaluateTurn(campaignId: Types.ObjectId): Promise<void> {
         await resumeMasterTurn(campaign)
         return
     }
+    // Descanso aberto (DND-58): quem está offline conclui a parte dele já aqui, mesmo antes de qualquer declaração.
+    const online = await onlineUserIds(String(campaignId))
+    const restBlocked = await (await import("./rest")).restBlocksTurn(campaignId, online)
     const declared = idSet(campaign.turn?.declaredMemberIds)
     const eligibleIds = (campaign.turn?.eligibleMemberIds ?? []).map(String)
     if (eligibleIds.length === 0 || declared.size === 0) return
@@ -567,12 +570,11 @@ export async function evaluateTurn(campaignId: Types.ObjectId): Promise<void> {
     const eligibleMembers = await MaddoxCampaignMemberModel.find({ _id: { $in: eligibleIds }, campaignId, status: "joined" }).select("userId kind opex.addedAt createdAt").lean<Pick<MemberDoc, "_id" | "userId" | "kind" | "opex" | "createdAt">[]>()
     // Personagens Opex (DND-26) ficam fora da regra dos humanos: agem depois, um de cada vez.
     const humans = eligibleMembers.filter((member) => member.kind !== "opex")
-    const online = await onlineUserIds(String(campaignId))
     const required = online ? humans.filter((member) => online.has(member.userId)) : humans
     const pending = required.filter((member) => !declared.has(String(member._id)))
     if (pending.length > 0) return
     // Descanso aberto (DND-58): o turno só avança quando cada personagem do descanso concluiu a parte dele.
-    if (await (await import("./rest")).restBlocksTurn(campaignId, online)) return
+    if (restBlocked) return
     if (campaign.turn.opexActor) return
     const opex = eligibleMembers.filter((member) => member.kind === "opex" && !declared.has(String(member._id)))
     if (opex.length > 0) {

@@ -248,6 +248,12 @@ export async function scheduleRestPreps(campaignId: Types.ObjectId): Promise<num
     return scheduled
 }
 
+/**
+ * As partes de cada personagem são atualizadas pelo driver (sem o cast do Mongoose): o subdocumento `rest` é `Mixed` e o
+ * cast dos `arrayFilters` perdia a condição do personagem, mexendo na entrada de outro.
+ */
+const messages = () => MaddoxCampaignMessageModel.collection
+
 const arrayFilter = (characterId: Types.ObjectId, extra: Record<string, unknown> = {}) => ({ arrayFilters: [{ "c.characterId": characterId, ...Object.fromEntries(Object.entries(extra).map(([field, value]) => [`c.${field}`, value])) }] })
 
 async function entryOf(messageId: Types.ObjectId, characterId: Types.ObjectId): Promise<{ message: RestMessage; entry: IMaddoxRestCharacter } | null> {
@@ -284,9 +290,9 @@ async function runRestPrep(campaignId: Types.ObjectId, messageId: Types.ObjectId
         return
     }
     // Preparação presa por um reinício do processo: volta à fila.
-    if (entry.prep.status === "running") await MaddoxCampaignMessageModel.updateOne({ _id: messageId }, { $set: { "rest.characters.$[c].prep.status": "pending" } }, arrayFilter(characterId, { "prep.status": "running" }))
+    if (entry.prep.status === "running") await messages().updateOne({ _id: messageId }, { $set: { "rest.characters.$[c].prep.status": "pending" } }, arrayFilter(characterId, { "prep.status": "running" }))
     const token = randomUUID()
-    const claimed = await MaddoxCampaignMessageModel.updateOne({ _id: messageId, "rest.status": "running" }, { $set: { "rest.characters.$[c].prep.status": "running", "rest.characters.$[c].prep.token": token }, $inc: { "rest.characters.$[c].prep.attempts": 1 } }, arrayFilter(characterId, { "prep.status": "pending" }))
+    const claimed = await messages().updateOne({ _id: messageId, "rest.status": "running" }, { $set: { "rest.characters.$[c].prep.status": "running", "rest.characters.$[c].prep.token": token }, $inc: { "rest.characters.$[c].prep.attempts": 1 } }, arrayFilter(characterId, { "prep.status": "pending" }))
     if (claimed.modifiedCount === 0) return
     const sheet = await loadRestSheet(entry.sheetId)
     if (!sheet) {
@@ -313,7 +319,7 @@ async function runRestPrep(campaignId: Types.ObjectId, messageId: Types.ObjectId
 
 async function failPrep(campaign: CampaignDoc, messageId: Types.ObjectId, entry: IMaddoxRestCharacter, token: string, reason: string, final: boolean): Promise<void> {
     log.warn({ campaignId: String(campaign._id), restId: String(messageId), character: entry.name, err: reason, final }, "[maddox] preparação da ficha no descanso falhou")
-    await MaddoxCampaignMessageModel.updateOne({ _id: messageId }, { $set: { "rest.characters.$[c].prep.status": final ? "failed" : "pending", "rest.characters.$[c].prep.error": clip(reason, 500), "rest.characters.$[c].prep.token": null } }, arrayFilter(entry.characterId, { "prep.token": token }))
+    await messages().updateOne({ _id: messageId }, { $set: { "rest.characters.$[c].prep.status": final ? "failed" : "pending", "rest.characters.$[c].prep.error": clip(reason, 500), "rest.characters.$[c].prep.token": null } }, arrayFilter(entry.characterId, { "prep.token": token }))
     if (final) {
         const { publishGameChanged } = await import("./game")
         await publishGameChanged(campaign._id)
@@ -325,7 +331,7 @@ async function commitPrep(campaign: CampaignDoc, message: RestMessage, entry: IM
     const filter: Record<string, unknown> = { "prep.status": options.from }
     if (options.token) filter["prep.token"] = options.token
     if (options.from !== "applying") {
-        const staged = await MaddoxCampaignMessageModel.updateOne({ _id: message._id, "rest.status": "running" }, { $set: { "rest.characters.$[c].prep.status": "applying", "rest.characters.$[c].prep.plan": plan, "rest.characters.$[c].prep.skippedCatalog": options.skippedCatalog } }, arrayFilter(entry.characterId, filter))
+        const staged = await messages().updateOne({ _id: message._id, "rest.status": "running" }, { $set: { "rest.characters.$[c].prep.status": "applying", "rest.characters.$[c].prep.plan": plan, "rest.characters.$[c].prep.skippedCatalog": options.skippedCatalog } }, arrayFilter(entry.characterId, filter))
         if (staged.modifiedCount === 0) return false
     }
     if (Object.keys(plan.set).length) {
@@ -341,7 +347,7 @@ async function commitPrep(campaign: CampaignDoc, message: RestMessage, entry: IM
             depois: { by: "maddox", origin: "rest-recovery", campaign: String(campaign._id), rest: String(message._id), type: message.rest.type, character: entry.name, set: plan.set, skippedCatalog: options.skippedCatalog },
         })
     }
-    await MaddoxCampaignMessageModel.updateOne(
+    await messages().updateOne(
         { _id: message._id },
         { $set: { "rest.characters.$[c].prep.status": "ready", "rest.characters.$[c].prep.recovered": plan.recovered, "rest.characters.$[c].prep.notRecovered": plan.notRecovered, "rest.characters.$[c].prep.appliedAt": new Date(), "rest.characters.$[c].prep.token": null, "rest.characters.$[c].prep.error": null } },
         arrayFilter(entry.characterId, { "prep.status": "applying" }),
@@ -405,9 +411,9 @@ async function spendHitDie(campaign: CampaignDoc, message: RestMessage, entry: I
     const hpBefore = Math.max(0, sheet.hpCurrent ?? sheet.hpMax)
     const hpAfter = Math.min(sheet.hpMax, hpBefore + hitDieHeal(roll.total))
     const doc: IMaddoxRestHitDieRoll = { roll, total: roll.total, healed: hpAfter - hpBefore, hpBefore, hpAfter, usedAfter: pool.used + 1, rolledBy, at: new Date() }
-    const pushed = await MaddoxCampaignMessageModel.updateOne(
+    const pushed = await messages().updateOne(
         { _id: message._id, "rest.status": "running" },
-        { $push: { "rest.characters.$[c].hitDice.rolls": doc } },
+        { $push: { "rest.characters.$[c].hitDice.rolls": doc } } as never,
         arrayFilter(entry.characterId, { "hitDice.status": "open", "hitDice.rolls": { $size: entry.hitDice.rolls.length } }),
     )
     if (pushed.modifiedCount === 0) throw new DomainError(409, "Este dado de vida já foi rolado.", "REST_ROLL_CONFLICT")
@@ -430,7 +436,7 @@ async function spendHitDie(campaign: CampaignDoc, message: RestMessage, entry: I
 }
 
 async function setHitDiceStatus(messageId: Types.ObjectId, characterId: Types.ObjectId, from: string, to: string): Promise<boolean> {
-    const result = await MaddoxCampaignMessageModel.updateOne({ _id: messageId }, { $set: { "rest.characters.$[c].hitDice.status": to } }, arrayFilter(characterId, { "hitDice.status": from }))
+    const result = await messages().updateOne({ _id: messageId }, { $set: { "rest.characters.$[c].hitDice.status": to } }, arrayFilter(characterId, { "hitDice.status": from }))
     return result.modifiedCount > 0
 }
 
@@ -452,7 +458,7 @@ export async function declineRestHitDice(campaignId: string, messageId: string, 
 
 /** Reserva a vez do pedido de troca (um por vez, até o teto). */
 async function claimExchange(message: RestMessage, entry: IMaddoxRestCharacter): Promise<void> {
-    const claimed = await MaddoxCampaignMessageModel.updateOne(
+    const claimed = await messages().updateOne(
         { _id: message._id, "rest.status": "running" },
         { $set: { "rest.characters.$[c].exchange.status": "processing" }, $inc: { "rest.characters.$[c].exchange.requests": 1 } },
         arrayFilter(entry.characterId, { "exchange.status": "open", "exchange.requests": { $lt: MADDOX_REST_EXCHANGE_REQUESTS_MAX } }),
@@ -507,6 +513,24 @@ export async function runRestExchange(campaignId: Types.ObjectId, jobId: string,
             const abort = () => controller.abort()
             outer?.addEventListener("abort", abort, { once: true })
             const timer = setTimeout(() => controller.abort(), MADDOX_MASTER_GENERATION_TIMEOUT_MS)
+            // As ferramentas da ficha do "Pergunte ao mestre", presas ao personagem do descanso (o dono que responde pelo
+            // Personagem Opex não ganha acesso a outra ficha) e à lista das trocas.
+            const [runs, { MADDOX_REST_EXCHANGE_CHANGE_TYPES }] = await Promise.all([import("./question-runs"), import("../rest-schemas")])
+            runs.openQuestionRun({
+                campaignId: String(campaignId),
+                jobId,
+                turnNumber: request.turnNumber,
+                questionId: String(requestId),
+                askerUserId: requesterUserId,
+                askerCharacterId: String(characterId),
+                askerIsOwner: false,
+                playerTexts: [...thread.filter((item) => item.role === "player").map((item) => item.content), request.content],
+                allowedChangeTypes: MADDOX_REST_EXCHANGE_CHANGE_TYPES,
+                sheetChangeTitle: `Trocas de ${entry.name} depois do ${message.rest.type === "long" ? "descanso longo" : "descanso curto"}:`,
+                onSheetChanged: async (lines) => {
+                    await messages().updateOne({ _id: messageId }, { $push: { "rest.characters.$[c].exchange.applied": { $each: lines } } } as never, arrayFilter(characterId))
+                },
+            })
             try {
                 content = await master.restExchange(
                     {
@@ -520,9 +544,6 @@ export async function runRestExchange(campaignId: Types.ObjectId, jobId: string,
                         request: request.content,
                         requesterUserId,
                         thread,
-                        onSheetChanged: async (lines) => {
-                            await MaddoxCampaignMessageModel.updateOne({ _id: messageId }, { $push: { "rest.characters.$[c].exchange.applied": { $each: lines } } }, arrayFilter(characterId))
-                        },
                         signal: controller.signal,
                     },
                     live,
@@ -531,6 +552,7 @@ export async function runRestExchange(campaignId: Types.ObjectId, jobId: string,
             } finally {
                 clearTimeout(timer)
                 outer?.removeEventListener("abort", abort)
+                runs.closeQuestionRun(jobId)
             }
             if (!isActiveMaddoxJob(String(campaignId), jobId)) {
                 live.end({ messageId: null, error: null })
@@ -553,8 +575,8 @@ export async function runRestExchange(campaignId: Types.ObjectId, jobId: string,
         }
     }
     // A parte volta a aceitar pedidos; se o jogador saiu (ou ficou offline) no meio, ela fica pulada.
-    const reopened = await MaddoxCampaignMessageModel.updateOne({ _id: messageId }, { $set: { "rest.characters.$[c].exchange.status": "open" } }, arrayFilter(characterId, { "exchange.status": "processing", doneReason: null }))
-    if (reopened.modifiedCount === 0) await MaddoxCampaignMessageModel.updateOne({ _id: messageId }, { $set: { "rest.characters.$[c].exchange.status": "skipped" } }, arrayFilter(characterId, { "exchange.status": "processing" }))
+    const reopened = await messages().updateOne({ _id: messageId }, { $set: { "rest.characters.$[c].exchange.status": "open" } }, arrayFilter(characterId, { "exchange.status": "processing", doneReason: null }))
+    if (reopened.modifiedCount === 0) await messages().updateOne({ _id: messageId }, { $set: { "rest.characters.$[c].exchange.status": "skipped" } }, arrayFilter(characterId, { "exchange.status": "processing" }))
     await afterRestProgress(campaignId)
     return { content: error ? "" : content, error }
 }
@@ -571,14 +593,14 @@ export async function finishRestExchange(campaignId: string, messageId: string, 
 }
 
 async function setExchangeStatus(messageId: Types.ObjectId, characterId: Types.ObjectId, from: string, to: string): Promise<boolean> {
-    const result = await MaddoxCampaignMessageModel.updateOne({ _id: messageId }, { $set: { "rest.characters.$[c].exchange.status": to } }, arrayFilter(characterId, { "exchange.status": from }))
+    const result = await messages().updateOne({ _id: messageId }, { $set: { "rest.characters.$[c].exchange.status": to } }, arrayFilter(characterId, { "exchange.status": from }))
     return result.modifiedCount > 0
 }
 
 /** "Tentar de novo" do dono na preparação que falhou. */
 export async function retryRestPrep(campaignId: string, messageId: string, characterId: string, userId: string): Promise<MaddoxGameStateDto> {
     const { campaign, message, entry } = await loadRestTarget(campaignId, messageId, characterId, userId, { ownerAction: true })
-    const reset = await MaddoxCampaignMessageModel.updateOne({ _id: message._id }, { $set: { "rest.characters.$[c].prep.status": "pending", "rest.characters.$[c].prep.attempts": 0, "rest.characters.$[c].prep.error": null } }, arrayFilter(entry.characterId, { "prep.status": "failed" }))
+    const reset = await messages().updateOne({ _id: message._id }, { $set: { "rest.characters.$[c].prep.status": "pending", "rest.characters.$[c].prep.attempts": 0, "rest.characters.$[c].prep.error": null } }, arrayFilter(entry.characterId, { "prep.status": "failed" }))
     if (reset.modifiedCount === 0) throw new DomainError(409, "A preparação desta ficha não está com falha.", "REST_PREP_NOT_FAILED")
     await recordAudit({ userId, entidade: MADDOX_CAMPAIGN_AUDIT_ENTITY, entidadeId: String(campaign._id), acao: AcaoAuditoria.ATUALIZAR, depois: { rest: String(message._id), character: entry.name, prep: "retry" } })
     await scheduleRestPreps(campaign._id)
@@ -604,7 +626,7 @@ export async function skipRestPrep(campaignId: string, messageId: string, charac
 
 /** Conclui as partes de um personagem que não vai mais responder (offline, saiu, morreu). */
 async function skipEntry(messageId: Types.ObjectId, characterId: Types.ObjectId, reason: "offline" | "left" | "dead"): Promise<void> {
-    await MaddoxCampaignMessageModel.updateOne({ _id: messageId }, { $set: { "rest.characters.$[c].doneReason": reason } }, arrayFilter(characterId, { doneReason: null }))
+    await messages().updateOne({ _id: messageId }, { $set: { "rest.characters.$[c].doneReason": reason } }, arrayFilter(characterId, { doneReason: null }))
     await setHitDiceStatus(messageId, characterId, "open", "skipped")
     await setExchangeStatus(messageId, characterId, "open", "skipped")
 }
@@ -832,8 +854,8 @@ async function runOpexRest(campaignId: Types.ObjectId, messageId: Types.ObjectId
         if (isAbortedMaddoxJob(jobId)) return
         // O agente falhou: a pergunta vai para o dono da campanha, que responde pelo personagem.
         log.warn({ campaignId: String(campaignId), character: entry.name, err: errorText(error) }, "[maddox] Personagem Opex não decidiu o descanso: o dono responde")
-        await MaddoxCampaignMessageModel.updateOne({ _id: messageId }, { $set: { "rest.characters.$[c].answeredBy": "owner", "rest.characters.$[c].opexError": clip(errorText(error), 500) } }, arrayFilter(characterId))
-        await MaddoxCampaignMessageModel.updateOne({ _id: messageId }, { $set: { "rest.characters.$[c].exchange.status": "open" } }, arrayFilter(characterId, { "exchange.status": "processing" }))
+        await messages().updateOne({ _id: messageId }, { $set: { "rest.characters.$[c].answeredBy": "owner", "rest.characters.$[c].opexError": clip(errorText(error), 500) } }, arrayFilter(characterId))
+        await messages().updateOne({ _id: messageId }, { $set: { "rest.characters.$[c].exchange.status": "open" } }, arrayFilter(characterId, { "exchange.status": "processing" }))
     }
     await afterRestProgress(campaignId)
 }

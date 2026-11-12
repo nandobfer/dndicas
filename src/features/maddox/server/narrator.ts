@@ -674,37 +674,19 @@ export const aiMaddoxMaster: MaddoxMaster = {
         }
     },
     async restExchange(context: MaddoxRestExchangeContext, sink) {
-        const [runs, { MADDOX_REST_EXCHANGE_CHANGE_TYPES }] = await Promise.all([import("./question-runs"), import("../rest-schemas")])
-        // DND-58: a troca usa as ferramentas da ficha do "Pergunte ao mestre", presas ao personagem do descanso (o dono que
-        // responde pelo Personagem Opex não ganha acesso a outra ficha) e à lista das trocas.
-        runs.openQuestionRun({
-            campaignId: context.campaignId,
-            jobId: context.jobId,
-            turnNumber: context.turnNumber,
-            questionId: context.requestId,
-            askerUserId: context.requesterUserId,
-            askerCharacterId: context.characterId,
-            askerIsOwner: false,
-            playerTexts: [...context.thread.filter((entry) => entry.role === "player").map((entry) => entry.content), context.request],
-            allowedChangeTypes: MADDOX_REST_EXCHANGE_CHANGE_TYPES,
-            sheetChangeTitle: `Trocas de ${context.characterName} depois do ${context.restType === "long" ? "descanso longo" : "descanso curto"}:`,
-            onSheetChanged: context.onSheetChanged,
-        })
-        try {
-            return await generate(
-                {
-                    campaignId: context.campaignId,
-                    jobId: context.jobId,
-                    turnNumber: context.turnNumber,
-                    task: { kind: "rest-exchange", turnNumber: context.turnNumber, characterName: context.characterName, restType: context.restType, request: context.request, thread: context.thread.map(({ role, characterName, content }) => ({ role, characterName, content })), sheetFix: true },
-                    excludeIds: new Set([context.requestId, ...context.thread.map((entry) => entry.id)]),
-                    title: `Maddox · trocas do descanso · turno ${context.turnNumber}`,
-                    signal: context.signal,
-                },
-                sink,
-            )
-        } finally {
-            runs.closeQuestionRun(context.jobId)
-        }
+        // DND-58: a execução da troca (ferramentas da ficha presas ao personagem e à lista das trocas) é aberta por quem
+        // chama (`runRestExchange`); aqui só a geração.
+        return generate(
+            {
+                campaignId: context.campaignId,
+                jobId: context.jobId,
+                turnNumber: context.turnNumber,
+                task: { kind: "rest-exchange", turnNumber: context.turnNumber, characterName: context.characterName, restType: context.restType, request: context.request, thread: context.thread.map(({ role, characterName, content }) => ({ role, characterName, content })), sheetFix: true },
+                excludeIds: new Set([context.requestId, ...context.thread.map((entry) => entry.id)]),
+                title: `Maddox · trocas do descanso · turno ${context.turnNumber}`,
+                signal: context.signal,
+            },
+            sink,
+        )
     },
 }

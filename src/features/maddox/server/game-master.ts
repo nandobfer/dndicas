@@ -60,8 +60,6 @@ export interface MaddoxRestExchangeContext {
     requesterUserId: string
     /** Pedidos e respostas anteriores desta troca (do mais antigo ao atual, sem o pedido atual). */
     thread: { role: "player" | "maddox"; characterName: string | null; content: string; id: string }[]
-    /** Linhas das mudanças aplicadas na ficha (o resumo do descanso as guarda). */
-    onSheetChanged?: (lines: string[]) => Promise<void>
     signal?: AbortSignal
 }
 
