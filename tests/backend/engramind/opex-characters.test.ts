@@ -105,7 +105,68 @@ describe("agente do Personagem Opex", () => {
         await opexChars.provisionOpexCharacterAgent(ref)
         await opexChars.saveOpexCharacterMemories(ref, [{ title: "Medo", text: "Tenho pavor de aranhas." }])
         const block = await opexChars.opexCharacterMemoryBlock(ref)
-        expect(block).toContain("Tenho pavor de aranhas.")
+        expect(block.memories).toContain("Tenho pavor de aranhas.")
+        expect(block.guidance).toBe("")
+    })
+
+    it("DND-57: as orientações do dono (canal global) voltam à parte das demais memórias, em chamadas independentes", async () => {
+        const ref = await setup()
+        await opexChars.provisionOpexCharacterAgent(ref)
+        await opexChars.createOpexGlobalMemory({ title: "Diálogo", text: "Deixe os jogadores conduzirem os diálogos." }, "admin-1")
+        await opexChars.saveOpexCharacterMemories(ref, [{ title: "Medo", text: "Tenho pavor de aranhas.", category: "SENTIMENTO" }])
+        const block = await opexChars.opexCharacterMemoryBlock(ref)
+        expect(block.guidance).toContain("Deixe os jogadores conduzirem os diálogos.")
+        expect(block.guidance).not.toContain("Tenho pavor de aranhas.")
+        expect(block.memories).toContain("Tenho pavor de aranhas.")
+        expect(block.memories).not.toContain("Deixe os jogadores conduzirem")
+        const contexts = fake.state.calls.filter((call) => call.path === "/v1/context").map((call) => call.query.channels)
+        expect(contexts).toEqual(expect.arrayContaining([OPEX_CHARACTER_GLOBAL_CHANNEL, `${campaignChannel(ref.campaignId, "players")},${opexCharacterChannel(ref.campaignId, ref.memberId)}`]))
+
+        // A falha das orientações não derruba as demais memórias.
+        const original = fake.fetch
+        vi.stubGlobal("fetch", (async (input: RequestInfo | URL, init?: RequestInit) => {
+            const url = new URL(String(input))
+            if (url.pathname === "/v1/context" && url.searchParams.get("channels") === OPEX_CHARACTER_GLOBAL_CHANNEL) return new Response(JSON.stringify({ error: { code: "INTERNAL", message: "x" } }), { status: 500 })
+            return original(input as string, init)
+        }) as typeof fetch)
+        const partial = await opexChars.opexCharacterMemoryBlock(ref)
+        vi.stubGlobal("fetch", original)
+        expect(partial).toEqual({ guidance: "", memories: expect.stringContaining("Tenho pavor de aranhas.") })
+    })
+
+    it("DND-57: grava a categoria escolhida; inexistente na rede vira OUTRO, também na fila", async () => {
+        const ref = await setup()
+        await opexChars.provisionOpexCharacterAgent(ref)
+        await opexChars.saveOpexCharacterMemories(ref, [
+            { title: "Medo", text: "Tenho pavor de aranhas.", category: "SENTIMENTO" },
+            { title: "Sem categoria", text: "Algo sem categoria." },
+        ])
+        const own = (key: string) => [...fake.state.memories.values()].find((memory) => memory.key === key)
+        expect(own("opex:medo")!.category).toBe("SENTIMENTO")
+        expect(own("opex:sem-categoria")!.category).toBe("OUTRO")
+
+        // A categoria sumiu da rede (removida no Opex): a gravação cai em OUTRO em vez de se perder.
+        fake.state.categories = fake.state.categories.filter((item) => item.key !== "PLANO")
+        const { invalidateCategoryCache } = await import("@/features/engramind/server/categories")
+        invalidateCategoryCache()
+        await opexChars.saveOpexCharacterMemories(ref, [{ title: "Plano", text: "Fugir à noite.", category: "PLANO" }])
+        expect(own("opex:plano")!.category).toBe("OUTRO")
+
+        // Fila: o corpo guarda a categoria; a entrega aplica o mesmo fallback.
+        const original = fake.fetch
+        vi.stubGlobal("fetch", (async (input: RequestInfo | URL, init?: RequestInit) => {
+            if (String(input).includes("/v1/memories") && init?.method === "POST") throw Object.assign(new TypeError("fetch failed"), { cause: { code: "ECONNREFUSED" } })
+            return original(input as string, init)
+        }) as typeof fetch)
+        await opexChars.saveOpexCharacterMemories(ref, [{ title: "Raiva", text: "Odeio o goblin.", category: "SENTIMENTO" }, { title: "Rota", text: "Ir a Phandalin.", category: "PLANO" }])
+        vi.stubGlobal("fetch", original)
+        const queued = await PendingWrite.find({ agentMemberId: ref.memberId }).lean()
+        expect(queued.map((entry) => (entry.body as { category?: string }).category).sort()).toEqual(["OUTRO", "SENTIMENTO"])
+        fake.state.categories = fake.state.categories.filter((item) => item.key !== "SENTIMENTO")
+        await flushPendingWrites()
+        expect(await PendingWrite.countDocuments({})).toBe(0)
+        expect(own("opex:raiva")!.category).toBe("OUTRO")
+        expect(own("opex:rota")!.category).toBe("OUTRO")
     })
 
     it("arquiva o canal individual com a campanha e restaura ao sair do arquivo; a remoção desativa o agente e revoga o token", async () => {

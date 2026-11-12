@@ -1,7 +1,7 @@
 import { engramindCodeOf, type EngramindClient } from "@engramind/client/server"
 import { dbConnect } from "@/lib/db"
 import { MaddoxCampaignModel } from "@/features/maddox/models"
-import { CAMPAIGN_CATEGORY_LIST, CAMPAIGN_VISIBILITY_NAMES, campaignChannels } from "../constants"
+import { ENGRAMIND_CATEGORY_LIST, CAMPAIGN_VISIBILITY_NAMES, campaignChannels } from "../constants"
 import { ensureCategories, listCategoryKeys } from "./categories"
 import { engramindAppClient } from "./client"
 import { ensureSubscription, tidyChannel } from "./bootstrap"
@@ -61,7 +61,7 @@ export async function provisionCampaignMemoryNetwork(campaign: CampaignNetworkIn
     const client = await engramindAppClient()
     if (!client) return false
     const keys = await listCategoryKeys(client)
-    if (keys && CAMPAIGN_CATEGORY_LIST.some((def) => !keys.includes(def.key))) await ensureCategories(CAMPAIGN_CATEGORY_LIST, client)
+    if (keys && ENGRAMIND_CATEGORY_LIST.some((def) => !keys.includes(def.key))) await ensureCategories(ENGRAMIND_CATEGORY_LIST, client)
     const channels = campaignChannels(campaign.id)
     for (const [index, channel] of channels.entries()) {
         const { channelCreated } = await ensureSubscription(client, "maddox", channel, "search")

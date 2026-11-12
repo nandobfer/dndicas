@@ -13,6 +13,9 @@ import {
     MADDOX_OPEX_NPC_ROLE_RULE,
     MADDOX_OPEX_ROLE_RULE,
     MADDOX_OPEX_MEMORY_RULE,
+    MADDOX_OPEX_NPC_MEMORY_RULE,
+    OPEX_OWNER_GUIDANCE_TITLE,
+    opexMemorySchema,
 } from "@/features/maddox/server/opex-prompt"
 import { MADDOX_OPEX_MEMORIES_PER_TURN, MADDOX_OPEX_MEMORY_TEXT_EXPECTED, MADDOX_OPEX_MEMORY_TEXT_MAX, MADDOX_OPEX_MEMORY_TITLE_MAX } from "@/features/maddox/constants"
 
@@ -20,7 +23,9 @@ import { MADDOX_OPEX_MEMORIES_PER_TURN, MADDOX_OPEX_MEMORY_TEXT_EXPECTED, MADDOX
 
 const context = {
     instructions: "Jogue em equipe.",
+    ownerGuidance: "",
     memories: "- Desconfio de magos.",
+    table: [{ name: "Brunna", kind: "opex" as const, self: true }],
     basePrompt: "Uma clériga anã chamada Brunna.",
     campaign: { name: "Brumas", rigor: "fiel-dnd" as const, setting: "Fantasia sombria.", openingSituation: "Numa taverna.", state: { scene: "A ponte", location: "", situation: "Goblins atacam.", pendingDecision: "" } },
     character: { name: "Brunna", profile: { identidade: "Clériga anã" }, currentState: "Ferida no braço.", sheet: "Nível 3 · Clériga" },
@@ -113,5 +118,103 @@ describe("NPC Opex (DND-27)", () => {
         const schema = opexNpcCombatSchema(options)
         expect(schema.safeParse({ acao: "cimitarra", alvos: ["Kael"] })).toMatchObject({ success: true, data: { acao: "Cimitarra", alvos: ["Kael"], fala: "", memorias: [] } })
         expect(schema.safeParse({ acao: "Bola de Fogo" }).success).toBe(false)
+    })
+})
+
+describe("orientações do dono e quem está na mesa (DND-57)", () => {
+    // Contexto real da DND-57: o canal global como o Engramind devolve, na campanha de Nala (humana) e Uther (Opex).
+    const guidance = "## Memórias\n\n### PROJECT_RULES\n- [Diálogo] Deixe os jogadores conduzirem os diálogos. Apenas os apoiem quando necessário ou quando solicitado pelos jogadores.\n- [Coadjuvante] Deixe o holofote para os jogadores. Você é um coadjuvante: sirva apenas como ajudante e auxilie os protagonistas.\n- [Pode não fazer nada] Pode não fazer nada — quando quiser ou quando for conveniente, o agente pode pular a vez, declarando que não faz nada."
+    const table = [
+        { name: "Uther", kind: "opex" as const, self: true },
+        { name: "Nala", kind: "human" as const, self: false },
+        { name: "Vaelyra", kind: "opex" as const, self: false },
+    ]
+    const uther = { ...context, ownerGuidance: guidance, table, memories: "### PROJECT_RULES\n- Afrouxei a lâmina e assumi a conversa.", character: { ...context.character, name: "Uther" } }
+
+    it("as orientações ficam numa seção própria, separada das memórias, que prevalece sobre personalidade, prompt base e memórias", () => {
+        const text = buildOpexInstructions(uther, { withMemoryRule: true })
+        const section = text.indexOf(OPEX_OWNER_GUIDANCE_TITLE)
+        expect(section).toBeGreaterThan(0)
+        expect(text).toContain("PREVALECEM sobre a sua personalidade, o prompt base do dono da campanha e as suas próprias memórias")
+        expect(text).toContain("Deixe os jogadores conduzirem os diálogos.")
+        // Antes das memórias, da campanha e do personagem; o título das memórias não cita mais o global.
+        expect(section).toBeLessThan(text.indexOf("## Memórias (campanha e as suas)"))
+        expect(section).toBeLessThan(text.indexOf("## Seu personagem: Uther"))
+        expect(text).not.toContain("global do Personagem Opex")
+        const memoriesBlock = text.slice(text.indexOf("## Memórias (campanha e as suas)"))
+        expect(memoriesBlock).not.toContain("Deixe os jogadores conduzirem")
+        // O título "Memórias" do Engramind sai e as categorias viram subtítulos da seção.
+        const body = text.slice(section, text.indexOf(MADDOX_OPEX_MEMORY_RULE))
+        expect(body).not.toMatch(/^#{1,6} Memórias$/m)
+        expect(body).toContain("### PROJECT_RULES")
+    })
+
+    it("vale em toda decisão (mesa, combate, reação e entrevista usam as mesmas instruções)", () => {
+        expect(buildOpexInstructions(uther)).toContain(OPEX_OWNER_GUIDANCE_TITLE)
+    })
+
+    it("lista quem é humano e quem é Opex, marca você e define jogadores/protagonistas como os humanos", () => {
+        const text = buildOpexInstructions(uther)
+        expect(text).toContain("## Quem está na mesa")
+        expect(text).toContain("- Nala — personagem de jogador humano")
+        expect(text).toContain("- Uther — Personagem Opex (você)")
+        expect(text).toContain("- Vaelyra — Personagem Opex\n")
+        expect(text).not.toContain("Vaelyra — Personagem Opex (você)")
+        expect(text).toContain('"jogadores" e "protagonistas" significam SEMPRE os personagens dos jogadores humanos')
+    })
+
+    it("sem humano na mesa, diz que não há personagem de jogador humano; personagem em criação aparece como você", () => {
+        const solo = buildOpexInstructions({ ...uther, table: [] })
+        expect(solo).toContain("Não há personagem de jogador humano nesta mesa")
+        expect(solo).toContain("(o seu personagem, ainda em criação) — Personagem Opex (você)")
+    })
+
+    it("sem orientações, nem a seção nem a repetição aparecem", () => {
+        expect(buildOpexInstructions({ ...uther, ownerGuidance: "" })).not.toContain(OPEX_OWNER_GUIDANCE_TITLE)
+        expect(buildOpexInstructions({ ...uther, ownerGuidance: "## Memórias\n" })).not.toContain(OPEX_OWNER_GUIDANCE_TITLE)
+        const task = opexTableTask({ turnNumber: 12, transcript: "x", questionsLeft: 1, ownerGuidance: "" })
+        expect(task).not.toContain("orientações do dono")
+    })
+
+    it("no turno da mesa, as orientações se repetem em texto integral logo antes do formato da resposta", () => {
+        const task = opexTableTask({ turnNumber: 12, transcript: "[Turno 12 — Nala (jogador humano) declara] Continuo interrogando o goblin.", questionsLeft: 1, ownerGuidance: guidance })
+        const reminder = task.indexOf("### Lembre: orientações do dono")
+        expect(reminder).toBeGreaterThan(task.indexOf("### Transcrição recente"))
+        expect(reminder).toBeLessThan(task.indexOf("Responda só com:"))
+        expect(task.slice(reminder)).toContain("Deixe o holofote para os jogadores.")
+        expect(task.slice(reminder)).toContain("Pode não fazer nada")
+    })
+})
+
+describe("categoria das memórias do Opex (DND-57)", () => {
+    it("a regra das memórias lista as categorias permitidas e proíbe as de regra (Personagem e NPC)", () => {
+        for (const rule of [MADDOX_OPEX_MEMORY_RULE, MADDOX_OPEX_NPC_MEMORY_RULE]) {
+            for (const key of ["SENTIMENTO", "PLANO", "OPINIAO", "RELACAO", "FATO", "EVENTO", "OUTRO"]) expect(rule).toContain(key)
+            expect(rule).toContain("Nunca use categorias de regra (PROJECT_RULES")
+        }
+    })
+
+    it("os formatos de resposta da mesa, da cena e do combate do NPC pedem a categoria", () => {
+        const format = '"categoria": "SENTIMENTO | PLANO | OPINIAO | RELACAO | FATO | EVENTO | OUTRO"'
+        expect(opexTableTask({ turnNumber: 1, transcript: "", questionsLeft: 0 })).toContain(format)
+        expect(opexNpcSceneTask({ situation: "x" })).toContain(format)
+        expect(opexNpcCombatTask({ round: 1, situation: "x", options: [{ name: "Adaga", detail: "" }], targets: [] })).toContain(format)
+    })
+
+    it("categoria escolhida passa; ausente, nula, de regra ou desconhecida vira OUTRO sem invalidar a decisão", () => {
+        const parsed = opexTableActionSchema.parse({
+            acao: "nada",
+            memorias: [
+                { titulo: "Medo", texto: "Tenho medo do escuro.", categoria: "sentimento" },
+                { titulo: "Plano", texto: "Vou a Phandalin.", categoria: "PLANO" },
+                { titulo: "Regra", texto: "Assumo a conversa.", categoria: "PROJECT_RULES" },
+                { titulo: "Nula", texto: "Algo.", categoria: null },
+                { titulo: "Sem", texto: "Algo." },
+                { titulo: "Número", texto: "Algo.", categoria: 7 },
+            ],
+        })
+        expect(opexMemoriesOf(parsed).map((memory) => memory.category)).toEqual(["SENTIMENTO", "PLANO", "OUTRO", "OUTRO", "OUTRO"])
+        expect(opexMemorySchema.safeParse({ titulo: "Opinião", texto: "Lyra é corajosa.", categoria: "Opinião" }).success).toBe(true)
+        expect(opexMemoriesOf({ memorias: [{ titulo: "Opinião", texto: "Lyra é corajosa.", categoria: "Opinião" }] })[0]!.category).toBe("OPINIAO")
     })
 })

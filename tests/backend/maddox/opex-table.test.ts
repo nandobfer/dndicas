@@ -17,6 +17,8 @@ const presence: { online: Set<string> | null } = { online: null }
 const opexReplies: (string | Error)[] = []
 const opexCalls: AiStreamRequest[] = []
 const saveOpexCharacterMemories = vi.fn(async () => ({ saved: 1, pending: 0 }))
+/** Memórias que o Engramind devolve ao Opex: orientações do dono (canal global) à parte das demais (DND-57). */
+const memoryBlocks = { guidance: "", memories: "- Desconfio do mago." }
 
 vi.mock("@/lib/db", () => ({
     dbConnect: vi.fn(async () => undefined),
@@ -46,7 +48,7 @@ vi.mock("@/lib/ai/stream", () => ({
     }),
 }))
 vi.mock("@/features/engramind/server/opex-characters", () => ({
-    opexCharacterMemoryBlock: vi.fn(async () => "- Desconfio do mago."),
+    opexCharacterMemoryBlock: vi.fn(async () => ({ ...memoryBlocks })),
     saveOpexCharacterMemories,
     provisionOpexCharacterAgent: vi.fn(async () => true),
     retireOpexCharacterAgent: vi.fn(async () => undefined),
@@ -145,6 +147,69 @@ beforeEach(async () => {
     validateDeclaration.mockClear()
     saveOpexCharacterMemories.mockClear()
     opexGate.hold = null
+    memoryBlocks.guidance = ""
+})
+
+describe("orientações do dono e quem é humano (DND-57)", () => {
+    const GUIDANCE = "## Memórias\n- [PROJECT_RULES] Deixe os jogadores conduzirem os diálogos. Apenas os apoiem quando necessário."
+
+    it("o turno traz quem é humano, as orientações em seção própria e repetidas antes da resposta, e marca a transcrição", async () => {
+        memoryBlocks.guidance = GUIDANCE
+        const { id, owner } = await table()
+        const tork = await addReadyOpex(id, owner, "Tork", 10)
+        await addReadyOpex(id, owner, "Brunna", 1)
+        await game.startCampaign(id, owner)
+        await settle(id)
+        opexReplies.push(
+            declare(id, { acao: "declarar", texto: "Ergo o escudo.", memorias: [{ titulo: "Medo do goblin", texto: "O goblin me assusta.", categoria: "SENTIMENTO" }, { titulo: "Regra", texto: "Assumo a conversa.", categoria: "PROJECT_RULES" }] }),
+            declare(id, { acao: "nada", texto: "" }),
+        )
+        await game.submitGameAction(id, { kind: "declaration", content: "Interrogo o goblin." }, owner)
+        await settle(id)
+
+        const [first, second] = opexCalls
+        expect(first!.instructions).toContain("## Quem está na mesa")
+        expect(first!.instructions).toContain("- Kael — personagem de jogador humano")
+        expect(first!.instructions).toContain("- Tork — Personagem Opex (você)")
+        expect(first!.instructions).toContain("- Brunna — Personagem Opex\n")
+        expect(second!.instructions).toContain("- Brunna — Personagem Opex (você)")
+        expect(first!.instructions).toContain("## Orientações do dono para todo Personagem Opex")
+        expect(first!.instructions).toContain("Deixe os jogadores conduzirem os diálogos.")
+        expect(first!.instructions).toContain("## Memórias (campanha e as suas)\n- Desconfio do mago.")
+        // Repetição na tarefa da mesa, logo antes do formato da resposta.
+        const reminder = first!.prompt!.indexOf("### Lembre: orientações do dono")
+        expect(reminder).toBeGreaterThan(0)
+        expect(first!.prompt!.slice(reminder)).toContain("Deixe os jogadores conduzirem os diálogos.")
+        expect(reminder).toBeLessThan(first!.prompt!.indexOf("Responda só com:"))
+        // Transcrição vista pelo Opex: cada personagem com a marca de quem o controla.
+        expect(first!.prompt).toContain("Kael (jogador humano) declara] Interrogo o goblin.")
+        expect(second!.prompt).toContain("Tork (Personagem Opex) declara] Ergo o escudo.")
+        // A categoria escolhida vai para a gravação; a de regra vira OUTRO.
+        expect(saveOpexCharacterMemories).toHaveBeenCalledWith(
+            expect.objectContaining({ memberId: tork }),
+            [
+                { title: "Medo do goblin", text: "O goblin me assusta.", category: "SENTIMENTO" },
+                { title: "Regra", text: "Assumo a conversa.", category: "OUTRO" },
+            ],
+            1,
+        )
+        // O narrador continua recebendo os nomes sem marca.
+        const declarations = fakeMaster.narrate.mock.calls.at(-1)![0].declarations.map((item: { characterName: string }) => item.characterName)
+        expect(declarations).toEqual(expect.arrayContaining(["Kael", "Tork"]))
+    })
+
+    it("sem orientações do dono, nem a seção nem a repetição aparecem", async () => {
+        const { id, owner } = await table()
+        await addReadyOpex(id, owner, "Tork", 5)
+        await game.startCampaign(id, owner)
+        await settle(id)
+        opexReplies.push(declare(id, { acao: "nada", texto: "" }))
+        await game.submitGameAction(id, { kind: "declaration", content: "Abro a porta." }, owner)
+        await settle(id)
+        expect(opexCalls[0]!.instructions).not.toContain("Orientações do dono")
+        expect(opexCalls[0]!.prompt).not.toContain("Lembre: orientações do dono")
+        expect(opexCalls[0]!.instructions).toContain("- Kael — personagem de jogador humano")
+    })
 })
 
 describe("Personagens Opex na mesa (DND-26)", () => {
@@ -173,7 +238,7 @@ describe("Personagens Opex na mesa (DND-26)", () => {
         expect(narration.turnNumber).toBe(2)
         expect(narration.content).toContain("Tork: Ergo o escudo.")
         expect(narration.content.indexOf("Tork")).toBeLessThan(narration.content.indexOf("Brunna"))
-        expect(saveOpexCharacterMemories).toHaveBeenCalledWith(expect.objectContaining({ memberId: first }), [{ title: "Confiança em Kael", text: "Kael parece corajoso." }], 1)
+        expect(saveOpexCharacterMemories).toHaveBeenCalledWith(expect.objectContaining({ memberId: first }), [{ title: "Confiança em Kael", text: "Kael parece corajoso.", category: "OUTRO" }], 1)
         const state = await game.getGameState(id, owner)
         expect(state.turn).toMatchObject({ number: 2, phase: "players", opexActor: null })
         expect(state.messages.find((message) => message.memberId === first && message.kind === "declaration")).toMatchObject({ opex: true })

@@ -81,6 +81,10 @@ export const SUBSCRIPTION_TARGETS: readonly SubscriptionTarget[] = [
     { agent: "opex", target: "dndicas/opex/*", mode: "inject" },
     ...FIXED_CHANNELS.filter((channel) => channel.owner !== "opex").map((channel) => ({ agent: "opex" as const, target: channel.slug, mode: "manage" as const })),
     { agent: "maddox", target: `${CAMPAIGN_CHANNEL_PREFIX}*`, mode: "search" },
+    // DND-57: os agentes globais alcançam os canais individuais (inclusive de Opex removidos) para a reclassificação das
+    // categorias; `manage` não entra no contexto deles.
+    { agent: "personagem-opex", target: "dndicas/personagem-opex/*", mode: "manage" },
+    { agent: "npc-opex", target: "dndicas/npc-opex/*", mode: "manage" },
 ]
 
 /** O Agente Opex com o mesmo agente assinando o mesmo alvo: a exata `inject` do dono vence a `manage`. */
@@ -161,6 +165,30 @@ export const CAMPAIGN_CATEGORIES: Record<MaddoxCampaignMemoryKind, CategoryDef> 
 }
 
 export const CAMPAIGN_CATEGORY_LIST: readonly CategoryDef[] = Object.values(CAMPAIGN_CATEGORIES)
+
+/**
+ * Categorias próprias das memórias dos Personagens e NPCs Opex (DND-57), abaixo de OUTRO: o que o personagem sente,
+ * pretende e acha nunca deve pesar como regra no contexto.
+ */
+export const OPEX_ONLY_CATEGORIES = {
+    sentimento: { key: "SENTIMENTO", label: "Sentimento", priority: -16 },
+    plano: { key: "PLANO", label: "Plano", priority: -17 },
+    opiniao: { key: "OPINIAO", label: "Opinião", priority: -18 },
+} as const satisfies Record<string, CategoryDef>
+
+export const OPEX_ONLY_CATEGORY_LIST: readonly CategoryDef[] = Object.values(OPEX_ONLY_CATEGORIES)
+
+/** Categorias que o agente do Opex pode escolher para as próprias memórias (a primeira explicação de cada uma vai no prompt). */
+export const OPEX_MEMORY_CATEGORY_KEYS = ["SENTIMENTO", "PLANO", "OPINIAO", "RELACAO", "FATO", "EVENTO", "OUTRO"] as const
+export type OpexMemoryCategory = (typeof OPEX_MEMORY_CATEGORY_KEYS)[number]
+/** Categoria de quem não escolheu (ou escolheu fora da lista). */
+export const OPEX_MEMORY_FALLBACK_CATEGORY: OpexMemoryCategory = "OUTRO"
+
+/** Categorias padrão da rede tratadas como regra no contexto: proibidas nas memórias dos Opex. */
+export const RULE_CATEGORY_KEYS = ["PROJECT_RULES", "ARCHITECTURE", "CONSTRAINTS", "CONFIG_VALUES", "NAMING"] as const
+
+/** Tudo o que o dndicas garante no Engramind (bootstrap, provisionamento da campanha e teste da integração). */
+export const ENGRAMIND_CATEGORY_LIST: readonly CategoryDef[] = [...CAMPAIGN_CATEGORY_LIST, ...OPEX_ONLY_CATEGORY_LIST]
 
 /** Formato da chave de categoria do Engramind: maiúsculas, dígitos e `_`, começando por letra, até 40. */
 export const CATEGORY_KEY_PATTERN = /^[A-Z][A-Z0-9_]{0,39}$/

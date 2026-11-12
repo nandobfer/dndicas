@@ -121,6 +121,28 @@ campanhas são `FATO`, `EVENTO`, `LOCAL`, `MISSAO`, `RELACAO` e `OUTRO` (priorid
 reordenar o contexto dos outros apps), garantidas no bootstrap e **na criação de cada campanha**. Conflito usa a
 existente; lista cheia vira aviso e a gravação usa `OUTRO` (ou a primeira).
 
+**Memórias dos Opex (DND-57).** `SENTIMENTO` ("Sentimento", -16), `PLANO` ("Plano", -17) e `OPINIAO` ("Opinião", -18), abaixo de
+`OUTRO` (`OPEX_ONLY_CATEGORIES`); `ENGRAMIND_CATEGORY_LIST` (campanhas + Opex) é o que o bootstrap, o provisionamento da campanha e o
+teste da integração garantem. O Personagem e o NPC Opex escolhem a categoria das próprias memórias entre
+`OPEX_MEMORY_CATEGORY_KEYS` (`SENTIMENTO`, `PLANO`, `OPINIAO`, `RELACAO`, `FATO`, `EVENTO`, `OUTRO`); as de regra
+(`RULE_CATEGORY_KEYS`: `PROJECT_RULES`, `ARCHITECTURE`, `CONSTRAINTS`, `CONFIG_VALUES`, `NAMING`) são proibidas. Antes, sem
+categoria, a rede gravava na padrão (`PROJECT_RULES`) e os pensamentos do Opex entravam no contexto como regra. Gravação:
+`resolveOpexCategory` (`opex-memory-category.ts`, puro) manda a escolhida se existir na rede, senão `OUTRO`; `postWithCategoryFallback`
+(`categories.ts`) regrava como `OUTRO` (e, sem `OUTRO`, na padrão) em `CATEGORY_NOT_FOUND`, também na entrega da fila
+`engramind_pending_writes` (o corpo guarda a `category`). A memória inicial do NPC Opex é `FATO`; a gravada pelo Maddox
+(`gravar_memoria_npc_opex`) é `OUTRO`.
+
+**Reclassificação única (DND-57, `server/opex-memory-reclassify.ts`).** Migração `reclassify-opex-memories`
+(`src/lib/db/migrations/reclassify-opex-memories.ts`): no boot, em segundo plano (o `dbConnect` não espera), percorre os canais
+`dndicas/personagem-opex/<campanha>/<membro>` e `dndicas/npc-opex/<campanha>/<npc>` (memórias ativas, permanentes e arquivadas com
+categoria de regra), pede ao modelo do Personagem Opex (rigor da campanha) a categoria de cada uma, uma geração por lote de 30 por canal
+(consumo `maddox-opex-memory-reclassify`), e faz `PATCH` com `expected_version`. Geração com falha ou resposta inválida = `OUTRO`;
+conflito de versão = ignorada (log); outras falhas pontuais vão para o log. Lê e grava com os agentes globais `dndicas/personagem-opex`
+e `dndicas/npc-opex`, que assinam `dndicas/personagem-opex/*` e `dndicas/npc-opex/*` em **`manage`** (em `SUBSCRIPTION_TARGETS`; não
+entram no contexto deles) e assim alcançam também os canais de Opex removidos; canal arquivado é restaurado pelo token de app, ajustado
+e arquivado de novo. A marca em `migration_marks` só é gravada com `done`; Engramind fora, sem token ou sem modelo = `retry` (nada
+marcado, tenta no próximo boot). Nunca derruba o boot.
+
 ## Memórias das campanhas (`server/campaign-memories.ts`, `server/campaign-channels.ts`)
 
 O Engramind é a **única fonte**: nada fica no MongoDB. Canais `dndicas/maddox/campanhas/<id>/{jogadores,mestre}`,
@@ -195,9 +217,11 @@ configuração ao token de app nos canais que ele criou.
   nessa assinatura). O token `agent` fica cifrado no membro (`opex.engramind.tokenBox`, `select: false`; sem
   `INTEGRATIONS_ENCRYPTION_KEY` não é gravado e o Opex joga sem memórias). Idempotente; falha fica em `opex.engramind.error`
   e a primeira decisão sem token tenta de novo.
-- **Contexto.** `opexCharacterMemoryBlock` pede `GET /v1/context` com o token do Opex nos 3 canais (nunca lança).
-- **Gravação.** A cada declaração, as `memorias` do JSON do Opex vão ao canal individual com a chave `opex:<título
-  normalizado>`, `upsert` (o mesmo assunto atualiza) e as tags `personagem-opex`, `turno:<n>` e `gravado:<ms>` (DND-44: a volta
+- **Contexto.** `opexCharacterMemoryBlock` pede `GET /v1/context` com o token do Opex em **duas chamadas independentes**
+  (DND-57): o canal global (`guidance`, as orientações do dono, que o prompt põe em seção própria e prioritária) e os canais
+  Jogadores + individual (`memories`). A falha de uma não derruba a outra; nunca lança.
+- **Gravação.** A cada declaração, as `memorias` do JSON do Opex vão ao canal individual com a categoria escolhida (DND-57, ver
+  Categorias), a chave `opex:<título normalizado>`, `upsert` (o mesmo assunto atualiza) e as tags `personagem-opex`, `turno:<n>` e `gravado:<ms>` (DND-44: a volta
   a um turno da campanha as acompanha). Rede fora ou token recusado → `engramind_pending_writes` com `agentMemberId`; `flushPendingWrites` entrega com o token do próprio Opex (sem token, a entrada é descartada).
 - **Ciclo de vida.** Remover o Opex arquiva o canal individual, desativa o agente e revoga o token
   (`retireOpexCharacterAgent`). `syncCampaignChannelLifecycle` arquiva/restaura também os canais individuais dos Opex ativos.

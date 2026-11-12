@@ -2,12 +2,14 @@ import { engramindCodeOf, type EngramindClient } from "@engramind/client/server"
 import { dbConnect } from "@/lib/db"
 import { decryptSecret, encryptSecret, isEncryptedSecret, isSecretBoxConfigured } from "@/lib/crypto/secretBox"
 import { MaddoxCampaignMemberModel, MaddoxCampaignModel } from "@/features/maddox/models"
-import { AGENT_TOKEN_SCOPES, CAMPAIGN_VISIBILITY_NAMES, ENGRAMIND_APP, OPEX_CHARACTER_GLOBAL_CHANNEL, campaignChannel, opexCharacterAgentSlug, opexCharacterChannel } from "../constants"
+import { AGENT_TOKEN_SCOPES, CAMPAIGN_VISIBILITY_NAMES, ENGRAMIND_APP, OPEX_CHARACTER_GLOBAL_CHANNEL, OPEX_MEMORY_FALLBACK_CATEGORY, campaignChannel, opexCharacterAgentSlug, opexCharacterChannel } from "../constants"
 import { clientFor, engramindAppClient, engramindConnection } from "./client"
 import { globalMemoriesFor, type OpexGlobalMemory } from "./global-memories"
 import { ensureAgentSubscription, tidyChannel } from "./bootstrap"
 import { provisionCampaignMemoryNetworkSafely } from "./campaign-channels"
 import { rewindTags } from "../campaign-memory-format"
+import { resolveOpexCategory } from "../opex-memory-category"
+import { listCategoryKeys, postWithCategoryFallback } from "./categories"
 import { PendingWrite, pendingWriteId } from "./pending-writes"
 import { AcaoAuditoria, auditEngramind, engramindLog, messageOf } from "./shared"
 
@@ -39,6 +41,8 @@ export interface OpexMemberRef {
 export interface OpexMemoryInput {
     title: string
     text: string
+    /** Categoria escolhida pelo agente, já normalizada (DND-57); ausente = OUTRO. */
+    category?: string
 }
 
 async function ensureAgent(client: EngramindClient, memberId: string, name: string): Promise<void> {
@@ -112,23 +116,43 @@ export async function opexCharacterClient(memberId: string): Promise<EngramindCl
     }
 }
 
+/** Memórias do Personagem Opex para o prompt (DND-57): as orientações do dono à parte das demais. */
+export interface OpexCharacterMemoryBlocks {
+    /** Contexto do canal global `dndicas/personagem-opex` (orientações do dono). */
+    guidance: string
+    /** Contexto dos canais Jogadores e individual. */
+    memories: string
+}
+
+async function contextOf(client: EngramindClient, channels: string[], memberId: string, label: string): Promise<string> {
+    try {
+        const view = await client.context({ channels }, { timeoutMs: CONTEXT_TIMEOUT_MS })
+        return typeof view?.content === "string" ? view.content.trim() : ""
+    } catch (error) {
+        engramindLog.warn({ memberId, err: messageOf(error) }, `[engramind] Personagem Opex sem ${label} neste turno`)
+        return ""
+    }
+}
+
 /**
- * Bloco de memórias do Personagem Opex para o prompt: o contexto dos 3 canais (global, Jogadores, individual) pedido com
- * o token dele. Sem token ou com a rede fora, tenta provisionar uma vez e segue sem memórias. Nunca lança.
+ * Memórias do Personagem Opex para o prompt, pedidas com o token dele em duas chamadas independentes (DND-57): o canal
+ * global (orientações do dono, em seção própria) e os canais Jogadores + individual. A falha de uma não derruba a outra.
+ * Sem token ou com a rede fora, tenta provisionar uma vez e segue sem memórias. Nunca lança.
  */
-export async function opexCharacterMemoryBlock(ref: OpexMemberRef): Promise<string> {
+export async function opexCharacterMemoryBlock(ref: OpexMemberRef): Promise<OpexCharacterMemoryBlocks> {
     try {
         let client = await opexCharacterClient(ref.memberId)
         if (!client && (await engramindConnection().catch(() => null))) {
             await provisionOpexCharacterAgent(ref)
             client = await opexCharacterClient(ref.memberId)
         }
-        if (!client) return ""
-        const view = await client.context({ channels: opexCharacterChannels(ref.campaignId, ref.memberId) }, { timeoutMs: CONTEXT_TIMEOUT_MS })
-        return typeof view?.content === "string" ? view.content.trim() : ""
+        if (!client) return { guidance: "", memories: "" }
+        const [global, ...rest] = opexCharacterChannels(ref.campaignId, ref.memberId)
+        const [guidance, memories] = await Promise.all([contextOf(client, [global!], ref.memberId, "as orientações do dono"), contextOf(client, rest, ref.memberId, "memórias")])
+        return { guidance, memories }
     } catch (error) {
         engramindLog.warn({ memberId: ref.memberId, err: messageOf(error) }, "[engramind] Personagem Opex sem memórias neste turno")
-        return ""
+        return { guidance: "", memories: "" }
     }
 }
 
@@ -155,13 +179,24 @@ export async function saveOpexCharacterMemories(ref: OpexMemberRef, memories: re
     // O teto real é o limite do canal no Engramind (o corte em `opexMemoriesOf` é só proteção, bem acima).
     const { textMaxOf } = await import("./campaign-memories")
     const max = client ? await textMaxOf(client, channel).catch(() => null) : null
+    const categories = client ? await listCategoryKeys(client) : null
     for (const memory of memories) {
         const key = keyOf(memory.title)
         if (key === "opex:") continue
-        const body = { channel, key, upsert: true, title: memory.title.slice(0, 120), text: max && memory.text.length > max ? memory.text.slice(0, max).trimEnd() : memory.text, tags: ["personagem-opex", ...rewindTags(turnNumber)], origin: { source: "maddox", label: ref.characterName || "Personagem Opex" } }
+        const category = resolveOpexCategory(memory.category ?? OPEX_MEMORY_FALLBACK_CATEGORY, categories)
+        const body = {
+            channel,
+            key,
+            upsert: true,
+            title: memory.title.slice(0, 120),
+            text: max && memory.text.length > max ? memory.text.slice(0, max).trimEnd() : memory.text,
+            ...(category ? { category } : {}),
+            tags: ["personagem-opex", ...rewindTags(turnNumber)],
+            origin: { source: "maddox", label: ref.characterName || "Personagem Opex" },
+        }
         try {
             if (!client) throw new Error("Token do Personagem Opex indisponível")
-            await client.call("POST", "/v1/memories", { body })
+            await postWithCategoryFallback(client, body)
             saved++
         } catch (error) {
             const id = pendingWriteId(ref.campaignId, `${ref.memberId}:${key}`)

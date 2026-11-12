@@ -1,3 +1,4 @@
+import type { Types } from "mongoose"
 import { DomainError } from "@/lib/api/route"
 import { loggerFor } from "@/lib/logger"
 import { MADDOX_OPEX_GENERATION_TIMEOUT_MS, MADDOX_OPEX_NPC_COMBAT_CONSUMPTION_ORIGIN, MADDOX_OPEX_NPC_CONSUMPTION_ORIGIN, MADDOX_OPEX_NPC_TIMEOUT_MS, type MaddoxRigorLevel } from "../constants"
@@ -18,6 +19,7 @@ import {
     type OpexNpcSceneDecision,
     type OpexNpcSceneTask,
     type OpexPromptContext,
+    type OpexTableMember,
 } from "./opex-prompt"
 
 /**
@@ -42,16 +44,52 @@ export async function loadOpexModel(rigor: MaddoxRigorLevel): Promise<{ settings
 const profileOf = (character: Pick<IMaddoxCharacter, "profile"> | null): Record<string, string> =>
     !character?.profile ? {} : character.profile instanceof Map ? Object.fromEntries(character.profile) : { ...character.profile }
 
-/** Contexto das decisões: instruções da configuração, memórias dos 3 canais, campanha e personagem (com a ficha). */
+/** Personagem da mesa com o membro dono dele (DND-57). */
+export interface OpexTableRosterEntry extends OpexTableMember {
+    memberId: string
+}
+
+/**
+ * Quem está na mesa (DND-57): membros `joined` com personagem nomeado, humanos e Opex, com `self` no Opex que decide.
+ * Quem ainda está na entrevista sem nome ou saiu da campanha não entra. Falha de leitura = mesa vazia (nunca lança).
+ */
+export async function loadOpexTableRoster(campaignId: Types.ObjectId | string, selfMemberId: string): Promise<OpexTableRosterEntry[]> {
+    try {
+        const { MaddoxCampaignMemberModel, MaddoxCharacterModel } = await import("../models")
+        const members = await MaddoxCampaignMemberModel.find({ campaignId, status: "joined", characterId: { $ne: null } })
+            .select("_id kind characterId")
+            .sort({ _id: 1 })
+            .lean<{ _id: Types.ObjectId; kind?: string; characterId: Types.ObjectId }[]>()
+        if (!members.length) return []
+        const characters = await MaddoxCharacterModel.find({ _id: { $in: members.map((member) => member.characterId) } })
+            .select("_id name")
+            .lean<{ _id: Types.ObjectId; name?: string | null }[]>()
+        const names = new Map(characters.map((character) => [String(character._id), character.name?.trim() ?? ""]))
+        return members
+            .map((member) => ({ memberId: String(member._id), name: names.get(String(member.characterId)) ?? "", kind: member.kind === "opex" ? ("opex" as const) : ("human" as const), self: String(member._id) === selfMemberId }))
+            .filter((entry) => entry.name)
+    } catch (error) {
+        log.warn({ err: error instanceof Error ? error.message : String(error) }, "[maddox] mesa do Personagem Opex não lida")
+        return []
+    }
+}
+
+/**
+ * Contexto das decisões: instruções da configuração, quem está na mesa, as orientações do dono (canal global) à parte
+ * das memórias dos canais Jogadores e individual (DND-57), campanha e personagem (com a ficha).
+ */
 export async function opexPromptContext(campaign: IMaddoxCampaign, member: IMaddoxCampaignMember, character: IMaddoxCharacter | null, settings: MaddoxSettings): Promise<OpexPromptContext> {
     const [{ opexCharacterMemoryBlock }, { loadSheetSummaries }] = await Promise.all([import("@/features/engramind/server/opex-characters"), import("./narrator")])
-    const [memories, sheets] = await Promise.all([
+    const [blocks, sheets, roster] = await Promise.all([
         opexCharacterMemoryBlock({ campaignId: String(campaign._id), memberId: String(member._id), characterName: character?.name ?? "" }),
         character?.sheetId ? loadSheetSummaries(campaign, [character]) : Promise.resolve(new Map<string, string>()),
+        loadOpexTableRoster(campaign._id, String(member._id)),
     ])
     return {
         instructions: settings.opexCharacterInstructions,
-        memories,
+        ownerGuidance: blocks.guidance,
+        memories: blocks.memories,
+        table: roster.map(({ name, kind, self }) => ({ name, kind, self })),
         basePrompt: member.opex?.prompt ?? "",
         campaign: {
             name: campaign.name,
