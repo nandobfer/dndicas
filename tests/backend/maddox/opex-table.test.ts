@@ -198,6 +198,52 @@ describe("orientações do dono e quem é humano (DND-57)", () => {
         expect(declarations).toEqual(expect.arrayContaining(["Kael", "Tork"]))
     })
 
+    it("só membros na campanha com personagem nomeado entram na mesa; linhas de quem saiu ficam sem marca; pass e pergunta levam marca; combate não", async () => {
+        const { id, owner } = await table()
+        const tork = await addReadyOpex(id, owner, "Tork", 5)
+        /** Humano extra com personagem (`status` e nome variam): quem saiu, quem só foi convidado e quem ainda não tem nome. */
+        async function human(status: "joined" | "left" | "invited", name: string) {
+            const userId = await seedUser(`u${new mongoose.Types.ObjectId()}`)
+            const _id = new mongoose.Types.ObjectId()
+            const character = await MaddoxCharacterModel.create({ campaignId: id, memberId: _id, userId, name, interview: { status: name ? "done" : "in-progress", scriptVersion: 0 } })
+            await MaddoxCampaignMemberModel.create({ _id, campaignId: id, userId, role: "player", status, joinedAt: new Date(), characterId: character._id })
+            return { memberId: _id, characterId: character._id }
+        }
+        const gorn = await human("left", "Gorn")
+        await human("invited", "Lia")
+        await human("joined", "")
+        await game.startCampaign(id, owner)
+        await settle(id)
+        const kael = await MaddoxCampaignMemberModel.findOne({ campaignId: id, userId: owner }).lean()
+        const line = (kind: string, memberId: unknown, characterName: string, content: string, extra: Record<string, unknown> = {}): Record<string, unknown> => ({ campaignId: id, turnNumber: 1, phase: "players", kind, memberId, characterName, content, ...extra })
+        await MaddoxCampaignMessageModel.insertMany([
+            line("declaration", gorn.memberId, "Gorn", "Arrombo o baú antigo."),
+            line("question", kael!._id, "Kael", "O goblin está armado?"),
+            line("pass", tork, "Tork", ""),
+            line("combat-roll", kael!._id, "Kael", "", { combatRoll: { status: "rolled", reason: "Iniciativa", outcome: "17" } }),
+        ])
+        await MaddoxCampaignModel.updateOne({ _id: id }, { $set: { hidePlayerActions: false } })
+        opexReplies.push(declare(id, { acao: "nada", texto: "" }))
+        await game.submitGameAction(id, { kind: "declaration", content: "Interrogo o goblin." }, owner)
+        await settle(id)
+
+        const { instructions, prompt } = opexCalls[0]!
+        const roster = instructions!.slice(instructions!.indexOf("## Quem está na mesa"), instructions!.indexOf("Os personagens dos jogadores humanos"))
+        expect(roster).toContain("- Kael — personagem de jogador humano")
+        expect(roster).toContain("- Tork — Personagem Opex (você)")
+        // Quem saiu, quem só foi convidado e quem ainda não tem personagem nomeado não aparecem.
+        expect(roster).not.toContain("Gorn")
+        expect(roster).not.toContain("Lia")
+        expect(roster.match(/^- /gm)).toHaveLength(2)
+        // Linha antiga de quem saiu: sem marca.
+        expect(prompt).toContain("[Turno 1 — Gorn declara] Arrombo o baú antigo.")
+        // Pergunta e "não fez nada" levam a marca; o combate não.
+        expect(prompt).toContain("[Turno 1 — Kael (jogador humano) pergunta] O goblin está armado?")
+        expect(prompt).toContain("[Turno 1 — Tork (Personagem Opex) não fez nada]")
+        expect(prompt).toContain("[Turno 1 — combate] Kael — Iniciativa: 17")
+        expect(prompt).not.toMatch(/\(jogador humano\) —|combate\] Kael \(/)
+    })
+
     it("sem orientações do dono, nem a seção nem a repetição aparecem", async () => {
         const { id, owner } = await table()
         await addReadyOpex(id, owner, "Tork", 5)
