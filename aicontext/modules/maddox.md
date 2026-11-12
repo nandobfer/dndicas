@@ -449,7 +449,7 @@ de N jogador(es) online já declararam" / "Turno do mestre — o Maddox está na
 (divisor por turno, Maddox com avatar e cor do rigor, declarações com o retrato do personagem — as minhas à direita —,
 pergunta e resposta ligadas, "Fulano não fez nada (pulado por …)", "Carregar anteriores" com cursor); campo no desenho do
 campo da entrevista (`GameComposer`: caixa única `flex items-end`, texto `flex-1`, três botões de ícone redondos `h-8 w-8` à direita,
-na ordem **Perguntar ao mestre**, **Não fazer nada** e **Declarar** (enviar); Enter declara, também Ctrl/⌘+Enter, Shift+Enter quebra
+na ordem **Perguntar ao mestre** (com a borda premium de IA, DND-52), **Não fazer nada** e **Declarar** (enviar); Enter declara, também Ctrl/⌘+Enter, Shift+Enter quebra
 linha; estado/motivo e contador abaixo da caixa), bloqueado com o
 motivo em pt-BR (turno do mestre, próximo turno, entrevista pendente com link); painel "Na mesa" com presença (ponto
 online/offline) e a situação em cores de raridade (Declarou, Aguardando, Offline (não conta), Entra no próximo turno,
@@ -523,7 +523,7 @@ falha — mesmo que não respeite o sinal —, então a fila anda e o pulso da t
 
 Uma falha da narração encerra a geração ao vivo **antes** de gravar `failedAt` (se a gravação falhar, nenhum cliente fica
 com a bolha parada). `GET …/game/stream` (membros; `maddox.play`): `snapshot { live[] }`, `live-start`, `delta { liveId, text }`,
-`tool { liveId, running }`, `live-end { liveId, messageId, error }` e `ping` (15 s). O mesmo fluxo chega a **todos** os
+`tool { liveId, running }`, `live-text { liveId, text }` (troca o texto ao vivo inteiro; DND-52), `live-end { liveId, messageId, error }` e `ping` (15 s). O mesmo fluxo chega a **todos** os
 jogadores com a mesa aberta. O texto ao vivo passa pelo `createMarkupFilter` (marcação do catálogo nunca crua) e, ao gravar, as
 menções são resolvidas com os nomes reservados da campanha **e dos NPCs**.
 
@@ -1526,7 +1526,8 @@ Código: ferramenta `suggest_actions` (`MADDOX_ACTION_OPTIONS_TOOLS` em `server/
 acoes[] }] }`: sem chamada extra de IA. A orientação vai no **texto da tarefa** (`MADDOX_ACTION_OPTIONS_TASK_LINE`, via
 `narratorTaskText(task, { actionOptions })`), como a densidade, para valer com a sessão do OpenCode reaproveitada. A ferramenta é
 oferecida (AI SDK: `buildMaddoxAiTools({ actionOptions })`; OpenCode: listada no bloco do MCP `dndicas-maddox`) só nas narrações
-fora do combate tático; nunca nas respostas a perguntas. Se o modelo não chamar, a narração fica sem sugestões.
+fora do combate tático; nunca nas respostas a perguntas. Se o modelo não chamar, a narração fica sem sugestões. Desde a DND-52, a
+linha pede a chamada **antes de escrever a narração** (escrita única), não mais "no fim".
 
 | Regra | Comportamento |
 | --- | --- |
@@ -1991,6 +1992,63 @@ quem corrige quem, a leitura e a conversa), `player-choice.test.ts` (parte pura 
 `tactical-combat.test.ts` (pergunta, resposta e prazo), de `game.test.ts` (conversa), de `interview-character-build.test.ts`
 (magias extras e atributo) e de `sheet-restore.test.ts` (o reinício mantém as escolhas) e, na tela, o bloco DND-51 de
 `maddox-combat-prep.test.tsx`.
+
+## Borda premium e narração escrita uma vez (DND-52)
+
+**Botão.** `AskMasterButton` (`components/game/composer-buttons.tsx`) tem o tratamento dos botões premium de IA, igual ao
+"Entender com IA" (`EntityAIUnderstandButton`): `motion.button` com o anel gradiente `from-blue-500/20 via-purple-500/20
+to-blue-500/20 bg-[length:200%_auto] animate-gradient` em `p-[1.5px]`, miolo em vidro escuro (`bg-black/40 backdrop-blur-[4px]`,
+`group-hover:bg-slate-900/40`), ícone `HelpCircle` (mantido por decisão do dono) `text-blue-400` → `group-hover:text-white`,
+`whileHover` 1.08 / `whileTap` 0.94 e `focus:ring-2 focus:ring-blue-500/40`. Mesmo diâmetro dos outros botões (`h-8 w-8
+rounded-full`, miolo `rounded-full`). Desabilitado: `opacity-50`, sem ponteiro, sem animação e sem escala; com
+`prefers-reduced-motion`: `motion-reduce:animate-none` (anel parado) e sem escala (`useReducedMotion`). O tutorial da campanha
+(`TableTutorialCard`) usa o mesmo componente.
+
+**Causa da narração duplicada.** A investigação (campanha `6af1283c9fab85d05645fff7`) mostrou que o texto já era **gravado**
+duplicado e que cada caso vinha de **uma única geração** (um só registro em `ai_consumption_logs`, sem `failedAt`, `segment` 0),
+pelo AI SDK (`opencode-go`): o modelo escrevia a cena, chamava ferramentas (`update_campaign_state` e outras, que o prompt pedia
+"antes de concluir" e "no fim") e reescrevia tudo na etapa seguinte; `generateWithTools` somava as etapas com `\n\n`. Não era
+nova tentativa, sessão do OpenCode, continuação nem a tela.
+
+**Correção no prompt (escrita única).** `MADDOX_WRITE_ONCE_RULE` (no `MADDOX_NARRATOR_FORMAT`, nos dois modos e nas respostas):
+chamar primeiro todas as ferramentas e escrever o texto **uma única vez**, sem texto antes nem entre as chamadas, nunca repetindo
+nem reescrevendo. Por decisão do dono, o modelo não reescreve, pois a reescrita dobra os tokens de saída. A `MADDOX_PERSISTENCE_RULE` agora diz "Antes de
+escrever a narração, grave o que mudou" e "Grave antes de escrever a narração, nunca no meio nem depois dela"; `suggest_actions`,
+`update_campaign_state` e `request_check` pedem a chamada antes do texto nas próprias descrições.
+
+**Defesa no servidor.** `dropRewrittenParagraphs` (`narration-dedupe.ts`, puro) compara os parágrafos (sem marcação `{{Tipo:Nome}}`,
+menções, caixa e pontuação) pelo coeficiente de Dice sobre pares de palavras: com semelhança ≥ `MADDOX_REWRITE_SIMILARITY` (0,5)
+ou igualdade depois de normalizar, o parágrafo `j` é a reescrita do `i`. Parágrafos com menos de `MADDOX_REWRITE_MIN_PAIRS` (6)
+pares de palavras nunca contam, nem iguais: falas e pausas curtas ("— Corram!", "Silêncio.") se repetem de propósito e o
+conteúdo novo entre elas fica; saem os
+parágrafos de `i` até `j - 1` (a primeira versão e o que veio entre as duas) e fica a versão escrita depois das ferramentas. Repete
+até não sobrar repetição. Nos textos reais, as reescritas mediram de 0,61 a 1,00 e parágrafos distintos até 0,25. `generate`
+(`server/narrator.ts`) aplica a defesa ao texto final nos dois caminhos (AI SDK e OpenCode), em narrações, continuações e
+respostas, antes de resolver as menções; quando algo sai, registra `warn` "[maddox] narração reescrita depois das ferramentas:
+primeira versão descartada" com `campaignId`, `turnNumber`, `kind` e `dropped` (sem o texto).
+
+**Tela ao vivo.** `liveText` roda a mesma defesa sobre o texto visível a cada trecho com quebra de linha, só nos parágrafos já
+fechados (`splitOpenParagraph`: o trecho depois da última quebra de parágrafo, ainda em escrita, nunca é comparado, porque pode ser
+o começo igual de um parágrafo anterior), e no fim sobre o texto inteiro; se algo sai,
+chama `sink.replace(texto)` (`MaddoxMasterSink.replace`, opcional; `LiveSink.replace` em `game-live.ts`), que troca o `live.text`
+(também no `snapshot` de quem reconecta) e emite `live-text { liveId, text }`. `reduceGameStream` troca o texto do item, e o
+`settled` herda o texto corrigido: a bolha ao vivo termina igual à mensagem gravada. A quebra de parágrafo no fim do texto é
+mantida, para os próximos trechos seguirem no parágrafo novo.
+
+**Falha no meio.** Inalterado: o texto parcial de uma geração que falha nunca é gravado (`live-end` com `error` tira a bolha), e a
+nova tentativa depois de `MADDOX_MASTER_RETRY_MS` começa do zero.
+
+Mensagens já gravadas com duplicação não são corrigidas (a defesa vale para as novas).
+
+Testes: `narration-dedupe.test.ts` (os 7 textos reais duplicados de `fixtures/narration-rewrites.ts`, narrações legítimas
+intactas, bloco repetido, continuação, frases curtas parecidas e iguais com cena nova no meio, parágrafo em escrita, marcação e
+quebra final), `narrator-rewrite.test.ts` (narrador real sobre
+`streamText` roteirizado: reescrita depois de `update_campaign_state` grava só a reescrita e a tela converge via `live-text`;
+continuação legítima inteira; bloco entregue duas vezes; falha com texto parcial e nova tentativa; 10 narrações seguidas com uma
+falha no meio sem parágrafo repetido; parágrafo em escrita igual ao começo de um anterior e falas curtas repetidas sem `live-text`
+nem corte; instruções com a escrita única), `narrator-prompt.test.ts` (regras novas nos dois modos e a
+linha do `suggest_actions`), `maddox-game-stream.test.ts` (`live-text`) e, na tela, `ask-master-button.test.tsx` (anel, miolo,
+movimento reduzido, desabilitado, clique e os outros botões sem anel).
 
 ## Testes
 

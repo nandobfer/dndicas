@@ -16,6 +16,8 @@ export interface MaddoxMasterDeclaration {
 export interface MaddoxMasterSink {
     delta(text: string): void
     tool(running: boolean): void
+    /** Troca o texto ao vivo inteiro (DND-52: a reescrita depois das ferramentas substitui a primeira versão). */
+    replace?(text: string): void
 }
 
 export interface MaddoxNarrationContext {

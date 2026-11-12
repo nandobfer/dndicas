@@ -503,6 +503,7 @@ export interface LiveSink {
     liveId: string
     delta(text: string): void
     tool(running: boolean): void
+    replace(text: string): void
     end(result: { messageId: string | null; error: string | null }): void
 }
 
@@ -521,6 +522,11 @@ export function beginLive(campaignId: string, input: Pick<MaddoxLiveGenerationDt
             if (ended || !text || !hubs.get(campaignId)?.live.has(live.liveId)) return
             live.text += text
             emit(campaignId, { type: "delta", liveId: live.liveId, text })
+        },
+        replace(text) {
+            if (ended || live.text === text || !hubs.get(campaignId)?.live.has(live.liveId)) return
+            live.text = text
+            emit(campaignId, { type: "live-text", liveId: live.liveId, text })
         },
         tool(running) {
             if (ended || live.tool === running || !hubs.get(campaignId)?.live.has(live.liveId)) return

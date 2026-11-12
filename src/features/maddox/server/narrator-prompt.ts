@@ -147,21 +147,29 @@ export const MADDOX_FREE_ACTION_RULE = [
     "- Avalie se cada ação declarada é possível para o personagem e coerente com o cenário e o grau de rigor. Se não for (um poder que ele não tem, algo que as regras do mundo não permitem), não recuse fora da história: narre a tentativa frustrada, com a causa perceptível na ficção e pistas sobre o impedimento, sem impor custo só porque falhou.",
 ].join("\n")
 
+/**
+ * Escrita única (DND-52): todo texto da resposta, de todas as etapas, vira uma mensagem só. O modelo que escrevia a cena,
+ * chamava ferramentas e reescrevia tudo deixava a narração duplicada e gastava o dobro de tokens de saída.
+ */
+export const MADDOX_WRITE_ONCE_RULE =
+    "- Chame primeiro todas as ferramentas de que precisar (consultas, gravações, testes, combate, sugestões) e só depois escreva o texto, uma única vez. Não escreva nada antes nem entre as chamadas: tudo o que você escreve é somado na mesma mensagem, então nunca repita nem reescreva o que já escreveu."
+
 export const MADDOX_NARRATOR_FORMAT = [
     "## Formato da resposta",
     "- Markdown em parágrafos de prosa, no tamanho pedido na tarefa. Use **negrito** para nomes próprios do mundo (personagens, lugares, facções, NPCs) e para ênfase, e citação (`>`) para falas e trechos marcantes quando ajudar.",
     CATALOG_CITATION_RULE,
     "- Não use títulos de turno, tabelas nem listas de regras; a narração é uma cena.",
+    MADDOX_WRITE_ONCE_RULE,
 ].join("\n")
 
 export const MADDOX_PERSISTENCE_RULE = [
     "## Continuidade e anotações da campanha",
     "- O estado gravado abaixo é a versão oficial da história. Consulte os detalhes pelas ferramentas quando a cena depender deles (NPC, local, missão, memória) em vez de inventar.",
-    "- Antes de concluir, grave o que mudou: `update_campaign_state` quando a cena, o local, a situação ou a decisão aguardada mudar; `save_npc` para NPCs novos ou que mudaram; `save_memory` para locais (`local`), missões (`missao`, com `status`), marcos da história (`evento`), relações (`relacao`) e fatos duráveis (`fato`); `update_character_state` quando ferimentos, recursos ou a situação de um personagem mudar, inclusive mudanças visíveis de aparência (cabelo tingido ou cortado, cicatriz nova, roupa ou armadura nova), que entram nas ilustrações da cena.",
+    "- Antes de escrever a narração, grave o que mudou: `update_campaign_state` quando a cena, o local, a situação ou a decisão aguardada mudar; `save_npc` para NPCs novos ou que mudaram; `save_memory` para locais (`local`), missões (`missao`, com `status`), marcos da história (`evento`), relações (`relacao`) e fatos duráveis (`fato`); `update_character_state` quando ferimentos, recursos ou a situação de um personagem mudar, inclusive mudanças visíveis de aparência (cabelo tingido ou cortado, cicatriz nova, roupa ou armadura nova), que entram nas ilustrações da cena.",
     "- Grave só o que é novo ou mudou, sem duplicar nem gravar a cada golpe ou fala. Separe o que os jogadores sabem (`players`) do que é segredo do mestre (`master`).",
     "- Os jogadores consultam no Diário da campanha o estado da história (`update_campaign_state`), a condição dos personagens (`update_character_state`), a descrição pública dos NPCs e as anotações `players`. Nunca ponha segredos nesses campos: o que só o mestre sabe vai em `masterNotes` do `save_npc` ou em `save_memory` com `visibility: master`.",
     `- Cada anotação é um texto consolidado e conciso, de até uns ${MADDOX_TOOL_TEXT_GUIDE.toLocaleString("pt-BR")} caracteres: ao atualizar, reescreva o essencial em vez de acumular. Se o retorno trouxer \`truncated\`, consolide e grave de novo.`,
-    "- Grave antes ou depois de escrever a narração, nunca no meio dela, e não comente as gravações no texto.",
+    "- Grave antes de escrever a narração, nunca no meio nem depois dela, e não comente as gravações no texto.",
 ].join("\n")
 
 /** Consulta ao catálogo do DnDicas na narração (todos os graus). */
@@ -550,7 +558,7 @@ export function combatDifficultyReinforcementLine(level: MaddoxCombatDifficultyL
  * Linha das sugestões de ação (DND-30): vai no texto da tarefa das narrações em que a ferramenta `suggest_actions` é oferecida
  * (nunca nas respostas nem no combate tático), para valer mesmo com a sessão do OpenCode reaproveitada.
  */
-export const MADDOX_ACTION_OPTIONS_TASK_LINE = `Se a narração terminar no ponto de decisão (sem testes pedidos), chame \`suggest_actions\` no fim com 2 a ${MADDOX_ACTION_OPTIONS_MAX} ações curtas, plausíveis e variadas para cada personagem, em primeira pessoa, como o jogador declararia ("Examino a porta…"). Não cite as sugestões na narração.`
+export const MADDOX_ACTION_OPTIONS_TASK_LINE = `Se a narração terminar no ponto de decisão (sem testes pedidos), chame \`suggest_actions\` antes de escrever a narração, com 2 a ${MADDOX_ACTION_OPTIONS_MAX} ações curtas, plausíveis e variadas para cada personagem, em primeira pessoa, como o jogador declararia ("Examino a porta…"). Não cite as sugestões na narração.`
 
 /**
  * Seção "NPCs Opex" (DND-27) da tarefa das narrações (nunca das respostas): quem é NPC Opex e a regra de consultar o agente

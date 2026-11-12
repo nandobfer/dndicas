@@ -458,6 +458,8 @@ export type MaddoxGameStreamLine =
     | { type: "snapshot"; live: MaddoxLiveGenerationDto[] }
     | { type: "live-start"; live: MaddoxLiveGenerationDto }
     | { type: "delta"; liveId: string; text: string }
+    /** Texto ao vivo inteiro, substituindo o anterior (DND-52: narração reescrita depois das ferramentas). */
+    | { type: "live-text"; liveId: string; text: string }
     | { type: "tool"; liveId: string; running: boolean }
     | { type: "live-end"; liveId: string; messageId: string | null; error: string | null }
     | { type: "check-rolled"; messageId: string; roll: DiceRollResponse }
