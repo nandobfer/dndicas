@@ -17,7 +17,7 @@ import {
     type MaddoxRigorLevel,
 } from "../constants"
 import { createMarkupFilter } from "../catalog-markup"
-import { dropRewrittenParagraphs } from "../narration-dedupe"
+import { dropRewrittenParagraphs, splitOpenParagraph } from "../narration-dedupe"
 import {
     MaddoxCampaignMemberModel,
     MaddoxCampaignMessageModel,
@@ -342,7 +342,8 @@ interface GenerateArgs {
 }
 
 /**
- * Stream de texto com a marcação do catálogo segurada (nunca crua ao vivo). A cada parágrafo fechado, a tela ao vivo passa
+ * Stream de texto com a marcação do catálogo segurada (nunca crua ao vivo). A cada trecho com quebra de linha, os parágrafos
+ * já fechados (nunca o que ainda está em escrita) passam
  * pela mesma defesa da gravação (DND-52): se a reescrita depois das ferramentas repetir a primeira versão, o texto ao vivo
  * é trocado pela versão sem repetição (`sink.replace`), igual ao que vai ser gravado.
  */
@@ -350,11 +351,13 @@ function liveText(sink: MaddoxMasterSink) {
     const markup = createMarkupFilter()
     let text = ""
     let shown = ""
-    const settle = () => {
+    // Só os parágrafos fechados entram na comparação; no fim (`final`), todos estão fechados.
+    const settle = (final: boolean) => {
         if (!sink.replace) return
-        const clean = dropRewrittenParagraphs(shown)
+        const { closed, open } = final ? { closed: shown, open: "" } : splitOpenParagraph(shown)
+        const clean = dropRewrittenParagraphs(closed)
         if (!clean.dropped) return
-        shown = clean.text
+        shown = clean.text + open
         sink.replace(shown)
     }
     const show = (visible: string) => {
@@ -366,11 +369,11 @@ function liveText(sink: MaddoxMasterSink) {
         push(chunk: string) {
             text += chunk
             show(markup.push(chunk))
-            if (chunk.includes("\n")) settle()
+            if (chunk.includes("\n")) settle(false)
         },
         finish() {
             show(markup.flush())
-            settle()
+            settle(true)
             return text
         },
     }

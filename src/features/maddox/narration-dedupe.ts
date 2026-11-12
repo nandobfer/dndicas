@@ -7,10 +7,25 @@
 
 /** Semelhança mínima (Dice sobre pares de palavras) para tratar dois parágrafos como versões do mesmo texto. */
 export const MADDOX_REWRITE_SIMILARITY = 0.5
-/** Abaixo deste número de pares de palavras, só conta como repetição o parágrafo igual depois de normalizado. */
-const MIN_PAIRS = 6
+/**
+ * Parágrafo com menos pares de palavras que isto nunca conta como repetição, nem igual: falas e pausas curtas ("— Corram!",
+ * "Silêncio.") se repetem de propósito na cena, e tratá-las como reescrita apagaria o conteúdo novo entre as duas.
+ */
+export const MADDOX_REWRITE_MIN_PAIRS = 6
 
 const PARAGRAPH_BREAK = /\n[ \t]*\n/
+
+/**
+ * Separa o texto ao vivo em parágrafos já fechados (até a última quebra de parágrafo, inclusive) e o trecho ainda em escrita.
+ * A defesa ao vivo só compara os fechados: um parágrafo pela metade pode ser o começo igual de um anterior.
+ */
+export function splitOpenParagraph(text: string): { closed: string; open: string } {
+    const breaks = [...text.matchAll(/\n[ \t]*\n/g)]
+    const last = breaks.at(-1)
+    if (!last) return { closed: "", open: text }
+    const end = last.index + last[0].length
+    return { closed: text.slice(0, end), open: text.slice(end) }
+}
 
 function words(paragraph: string): string[] {
     return paragraph
@@ -39,15 +54,15 @@ function shapeOf(paragraph: string): Shape {
     return { normalized: list.join(" "), pairs: pairs(list) }
 }
 
-/** Dois parágrafos são versões do mesmo texto: iguais depois de normalizados ou, se longos, com Dice ≥ o limite. */
+/** Dois parágrafos (com pelo menos `MADDOX_REWRITE_MIN_PAIRS` pares de palavras) são versões do mesmo texto: iguais depois de
+ * normalizados ou com Dice ≥ o limite. */
 export function sameParagraph(a: string, b: string): boolean {
     return similar(shapeOf(a), shapeOf(b))
 }
 
 function similar(a: Shape, b: Shape): boolean {
-    if (!a.normalized || !b.normalized) return false
+    if (a.pairs.size < MADDOX_REWRITE_MIN_PAIRS || b.pairs.size < MADDOX_REWRITE_MIN_PAIRS) return false
     if (a.normalized === b.normalized) return true
-    if (a.pairs.size < MIN_PAIRS || b.pairs.size < MIN_PAIRS) return false
     let shared = 0
     for (const pair of a.pairs) if (b.pairs.has(pair)) shared += 1
     return (2 * shared) / (a.pairs.size + b.pairs.size) >= MADDOX_REWRITE_SIMILARITY

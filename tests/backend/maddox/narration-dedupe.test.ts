@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { dropRewrittenParagraphs, sameParagraph } from "@/features/maddox/narration-dedupe"
+import { dropRewrittenParagraphs, sameParagraph, splitOpenParagraph } from "@/features/maddox/narration-dedupe"
 import { LEGIT_NARRATIONS, REWRITTEN_NARRATIONS } from "./fixtures/narration-rewrites"
 
 const paragraphs = (text: string) => text.split(/\n[ \t]*\n/).map((part) => part.trim()).filter(Boolean)
@@ -54,6 +54,25 @@ describe("narração reescrita (DND-52)", () => {
     it("frase curta repetida só conta quando é igual; parecida, fica", () => {
         expect(dropRewrittenParagraphs("A chuva cai sobre a estrada vazia e fria da colina.\n\nO que você faz?\n\nUther sobe na carroça.\n\nO que vocês fazem?").dropped).toBe(0)
         expect(dropRewrittenParagraphs("Uma linha só, sem quebra.")).toEqual({ text: "Uma linha só, sem quebra.", dropped: 0 })
+    })
+
+    it("fala ou pausa curta repetida de propósito, com cena nova no meio, fica intacta (nem igual conta)", () => {
+        for (const short of ["— Corram!", "Silêncio.", "O que vocês fazem?"]) {
+            const text = [
+                short,
+                "O goblin da direita larga o arco e dispara pela trilha, tropeçando nas raízes, os olhos arregalados de medo.",
+                "Do mato, um segundo vulto surge com uma tocha e grita para os outros, a voz rachada de pânico.",
+                short,
+            ].join("\n\n")
+            expect(dropRewrittenParagraphs(text), short).toEqual({ text, dropped: 0 })
+            expect(sameParagraph(short, short), short).toBe(false)
+        }
+    })
+
+    it("separa os parágrafos fechados do trecho ainda em escrita", () => {
+        expect(splitOpenParagraph("Silêncio.\n\nO vento volta.\n\nSilêncio")).toEqual({ closed: "Silêncio.\n\nO vento volta.\n\n", open: "Silêncio" })
+        expect(splitOpenParagraph("Sem quebra ainda")).toEqual({ closed: "", open: "Sem quebra ainda" })
+        expect(splitOpenParagraph("Um parágrafo.\n\n")).toEqual({ closed: "Um parágrafo.\n\n", open: "" })
     })
 
     it("compara sem a marcação do catálogo nem das menções, e preserva a marcação no que fica", () => {

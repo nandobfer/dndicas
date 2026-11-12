@@ -2017,15 +2017,19 @@ escrever a narração, grave o que mudou" e "Grave antes de escrever a narraçã
 `update_campaign_state` e `request_check` pedem a chamada antes do texto nas próprias descrições.
 
 **Defesa no servidor.** `dropRewrittenParagraphs` (`narration-dedupe.ts`, puro) compara os parágrafos (sem marcação `{{Tipo:Nome}}`,
-menções, caixa e pontuação) pelo coeficiente de Dice sobre pares de palavras: com semelhança ≥ `MADDOX_REWRITE_SIMILARITY` (0,5),
-ou igualdade depois de normalizar quando o parágrafo tem menos de 6 pares, o parágrafo `j` é a reescrita do `i`; saem os
+menções, caixa e pontuação) pelo coeficiente de Dice sobre pares de palavras: com semelhança ≥ `MADDOX_REWRITE_SIMILARITY` (0,5)
+ou igualdade depois de normalizar, o parágrafo `j` é a reescrita do `i`. Parágrafos com menos de `MADDOX_REWRITE_MIN_PAIRS` (6)
+pares de palavras nunca contam, nem iguais: falas e pausas curtas ("— Corram!", "Silêncio.") se repetem de propósito e o
+conteúdo novo entre elas fica; saem os
 parágrafos de `i` até `j - 1` (a primeira versão e o que veio entre as duas) e fica a versão escrita depois das ferramentas. Repete
 até não sobrar repetição. Nos textos reais, as reescritas mediram de 0,61 a 1,00 e parágrafos distintos até 0,25. `generate`
 (`server/narrator.ts`) aplica a defesa ao texto final nos dois caminhos (AI SDK e OpenCode), em narrações, continuações e
 respostas, antes de resolver as menções; quando algo sai, registra `warn` "[maddox] narração reescrita depois das ferramentas:
 primeira versão descartada" com `campaignId`, `turnNumber`, `kind` e `dropped` (sem o texto).
 
-**Tela ao vivo.** `liveText` roda a mesma defesa sobre o texto visível a cada trecho com quebra de linha e no fim; se algo sai,
+**Tela ao vivo.** `liveText` roda a mesma defesa sobre o texto visível a cada trecho com quebra de linha, só nos parágrafos já
+fechados (`splitOpenParagraph`: o trecho depois da última quebra de parágrafo, ainda em escrita, nunca é comparado, porque pode ser
+o começo igual de um parágrafo anterior), e no fim sobre o texto inteiro; se algo sai,
 chama `sink.replace(texto)` (`MaddoxMasterSink.replace`, opcional; `LiveSink.replace` em `game-live.ts`), que troca o `live.text`
 (também no `snapshot` de quem reconecta) e emite `live-text { liveId, text }`. `reduceGameStream` troca o texto do item, e o
 `settled` herda o texto corrigido: a bolha ao vivo termina igual à mensagem gravada. A quebra de parágrafo no fim do texto é
@@ -2037,10 +2041,12 @@ nova tentativa depois de `MADDOX_MASTER_RETRY_MS` começa do zero.
 Mensagens já gravadas com duplicação não são corrigidas (a defesa vale para as novas).
 
 Testes: `narration-dedupe.test.ts` (os 7 textos reais duplicados de `fixtures/narration-rewrites.ts`, narrações legítimas
-intactas, bloco repetido, continuação, frases curtas, marcação e quebra final), `narrator-rewrite.test.ts` (narrador real sobre
+intactas, bloco repetido, continuação, frases curtas parecidas e iguais com cena nova no meio, parágrafo em escrita, marcação e
+quebra final), `narrator-rewrite.test.ts` (narrador real sobre
 `streamText` roteirizado: reescrita depois de `update_campaign_state` grava só a reescrita e a tela converge via `live-text`;
 continuação legítima inteira; bloco entregue duas vezes; falha com texto parcial e nova tentativa; 10 narrações seguidas com uma
-falha no meio sem parágrafo repetido; instruções com a escrita única), `narrator-prompt.test.ts` (regras novas nos dois modos e a
+falha no meio sem parágrafo repetido; parágrafo em escrita igual ao começo de um anterior e falas curtas repetidas sem `live-text`
+nem corte; instruções com a escrita única), `narrator-prompt.test.ts` (regras novas nos dois modos e a
 linha do `suggest_actions`), `maddox-game-stream.test.ts` (`live-text`) e, na tela, `ask-master-button.test.tsx` (anel, miolo,
 movimento reduzido, desabilitado, clique e os outros botões sem anel).
 

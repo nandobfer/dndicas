@@ -9,7 +9,8 @@ import { MongoMemoryServer } from "mongodb-memory-server"
  */
 
 type ToolCall = { name: string; input: Record<string, unknown> }
-type Step = { tools?: ToolCall[]; text?: string; fail?: boolean }
+/** `text` em lista = vários trechos (`text-delta`) na mesma etapa. */
+type Step = { tools?: ToolCall[]; text?: string | string[]; fail?: boolean }
 
 const calls: { instructions: string; userText: string; toolNames: string[] }[] = []
 const script: Step[][] = []
@@ -73,7 +74,7 @@ vi.mock("ai", () => ({
                             yield { type: "tool-error", toolCallId, toolName: call.name, error }
                         }
                     }
-                    if (step.text) yield { type: "text-delta", text: step.text }
+                    for (const text of typeof step.text === "string" ? [step.text] : (step.text ?? [])) yield { type: "text-delta", text }
                     if (step.fail) {
                         yield { type: "error", error: new Error("provedor caiu no meio") }
                         return
@@ -236,6 +237,27 @@ describe("DND-52 — narração reescrita depois das ferramentas", () => {
         expect(stored).toHaveLength(10)
         for (const content of stored) expect(repeats(content), content).toBe(false)
     }, 30_000)
+
+    it("ao vivo, um parágrafo em escrita igual ao começo de um anterior não apaga nada; falas curtas repetidas ficam (F1)", async () => {
+        const { id, owner } = await table()
+        let stream = MADDOX_GAME_STREAM_INITIAL
+        const lines: string[] = []
+        const leave = subscribeGameLive(id, (line) => {
+            lines.push(line.type)
+            stream = reduceGameStream(stream, line)
+        })
+        const middle = "O goblin da direita larga o arco e dispara pela trilha, tropeçando nas raízes, os olhos arregalados de medo."
+        const opening = "O vento sopra forte entre as pedras do farol e apaga as tochas uma a uma, deixando só o brilho da lua."
+        // O último trecho termina com o começo de um parágrafo igual ao primeiro ("O vento sopra forte…"), ainda sem ponto final.
+        script.push([{ text: [`— Corram!\n\n${middle}\n\n${opening}\n\nO vento sopra forte entre as pedras do farol e apaga`, " as velas da escada também, e a porta bate com força no alto, sem ninguém por perto que a tenha tocado.\n\n— Corram!"] }])
+        await game.startCampaign(id, owner)
+        await waitForCampaignIdle(id)
+        leave()
+        const [content] = await narrations(id)
+        expect(content).toBe(`— Corram!\n\n${middle}\n\n${opening}\n\nO vento sopra forte entre as pedras do farol e apaga as velas da escada também, e a porta bate com força no alto, sem ninguém por perto que a tenha tocado.\n\n— Corram!`)
+        expect(lines).not.toContain("live-text")
+        expect(stream.settled[0]!.text).toBe(content)
+    })
 
     it("as instruções pedem as ferramentas antes e o texto uma vez só", async () => {
         const { id, owner } = await table()
