@@ -226,6 +226,17 @@ describe("DND-51 — a preparação pergunta ao jogador e a correção aparece n
         expect(screen.queryByTestId("combat-prep-answer")).not.toBeInTheDocument()
     })
 
+    it("preparação descartada ou com falha: card final, sem spinner nem campo de resposta", () => {
+        const { unmount, container } = render(<CombatPrepCard message={{ ...base, combatPrep: { characterName: "Nala", changes: [], question: { prepId: "p1", text: "Qual atributo?", status: "answered", answer: "Sabedoria", deadline, settled: true, halted: "discarded" } } }} onAnswer={vi.fn(async () => undefined)} />)
+        expect(screen.getByTestId("combat-prep-halted")).toHaveTextContent("Preparação interrompida")
+        expect(container.querySelector(".animate-spin")).toBeNull()
+        expect(screen.queryByTestId("combat-prep-concluding")).not.toBeInTheDocument()
+        unmount()
+        render(<CombatPrepCard message={{ ...base, combatPrep: { characterName: "Nala", changes: [], question: { prepId: "p1", text: "Qual atributo?", status: "awaiting", answer: null, deadline, settled: true, halted: "failed" } } }} onAnswer={vi.fn(async () => undefined)} />)
+        expect(screen.getByTestId("combat-prep-halted")).toHaveTextContent("Aguardando o dono da campanha")
+        expect(screen.queryByTestId("combat-prep-answer")).not.toBeInTheDocument()
+    })
+
     it('o selo "Pergunta ao jogador" na ordem e a linha pública da correção da ficha', () => {
         render(
             <>

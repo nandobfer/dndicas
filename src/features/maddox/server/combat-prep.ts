@@ -568,8 +568,27 @@ async function activeStateOf(campaignId: Types.ObjectId, prep: Pick<PrepDoc, "co
 }
 
 async function discard(prepId: Types.ObjectId, reason: string) {
+    const cards = await questionCardsOf({ _id: prepId, status: { $in: BLOCKING } })
     await MaddoxCombatPrepModel.updateOne({ _id: prepId, status: { $in: BLOCKING } }, { $set: { status: "discarded", finishedAt: new Date(), jobId: null } })
+    await haltQuestionCards(cards, "discarded")
     log.info({ prepId: String(prepId), reason }, "[maddox] preparação descartada")
+}
+
+/** Revisão DND-51 (F10): cards de pergunta das preparações que vão parar (descartadas ou com falha). */
+async function questionCardsOf(filter: Record<string, unknown>): Promise<Pick<PrepDoc, "_id" | "campaignId" | "messageId">[]> {
+    return MaddoxCombatPrepModel.find({ ...filter, messageId: { $ne: null }, question: { $ne: null } }).select("_id campaignId messageId").lean<Pick<PrepDoc, "_id" | "campaignId" | "messageId">[]>()
+}
+
+/**
+ * O card da pergunta fica num estado final (sem spinner e sem o campo de resposta): `discarded` (o combate terminou ou o
+ * personagem saiu) ou `failed` (a preparação falhou; "Tentar de novo" do dono volta a "concluindo").
+ */
+async function haltQuestionCards(cards: readonly Pick<PrepDoc, "_id" | "campaignId" | "messageId">[], halted: "discarded" | "failed" | null) {
+    if (!cards.length) return
+    for (const card of cards) clearAnswerTimer(card._id)
+    await MaddoxCampaignMessageModel.updateMany({ _id: { $in: cards.map((card) => card.messageId!) } }, { $set: { "combatPrep.question.halted": halted, "combatPrep.question.settled": halted !== null } })
+    const { publishGameChanged } = await import("./game")
+    for (const campaignId of new Set(cards.map((card) => String(card.campaignId)))) await publishGameChanged(new Types.ObjectId(campaignId))
 }
 
 async function runCombatPrep(campaignId: Types.ObjectId, prepId: Types.ObjectId, jobId: string): Promise<void> {
@@ -646,7 +665,8 @@ async function runCombatPrep(campaignId: Types.ObjectId, prepId: Types.ObjectId,
         }
     } catch (error) {
         log.warn({ err: errorText(error), campaignId: String(campaignId), prepId: String(prepId), character: claimed.characterName }, "[maddox] falha na preparação da mesa de combate")
-        await MaddoxCombatPrepModel.updateOne({ _id: prepId, status: "running" }, { $set: { status: "failed", error: errorText(error), finishedAt: new Date(), jobId: null } })
+        const failed = await MaddoxCombatPrepModel.updateOne({ _id: prepId, status: "running" }, { $set: { status: "failed", error: errorText(error), finishedAt: new Date(), jobId: null } })
+        if (failed.modifiedCount > 0) await haltQuestionCards(await questionCardsOf({ _id: prepId }), "failed")
     }
     await afterPrepSettled(campaignId, claimed)
 }
@@ -847,6 +867,7 @@ export async function retryCombatPrep(campaignId: string, prepId: string, userId
     const { campaign, prep } = await loadOwnerPrep(campaignId, prepId, userId)
     const updated = await MaddoxCombatPrepModel.updateOne({ _id: prep._id, status: "failed" }, { $set: { status: "pending", error: null, jobId: null } })
     if (updated.modifiedCount === 0) throw new DomainError(409, "A preparação mudou. Atualize a mesa.", "PREP_CHANGED")
+    await haltQuestionCards(await questionCardsOf({ _id: prep._id }), null)
     await recordAudit({ userId, entidade: MADDOX_CAMPAIGN_AUDIT_ENTITY, entidadeId: String(campaign._id), acao: AcaoAuditoria.ATUALIZAR, depois: { combatPrep: String(prep._id), character: prep.characterName, decision: "retry" } })
     await scheduleCombatPreps(campaign._id)
     const { publishGameChanged, getGameState } = await import("./game")
@@ -872,7 +893,9 @@ export async function skipCombatPrep(campaignId: string, prepId: string, userId:
 
 /** Fim do combate: as preparações que ainda não terminaram são descartadas (nada é gravado na ficha). */
 export async function discardCombatPreps(combatId: Types.ObjectId): Promise<void> {
+    const cards = await questionCardsOf({ combatId, status: { $in: BLOCKING } })
     await MaddoxCombatPrepModel.updateMany({ combatId, status: { $in: BLOCKING } }, { $set: { status: "discarded", finishedAt: new Date(), jobId: null } })
+    await haltQuestionCards(cards, "discarded")
 }
 
 /**
@@ -882,7 +905,9 @@ export async function discardCombatPreps(combatId: Types.ObjectId): Promise<void
 export async function discardMemberPrep(combatId: Types.ObjectId, memberId: Types.ObjectId): Promise<void> {
     const prep = await MaddoxCombatPrepModel.findOne({ combatId, memberId, status: { $in: BLOCKING } }).select("campaignId turnNumber waitRound").lean<Pick<PrepDoc, "campaignId" | "turnNumber" | "waitRound">>()
     if (!prep) return
+    const cards = await questionCardsOf({ combatId, memberId, status: { $in: BLOCKING } })
     await MaddoxCombatPrepModel.updateMany({ combatId, memberId, status: { $in: BLOCKING } }, { $set: { status: "discarded", finishedAt: new Date(), jobId: null } })
+    await haltQuestionCards(cards, "discarded")
     if (await preparationPending(combatId)) return
     const { finishInitiativeIfReady } = await import("./tactical-combat")
     await finishInitiativeIfReady(prep.campaignId, prep.turnNumber, prep.waitRound + 1)

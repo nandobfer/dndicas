@@ -1947,7 +1947,9 @@ correção da ficha (`MADDOX_SHEET_FIX_TOOL_NAMES`, em `MADDOX_SHEET_FIX_TOOLS` 
   avisada em tempo real (`CharacterSheetPusherService`) e a mesa ganha a linha pública `kind: "sheet-change"` ("Ficha de X
   corrigida:" e uma linha por alteração, com o motivo; `SheetChangeLine`), que entra na transcrição do narrador como `[ficha]`.
 - **Limites do jogador comum** (`withPlayerLimits`; o dono faz tudo): acrescentar item ou aumentar a quantidade só até o
-  equipamento da entrevista (itens ganhos entram pela narração); tirar característica ou talento só com a fonte do catálogo.
+  equipamento da entrevista (itens ganhos entram pela narração). Com `catalogItemId`, vale o item gravado (id e nome do catálogo,
+  nunca o `name` do modelo); sem catálogo, a quantidade atual soma as linhas da ficha com o mesmo nome. `item-add` de item fora
+  do catálogo que a ficha já tem (`sameItemName`) aumenta a quantidade em vez de criar outra linha; tirar característica ou talento só com a fonte do catálogo.
   Diminuir quantidade, remover ou equipar item e as demais correções seguem com as travas de fonte e de escolha.
 - **Fonte do catálogo**: as leituras do catálogo do job entram no registro `job:<jobId>` (AI SDK pelos hooks de
   `buildCatalogAiTools`; OpenCode pelo token de turno em `handleCatalog`). Correção de regra sem fonte lida é recusada, como na
@@ -1968,7 +1970,9 @@ jogador sem a escolha dele, o servidor faz a pergunta (`fallbackQuestion`). Ness
 `awaiting-player` (segura a ordem como `BLOCKING`; selo **"Pergunta ao jogador"**) e o card privado `combat-prep` mostra a pergunta,
 o campo de resposta e o prazo (`CombatPrepQuestionCard`). Respondida ou vencida, enquanto a preparação roda de novo, o card mostra
 "Resposta enviada" ou "Prazo encerrado" (`question.settled: false`); só com a preparação pronta ele diz "Sua mesa está pronta". O
-prazo vencido tira o campo de resposta do card na hora. A resposta chega por `POST
+prazo vencido tira o campo de resposta do card na hora. Se a preparação parar sem concluir, o card fica num estado final, sem
+spinner e sem o campo (`question.halted`): `discarded` quando o combate termina ou o personagem sai (`discard`,
+`discardCombatPreps`, `discardMemberPrep`) e `failed` quando a execução falha. "Tentar de novo" volta o card a "concluindo". A resposta chega por `POST
 /api/maddox/campaigns/[id]/game/combat/preps/[prepId]/answer` (`{ text }`; responde o dono do personagem e, pelo Personagem Opex, o
 dono da campanha; auditada). A preparação volta para a fila com a resposta no prompt e sem nova pergunta. Sem resposta em
 `MADDOX_COMBAT_PREP_ANSWER_TIMEOUT_MS` (3 min; testes mudam `combatPrepTiming.answerMs`), a preparação conclui sem a escolha (o

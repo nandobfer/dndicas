@@ -164,7 +164,7 @@ async function withPlayerLimits(run: QuestionRun, character: CharacterRow, chang
     if (run.askerIsOwner) return [...changes]
     const needsEquipment = changes.some((change) => change.type === "item-add" || change.type === "item-quantity")
     const equipment = needsEquipment ? await interviewEquipment(new Types.ObjectId(run.campaignId), character._id) : []
-    const { CharacterItem } = await import("@/features/character-sheets/models/character-item")
+    const [{ CharacterItem }, { ItemModel }, { sameItemName }] = await Promise.all([import("@/features/character-sheets/models/character-item"), import("@/features/items/database/item"), import("./combat-sheet-writes")])
     const out: CombatSheetChange[] = []
     for (const change of changes) {
         if (change.type === "item-add" || change.type === "item-quantity") {
@@ -172,10 +172,19 @@ async function withPlayerLimits(run: QuestionRun, character: CharacterRow, chang
             let name = ""
             let current = 0
             if (change.type === "item-add") {
+                // Revisão DND-51 (F9): com item do catálogo, vale o item gravado (id e nome do banco), nunca o `name` do modelo;
+                // sem catálogo, a quantidade atual soma as linhas da ficha com o mesmo nome.
                 catalogId = change.catalogItemId ?? null
-                name = change.name ?? ""
-                const existing = catalogId && Types.ObjectId.isValid(catalogId) ? await CharacterItem.findOne({ sheetId: character.sheetId, catalogItemId: new Types.ObjectId(catalogId) }).select("quantity").lean<{ quantity?: number }>() : null
-                current = existing ? (existing.quantity ?? 1) : 0
+                if (catalogId) {
+                    const catalog = Types.ObjectId.isValid(catalogId) ? await ItemModel.findOne({ _id: new Types.ObjectId(catalogId), status: "active" }).select("name").lean<{ name: string }>() : null
+                    name = catalog?.name ?? ""
+                    const existing = catalog ? await CharacterItem.findOne({ sheetId: character.sheetId, catalogItemId: new Types.ObjectId(catalogId) }).select("quantity").lean<{ quantity?: number }>() : null
+                    current = existing ? (existing.quantity ?? 1) : 0
+                } else {
+                    name = change.name ?? ""
+                    const rows = await CharacterItem.find({ sheetId: character.sheetId, catalogItemId: null }).select("name quantity").lean<{ name: string; quantity?: number }[]>()
+                    current = rows.filter((row) => sameItemName(row.name, name)).reduce((sum, row) => sum + (row.quantity ?? 1), 0)
+                }
             } else {
                 const item = Types.ObjectId.isValid(change.itemId) ? await CharacterItem.findOne({ _id: new Types.ObjectId(change.itemId), sheetId: character.sheetId }).select("catalogItemId name quantity").lean<{ catalogItemId?: Types.ObjectId | null; name: string; quantity?: number }>() : null
                 catalogId = item?.catalogItemId ? String(item.catalogItemId) : null
@@ -187,7 +196,7 @@ async function withPlayerLimits(run: QuestionRun, character: CharacterRow, chang
                 }
             }
             const wanted = normalizeCatalogName(plainText(name))
-            const entry = equipment.find((item) => (catalogId && item.id === catalogId) || (wanted && normalizeCatalogName(item.name) === wanted))
+            const entry = equipment.find((item) => (catalogId ? item.id === catalogId || (wanted && normalizeCatalogName(item.name) === wanted) : wanted && !item.id && normalizeCatalogName(item.name) === wanted))
             const total = change.type === "item-add" ? current + change.quantity : change.quantity
             if (!entry || total > entry.quantity) {
                 refuse(change, PLAYER_ITEM_LIMIT)

@@ -476,6 +476,21 @@ export function CombatPrepCard({ message, busy = false, onAnswer }: { message: M
     const changes = prep.changes
     const question = prep.question ?? null
     // DND-51: a preparação parou com uma pergunta ao jogador; o card traz o campo de resposta até ela chegar.
+    // Revisão DND-51 (F10): a preparação parou sem concluir — estado final, sem spinner nem campo de resposta.
+    if (question?.halted) {
+        return (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="pb-4" data-testid="combat-prep-halted">
+                <div className="space-y-1.5 rounded-2xl border bg-white/[0.03] p-3.5 text-xs" style={{ borderColor: `${rarityColors.artifact}55`, boxShadow: `inset 3px 0 0 ${rarityColors.artifact}` }}>
+                    <p className="flex items-center gap-1.5 font-semibold uppercase tracking-wide" style={{ color: rarityColors.artifact }}>
+                        <AlertTriangle className="h-3.5 w-3.5" aria-hidden /> {question.halted === "failed" ? "Preparação com falha" : "Preparação interrompida"} · {prep.characterName}
+                    </p>
+                    <p className="whitespace-pre-wrap break-words text-white/70">{question.text}</p>
+                    {question.answer ? <p className="whitespace-pre-wrap break-words text-white/90">Sua resposta: {question.answer}</p> : null}
+                    <p className="text-white/60">{question.halted === "failed" ? "A preparação desta ficha falhou. Aguardando o dono da campanha." : "O combate terminou ou o personagem saiu antes de a preparação concluir."}</p>
+                </div>
+            </motion.div>
+        )
+    }
     if (question?.status === "awaiting") return <CombatPrepQuestionCard characterName={prep.characterName} question={question} busy={busy} onAnswer={onAnswer} />
     // Respondida ou vencida, mas a preparação ainda roda: o card não diz "mesa pronta" antes da hora.
     if (question && !question.settled) {

@@ -1217,6 +1217,39 @@ describe("DND-51 — a preparação pergunta ao jogador quando falta uma escolha
         await expect(combatPrep.answerCombatPrep(id, String(prep._id), "de novo", lyra.userId)).rejects.toMatchObject({ code: "PREP_NOT_ASKING" })
     })
 
+    it("F10: descartada ou com falha depois da resposta, o card fica num estado final (sem 'concluindo')", async () => {
+        reviewFor((answer) => answer)
+        const { id, kael, lyra, cardOf } = await initiativeScene()
+        await rollInitiatives(id, { kael, lyra }, cardOf)
+        await settleCampaign(id)
+        const cardOfLyra = async () => (await game.getGameState(id, lyra.userId)).messages.find((message) => message.kind === "combat-prep" && message.combatPrep?.characterName === "Lyra")!.combatPrep!.question
+        const prep = (await prepsOf(id)).find((item) => item.characterName === "Lyra")!
+        // A nova passada falha: o card sai de "concluindo" para "com falha"; "Tentar de novo" volta a "concluindo".
+        combatPrepAi.review.mockImplementation(async (input) => {
+            if (input.characterName === "Lyra") throw new Error("fora do ar")
+            return { sheetChanges: [], modify: [], remove: [], add: [] }
+        })
+        await combatPrep.answerCombatPrep(id, String(prep._id), "Sabedoria", lyra.userId)
+        await combatPrep.waitForCombatPreps()
+        await settleCampaign(id)
+        expect(await cardOfLyra()).toMatchObject({ halted: "failed", settled: true })
+        const hold = deferred()
+        combatPrepAi.review.mockImplementation(async () => {
+            await hold.gate
+            return { sheetChanges: [], modify: [], remove: [], add: [] }
+        })
+        await combatPrep.retryCombatPrep(id, String(prep._id), kael.userId)
+        expect(await cardOfLyra()).toMatchObject({ halted: null, settled: false })
+        // O combate termina com a preparação ainda rodando: o card fica "interrompida".
+        await combatPrep.discardCombatPreps(prep.combatId)
+        expect(await cardOfLyra()).toMatchObject({ halted: "discarded", settled: true })
+        hold.release()
+        await combatPrep.waitForCombatPreps()
+        await settleCampaign(id)
+        expect((await MaddoxCombatPrepModel.findById(prep._id).lean())!.status).toBe("discarded")
+        expect(await cardOfLyra()).toMatchObject({ halted: "discarded" })
+    }, 20_000)
+
     it("sem resposta no prazo, conclui sem a escolha (o atributo fica vazio) e avisa no card", async () => {
         combatPrep.combatPrepTiming.answerMs = 40
         try {

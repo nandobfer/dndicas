@@ -269,6 +269,8 @@ export interface MaddoxCombatPrepQuestionDto {
     deadline: string
     /** A preparação terminou (só então o card diz "Sua mesa está pronta"). */
     settled: boolean
+    /** Revisão DND-51 (F10): a preparação parou sem concluir — descartada (combate encerrado ou saída) ou com falha. */
+    halted?: "discarded" | "failed" | null
 }
 
 export interface MaddoxCombatRewardDto {

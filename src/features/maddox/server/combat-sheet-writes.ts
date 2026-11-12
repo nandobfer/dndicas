@@ -195,6 +195,16 @@ async function spellAttackBonusOf(sheet: Record<string, unknown>): Promise<{ bon
 
 const AUTO_SPELL_PREFIX = "auto:spell:"
 
+const itemNameKey = (value: string) =>
+    plainText(value)
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, " ")
+        .trim()
+/** Mesmo item pelo nome (sem HTML, acento e caixa). */
+export const sameItemName = (a: string, b: string) => Boolean(itemNameKey(a)) && itemNameKey(a) === itemNameKey(b)
+
 type Models = Awaited<ReturnType<typeof models>>
 
 type SheetEvent = { name: CharacterSheetCollectionName; action: "created" | "updated" | "deleted"; recordId: string }
@@ -386,7 +396,10 @@ async function applyOne(change: CombatSheetChange, sheetId: Types.ObjectId, m: M
             if (change.catalogItemId && !catalog) return { label, before: "—", after: "—", applied: false }
             const name = catalog?.name ?? change.name
             if (!name) return { label, before: "—", after: "—", applied: false }
-            const existing = catalog ? await m.CharacterItem.findOne({ sheetId, catalogItemId: catalog._id }).lean<{ _id: Types.ObjectId; quantity: number }>() : null
+            // Revisão DND-51 (F9): item fora do catálogo que a ficha já tem (pelo nome) ganha quantidade, não uma linha nova.
+            const existing = catalog
+                ? await m.CharacterItem.findOne({ sheetId, catalogItemId: catalog._id }).lean<{ _id: Types.ObjectId; quantity: number }>()
+                : ((await m.CharacterItem.find({ sheetId, catalogItemId: null }).select("_id name quantity").lean<{ _id: Types.ObjectId; name: string; quantity: number }[]>()).find((item) => sameItemName(item.name, name)) ?? null)
             if (existing) {
                 const updated = await m.CharacterItem.updateOne({ _id: existing._id, quantity: existing.quantity }, { $inc: { quantity: change.quantity } })
                 return { label: `Item ${name}`, before: `qtd ${existing.quantity ?? 1}`, after: `qtd ${(existing.quantity ?? 1) + change.quantity}`, applied: updated.modifiedCount > 0, collection: { name: "items", action: "updated", recordId: String(existing._id) } }

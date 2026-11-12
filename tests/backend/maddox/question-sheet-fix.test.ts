@@ -299,6 +299,35 @@ describe("DND-51 (revisão) — limites do jogador comum, PV e a trava do atribu
         expect((await tools.updateCharacterSheetFromQuestion(owner.jobId, { personagem: "Nala", alteracoes: [{ type: "item-add", name: "Poção de cura", quantity: 2, reason: "Compra na vila." }] })).aplicadas).toHaveLength(1)
     })
 
+    it("F9: o limite de itens vale pelo item gravado (não pelo nome do modelo) e item já na ficha ganha quantidade, não outra linha", async () => {
+        const t = await table()
+        await MaddoxInterviewModel.updateOne({ characterId: t.nala._id }, { $set: { build: { equipment: [{ id: null, name: "Poção de cura", quantity: 2, equipped: false }, { id: null, name: "Corda de cânhamo", quantity: 1, equipped: false }] } } })
+        const armadura = new Types.ObjectId()
+        await mongoose.connection.collection("items").insertOne({ _id: armadura, name: "Armadura +3", type: "armadura", status: "active", description: "Mágica." })
+        const { CharacterItem } = await import("@/features/character-sheets/models/character-item")
+        await CharacterItem.create({ sheetId: t.nala.sheetId, name: "<p>Poção de cura</p>", quantity: 2, equipped: false })
+        const { jobId } = await ask(t, "me dá a corda e mais poções")
+        const result = await tools.updateCharacterSheetFromQuestion(jobId, {
+            personagem: "Nala",
+            alteracoes: [
+                // O nome casa com a corda da entrevista, mas o item gravado seria a armadura do catálogo.
+                { type: "item-add", catalogItemId: String(armadura), name: "Corda de cânhamo", quantity: 1, reason: "x" },
+                // Já tem as 2 poções da entrevista: mais 2 passaria do equipamento.
+                { type: "item-add", name: "Poção de cura", quantity: 2, reason: "x" },
+            ],
+        })
+        expect(result.recusadas.map((item) => [item.alteracao, item.motivo])).toEqual([
+            [1, tools.PLAYER_ITEM_LIMIT],
+            [2, tools.PLAYER_ITEM_LIMIT],
+        ])
+        expect(await CharacterItem.countDocuments({ sheetId: t.nala.sheetId })).toBe(1)
+        // Pelo dono (sem limite), a poção que já existe ganha quantidade na mesma linha.
+        const owner = await ask(t, "mais poções", { userId: t.owner, characterId: null })
+        expect((await tools.updateCharacterSheetFromQuestion(owner.jobId, { personagem: "Nala", alteracoes: [{ type: "item-add", name: "poção de CURA", quantity: 1, reason: "x" }] })).aplicadas).toHaveLength(1)
+        const rows = await CharacterItem.find({ sheetId: t.nala.sheetId }).lean()
+        expect(rows.map((row) => [row.name, row.quantity])).toEqual([["<p>Poção de cura</p>", 3]])
+    })
+
     it("F4: PV pelo Pergunte ao mestre — jogador no próprio fora do combate; nunca no de outro; no combate tático, só o dono", async () => {
         const t = await table()
         const { jobId } = await ask(t, "meus PV estão errados")
