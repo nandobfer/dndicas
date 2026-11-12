@@ -60,7 +60,7 @@ export function createTemporaryAssistedSheet(userId = "assisted-user"): Characte
         subclass: "",
         subclassRef: null,
         level: 1,
-        experience: "",
+        experience: 0,
         race: "",
         raceRef: null,
         origin: "",

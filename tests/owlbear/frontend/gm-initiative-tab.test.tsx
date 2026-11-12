@@ -116,7 +116,7 @@ function sheet(overrides: Partial<CharacterSheetFull> = {}): CharacterSheetFull 
         subclass: "",
         subclassRef: null,
         level: 3,
-        experience: "0",
+        experience: 0,
         race: "Humano",
         raceRef: null,
         origin: "",

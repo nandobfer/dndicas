@@ -10,6 +10,7 @@ import { CharacterAttack } from "../models/character-attack"
 import { User } from "@/features/users/models/user"
 import { generateSlug } from "../utils/slug"
 import { computeSheetArmorClass } from "../utils/armor-class"
+import { experienceValue } from "../utils/sheet-rules"
 import type {
     AdminSheetsListResponse,
     CharacterItem as CharacterItemType,
@@ -795,6 +796,7 @@ function toPlainSheet(doc: any) {
         obj.spellSlots = Object.fromEntries(obj.spellSlots)
     }
     obj.notePages = Array.isArray(obj.notePages) ? obj.notePages : []
+    obj.experience = experienceValue(obj.experience)
     // lean() returns plain objects but savingThrows/skills/spellSlots may be plain already
     return obj
 }

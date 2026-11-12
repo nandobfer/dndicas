@@ -57,7 +57,7 @@ export interface CharacterSheet {
     subclass: string
     subclassRef: string | null
     level: number
-    experience: string
+    experience: number
     race: string
     raceRef: string | null
     origin: string
@@ -368,7 +368,7 @@ export const PatchSheetSchema = z.object({
     subclass: z.string().max(2000).optional(),
     subclassRef: z.string().nullable().optional(),
     level: z.number().int().min(1).max(20).optional(),
-    experience: z.string().optional(),
+    experience: z.number().int().min(0).optional(),
     race: z.string().max(2000).optional(),
     raceRef: z.string().nullable().optional(),
     origin: z.string().max(2000).optional(),

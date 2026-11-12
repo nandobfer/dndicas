@@ -30,7 +30,7 @@ function buildSheet(overrides: Partial<CharacterSheetFull> = {}): CharacterSheet
         subclass: "",
         subclassRef: null,
         level: 2,
-        experience: "0",
+        experience: 0,
         race: "Humano",
         raceRef: null,
         origin: "Soldado",

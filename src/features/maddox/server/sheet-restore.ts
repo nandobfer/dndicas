@@ -32,7 +32,7 @@ const plain = <T>(value: unknown): T => JSON.parse(JSON.stringify(value)) as T
 
 /** Valor do campo na ficha recém-criada quando a entrevista não o preenche (o padrão da ficha). */
 const FIELD_DEFAULTS: Partial<Record<SheetRestoreField, unknown>> = {
-    experience: "",
+    experience: 0,
     hpTemp: 0,
     hitDiceUsed: 0,
     deathSavesSuccess: 0,

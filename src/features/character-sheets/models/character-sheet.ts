@@ -12,7 +12,7 @@ export interface ICharacterSheet extends Document {
     subclass: string
     subclassRef: mongoose.Types.ObjectId | null
     level: number
-    experience: string
+    experience: number
     race: string
     raceRef: mongoose.Types.ObjectId | null
     origin: string
@@ -103,7 +103,7 @@ const CharacterSheetSchema = new Schema<ICharacterSheet>(
         subclass: { type: String, default: "", trim: true, maxlength: 2000 },
         subclassRef: { type: Schema.Types.ObjectId, ref: "Subclass", default: null },
         level: { type: Number, default: 1, min: 1, max: 20 },
-        experience: { type: String, default: "" },
+        experience: { type: Number, default: 0, min: 0 },
         race: { type: String, default: "", trim: true, maxlength: 2000 },
         raceRef: { type: Schema.Types.ObjectId, ref: "Race", default: null },
         origin: { type: String, default: "", trim: true, maxlength: 2000 },

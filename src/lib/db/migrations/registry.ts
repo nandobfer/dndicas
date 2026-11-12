@@ -15,6 +15,7 @@ import { ensureAiConsumptionIndexes } from "./ensure-ai-consumption-indexes"
 import { ensureOpexIndexes } from "./ensure-opex-indexes"
 import { ensureMaddoxIndexes } from "./ensure-maddox-indexes"
 import { ensureOpexFeedbackIndexes } from "./ensure-opex-feedback-indexes"
+import { sheetExperienceNumber } from "./sheet-experience-number"
 
 registerMigrations(
     { name: "drop-legacy-clerk-index", run: () => dropLegacyClerkIndex() },
@@ -29,4 +30,5 @@ registerMigrations(
     { name: "ensure-opex-indexes", run: () => ensureOpexIndexes() },
     { name: "ensure-maddox-indexes", run: () => ensureMaddoxIndexes() },
     { name: "ensure-opex-feedback-indexes", run: () => ensureOpexFeedbackIndexes() },
+    { name: "sheet-experience-number", run: () => sheetExperienceNumber() },
 )
