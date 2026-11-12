@@ -23,6 +23,8 @@ export interface IMaddoxSheetSnapshot {
  *
  * - `turn`: tirado quando a vez dos jogadores do turno `turnNumber` abre (depois da narração do Maddox). É o ponto de
  *   retorno de "Voltar ao turno…": um por turno, só dos turnos jogados depois da entrada da funcionalidade.
+ * - `start` (DND-50): cópia das fichas dos personagens tirada em "Iniciar campanha" (e atualizada quando alguém conclui a
+ *   entrevista com a campanha em andamento). É para onde o reinício devolve as fichas; um por campanha, com `turnNumber` 0.
  * - `origin`: tirado na primeira volta de uma volta pendente, com o turno inteiro (fase, elegíveis, falha) e as memórias
  *   tocadas pela volta; é o que "Voltar ao turno atual (N)" devolve. Some na retomada ou na perda definitiva.
  *
@@ -32,7 +34,7 @@ export interface IMaddoxSheetSnapshot {
 export interface IMaddoxCampaignSnapshot {
     _id: Types.ObjectId
     campaignId: Types.ObjectId
-    kind: "turn" | "origin"
+    kind: "turn" | "origin" | "start"
     turnNumber: number
     /** Volta pendente dona do retrato de origem. */
     rewindId: string | null
@@ -65,7 +67,7 @@ export interface IMaddoxCampaignSnapshot {
 const SnapshotSchema = new Schema<IMaddoxCampaignSnapshot>(
     {
         campaignId: { type: Schema.Types.ObjectId, required: true },
-        kind: { type: String, enum: ["turn", "origin"], required: true },
+        kind: { type: String, enum: ["turn", "origin", "start"], required: true },
         turnNumber: { type: Number, required: true },
         rewindId: { type: String, default: null },
         takenAt: { type: Date, required: true },
@@ -91,6 +93,8 @@ const SnapshotSchema = new Schema<IMaddoxCampaignSnapshot>(
 // Um retrato por turno jogado (a captura repetida substitui o anterior do mesmo turno).
 SnapshotSchema.index({ campaignId: 1, turnNumber: -1 }, { unique: true, partialFilterExpression: { kind: "turn" }, name: "snapshot_turn_unique" })
 SnapshotSchema.index({ campaignId: 1, kind: 1, rewindId: 1 })
+// Uma cópia de início por campanha (DND-50).
+SnapshotSchema.index({ campaignId: 1 }, { unique: true, partialFilterExpression: { kind: "start" }, name: "snapshot_start_unique" })
 
 export const MaddoxCampaignSnapshotModel: Model<IMaddoxCampaignSnapshot> =
     (mongoose.models.MaddoxCampaignSnapshot as Model<IMaddoxCampaignSnapshot>) || mongoose.model<IMaddoxCampaignSnapshot>("MaddoxCampaignSnapshot", SnapshotSchema)

@@ -14,10 +14,10 @@ import { MaddoxCampaignMemberModel, MaddoxCampaignMessageModel, MaddoxCampaignMo
 import type { MaddoxGameStateDto } from "../game-types"
 import { isHiddenPlayerAction } from "../player-actions-visibility"
 import { isMemberReadyToPlay } from "./campaigns"
-import { enqueueMaddoxJob } from "./game-live"
+import { enqueueMaddoxJob, maddoxJobSignal } from "./game-live"
 import { narratorTranscript, checkResultLine } from "./narrator-prompt"
 import { isOpexMember } from "./opex-members"
-import { decideOpex, loadOpexModel, opexPromptContext } from "./opex-player"
+import { decideOpex, loadOpexModel, OpexDecisionInterruptedError, opexPromptContext } from "./opex-player"
 import {
     buildOpexInstructions,
     opexCombatPlanSchema,
@@ -157,6 +157,7 @@ async function runOpexTurn(campaignId: Types.ObjectId, memberId: Types.ObjectId,
                 title: `Personagem Opex · turno ${turnNumber} · ${campaign.name}`,
                 origin: MADDOX_OPEX_TURN_CONSUMPTION_ORIGIN,
                 subject: String(campaignId),
+                signal: maddoxJobSignal(String(campaignId), jobId),
             })
             const text = action.texto.trim().slice(0, 4_000)
             if (action.acao === "perguntar" && text && questions < MADDOX_OPEX_QUESTIONS_MAX) {
@@ -187,7 +188,11 @@ async function runOpexTurn(campaignId: Types.ObjectId, memberId: Types.ObjectId,
             const memories = opexMemoriesOf(action)
             if (memories.length) {
                 void import("@/features/engramind/server/opex-characters")
-                    .then(({ saveOpexCharacterMemories }) => saveOpexCharacterMemories({ campaignId: String(campaignId), memberId: String(memberId), characterName: character?.name ?? "" }, memories, turnNumber))
+                    .then(async ({ saveOpexCharacterMemories }) => {
+                        // Reinício da campanha (DND-50) no meio: as memórias da partida apagada não são gravadas.
+                        if (!(await MaddoxCampaignModel.exists({ _id: campaignId, status: "active" }))) return
+                        await saveOpexCharacterMemories({ campaignId: String(campaignId), memberId: String(memberId), characterName: character?.name ?? "" }, memories, turnNumber)
+                    })
                     .catch((error: unknown) => log.warn({ memberId: String(memberId), err: errorText(error) }, "[maddox] memórias do Personagem Opex não gravadas"))
             }
             await MaddoxCampaignModel.updateOne({ _id: campaignId, "turn.number": turnNumber, "turn.opexActor.memberId": memberId }, { $set: { "turn.opexActor": null } })
@@ -197,6 +202,11 @@ async function runOpexTurn(campaignId: Types.ObjectId, memberId: Types.ObjectId,
         }
         throw new Error("o Personagem Opex não chegou a uma decisão")
     } catch (error) {
+        // Reinício da campanha (DND-50): a vez acabou junto com a partida; nada a gravar.
+        if (error instanceof OpexDecisionInterruptedError || maddoxJobSignal(String(campaignId), jobId) === null) {
+            log.info({ campaignId: String(campaignId), memberId: String(memberId), turnNumber }, "[maddox] vez do Personagem Opex interrompida: a campanha foi reiniciada")
+            return
+        }
         const code = (error as { code?: string }).code
         // Já declarou (o dono pulou no meio) ou o turno fechou: nada a fazer, a vez segue.
         if (code === "ALREADY_DECLARED" || code === "TURN_CLOSED") {

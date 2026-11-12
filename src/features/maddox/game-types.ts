@@ -340,6 +340,8 @@ export interface MaddoxGameStateDto {
     name: string
     rigor: MaddoxRigorLevel
     status: MaddoxCampaignStatus
+    /** Reinício da campanha (DND-50): quando o dono reiniciou; a mesa aberta volta à tela da campanha com o aviso. */
+    resetAt?: string | null
     ownerId: string
     maddoxAvatarUrl: string | null
     /** `failed`: a última geração do mestre falhou e a nova tentativa acontece em instantes (Maddox 4). */

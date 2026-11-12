@@ -150,3 +150,35 @@ export function useRetryMaddoxCharacterPortrait(id: string) {
         onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível gerar o retrato")),
     })
 }
+
+/** "Reiniciar campanha" (DND-50): a campanha volta ao lobby do fim das entrevistas. */
+export function useResetMaddoxCampaign(id: string) {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: async () => unwrapApi((await api.post<ApiResponse<MaddoxCampaignDetailDto>>(`${BASE}/${id}/reset`, {})).data),
+        onSuccess: (campaign) => {
+            queryClient.setQueryData(campaignKey(id), campaign)
+            void queryClient.invalidateQueries({ queryKey: MADDOX_CAMPAIGNS_KEY })
+        },
+        onError: (error) => {
+            toast.error(apiErrorMessage(error, "Não foi possível reiniciar a campanha"))
+            void queryClient.invalidateQueries({ queryKey: MADDOX_CAMPAIGNS_KEY })
+        },
+    })
+}
+
+/** "Tentar de novo" o ajuste da ficha de um personagem pelo Maddox depois do reinício (DND-50). */
+export function useRetryMaddoxSheetRestore(id: string) {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: async (characterId: string) => unwrapApi((await api.post<ApiResponse<MaddoxCampaignDetailDto>>(`${BASE}/${id}/reset/sheets/${characterId}`, {})).data),
+        onSuccess: (campaign) => {
+            queryClient.setQueryData(campaignKey(id), campaign)
+            void queryClient.invalidateQueries({ queryKey: MADDOX_CAMPAIGNS_KEY })
+        },
+        onError: (error) => {
+            toast.error(apiErrorMessage(error, "Não foi possível tentar de novo"))
+            void queryClient.invalidateQueries({ queryKey: MADDOX_CAMPAIGNS_KEY })
+        },
+    })
+}

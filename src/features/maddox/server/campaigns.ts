@@ -265,6 +265,7 @@ export async function listMyCampaigns(userId: string): Promise<MaddoxCampaignLis
 
 export async function getCampaignDetail(campaignId: string, userId: string): Promise<MaddoxCampaignDetailDto> {
     const { campaign } = await loadMembership(campaignId, userId)
+    const reset = await resetDetail(campaign, userId)
     const [dto] = await buildDtos([campaign], userId)
     return {
         ...dto!,
@@ -273,7 +274,21 @@ export async function getCampaignDetail(campaignId: string, userId: string): Pro
         setting: campaign.setting ?? "",
         openingSituation: campaign.openingSituation ?? "",
         rigorLocked: rigorLocked(campaign),
+        ...reset,
     }
+}
+
+/** Reinício da campanha (DND-50) no detalhe: botão, limpeza em andamento e ajustes de ficha (retoma o que parou). */
+async function resetDetail(campaign: CampaignDoc, userId: string): Promise<Pick<MaddoxCampaignDetailDto, "canReset" | "resetting" | "sheetRestores">> {
+    const { canResetCampaign, recoverReset } = await import("./campaign-reset")
+    const canReset = canResetCampaign(campaign, userId)
+    if (!campaign.reset) return { canReset, resetting: false, sheetRestores: [] }
+    recoverReset(campaign)
+    const { reconcileSheetRestores, sheetRestoreDtos } = await import("./sheet-restore")
+    const characters = await MaddoxCharacterModel.find({ campaignId: campaign._id, "sheetRestore.resetId": campaign.reset.id }).select("name sheetRestore").lean<CharacterDoc[]>()
+    await reconcileSheetRestores(campaign, characters)
+    const fresh = characters.length ? await MaddoxCharacterModel.find({ _id: { $in: characters.map((character) => character._id) } }).select("name sheetRestore").lean<CharacterDoc[]>() : []
+    return { canReset, resetting: campaign.reset.status === "cleaning", sheetRestores: sheetRestoreDtos(campaign, fresh, userId) }
 }
 
 // ── Criação e edição ───────────────────────────────────────────────────────────

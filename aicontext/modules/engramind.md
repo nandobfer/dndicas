@@ -150,8 +150,8 @@ criados na criação da campanha (assinatura exata `search` do Maddox). Formato 
   token de app. Sem a rede, o prompt segue sem as memórias, `search_memories` responde erro acionável e o Diário
   avisa (`memoriesUnavailable`, `503 ENGRAMIND_UNAVAILABLE` nas anotações). Não há cópia de reserva.
 - **Rotina** `engramind-campaign-memories-sync` (15 min, `server/campaign-sync.ts`) e "Sincronizar agora": rede de
-  cada campanha, ciclo de vida dos canais (`archived` arquiva; fora disso, restaura), a entrega da fila e os reparos da
-  volta a um turno (DND-44).
+  cada campanha, ciclo de vida dos canais (`archived` arquiva; fora disso, restaura), a entrega da fila, os reparos da
+  volta a um turno (DND-44) e as memórias dos reinícios de campanha que ficaram para trás (DND-50).
 - **Webhook**: mudança no canal dos jogadores avisa os membros (`maddox.campaign.changed`) e o Diário recarrega.
 - **Memórias antigas** (`maddox_campaign_memories`, de antes desta revisão): aba Migração → "Mover memórias"
   (`server/campaign-memory-move.ts`): backup da coleção a cada execução com dados (SHA-256, em partes de 2 milhões
@@ -174,6 +174,12 @@ posteriores ao retrato saem dela e voltam na retomada. Na **perda definitiva** (
 descartado são excluídas (`DELETE`, escopo `delete` dos tokens dos agentes); a que falhar vai para `maddox_memory_repairs` e a
 rotina `engramind-campaign-memories-sync` tenta de novo, junto com o reparo das voltas que ficaram pela metade
 (`campaign.memoryRepair`). Memórias sem `turno:` nem `gravado:` (anteriores) nunca são afetadas; a troca de canal não é desfeita.
+
+**Reiniciar a campanha (DND-50, `purgeCampaignMemories` em `server/campaign-rewind.ts`).** O reinício de uma campanha Maddox
+exclui **todas** as memórias (ativas, permanentes e arquivadas) dos canais Jogadores e Mestre (token do Maddox) e dos canais
+individuais dos Personagens Opex e dos NPCs Opex (token de cada um; os tokens dos NPCs apagados ficam guardados no reinício até a
+exclusão). As entrevistas não gravam nesses canais. Canal Opex com token revogado é ignorado; com a rede fora, lança
+`MemoryRewindUnavailableError` e o reinício marca `reset.memories: "pending"` (a rotina tenta de novo). Repetir é seguro.
 
 **Redator.** O Engramind só aceita `redator.rewrite_text` por canal com token admin. O dndicas tenta desligar a
 reescrita nos canais das campanhas; com `403` marca "não suportado" (`engramind_state.channelSettings`, aviso na

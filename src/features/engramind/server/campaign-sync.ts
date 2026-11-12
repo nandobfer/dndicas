@@ -40,6 +40,10 @@ async function run(actorId: string): Promise<string> {
         await import("@/features/maddox/server/rewind")
             .then(({ processRewindRepairs }) => processRewindRepairs())
             .catch((error: unknown) => engramindLog.warn({ err: messageOf(error) }, "[engramind] reparos da volta a um turno não processados"))
+        // Reinício da campanha (DND-50): memórias da partida anterior que ainda não foram apagadas.
+        await import("@/features/maddox/server/campaign-reset")
+            .then(({ processPendingResetPurges }) => processPendingResetPurges())
+            .catch((error: unknown) => engramindLog.warn({ err: messageOf(error) }, "[engramind] memórias dos reinícios de campanha não processadas"))
         const lastResult = { ...queue, channels }
         await EngramindState.updateOne({ _id: ENGRAMIND_STATE_ID }, { $set: { campaignSync: { lastRunAt: startedAt, lastOkAt: new Date(), lastError: null, lastResult } } }, { upsert: true })
         return `${queue.delivered} entregues, ${queue.failed} recusadas, ${queue.remaining} na fila`

@@ -160,6 +160,8 @@ async function completeCharacter(subject: InterviewSubject, doc: InterviewDoc, t
     )
     // Por último: falha antes daqui mantém a entrevista em `proposed` e confirmar de novo reaplica.
     await finishInterview(doc, token, card?.base && final ? { ...data, abilityScores: { method: card.method, base: card.base, bonus: card.bonus ?? null, final }, build: doc.build ?? null } : data)
+    // Campanha já iniciada (DND-50): a ficha entra na cópia do início, para onde o reinício a devolve.
+    if (sheet && subject.campaign.status !== "lobby" && subject.campaign.status !== "interview") await (await import("./turn-snapshots")).addToStartCopy(subject.campaign._id, sheet.sheetId)
     await recordAudit({
         userId,
         entidade: MADDOX_CAMPAIGN_AUDIT_ENTITY,

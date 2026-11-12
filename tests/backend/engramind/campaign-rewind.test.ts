@@ -195,3 +195,28 @@ describe("volta a um turno — Personagem Opex", () => {
         expect(remote("Dívida")).toMatchObject({ status: "archived" })
     })
 })
+
+describe("reinício da campanha (DND-50) — exclusão de todas as memórias da partida", () => {
+    it("exclui as memórias dos canais da campanha (inclusive arquivadas) e do Personagem Opex; repetir não falha", async () => {
+        const memberId = new mongoose.Types.ObjectId()
+        await MaddoxCampaignMemberModel.create({ _id: memberId, campaignId: id, userId: `opex:${memberId}`, kind: "opex", role: "player", status: "joined", opex: { ownerUserId: "dono", prompt: "", interviewMode: "autonomous", addedAt: new Date(), run: null, engramind: null } })
+        const ref = { campaignId: id, memberId: String(memberId), characterName: "Brunna" }
+        expect(await opexChars.provisionOpexCharacterAgent(ref)).toBe(true)
+        await opexChars.saveOpexCharacterMemories(ref, [{ title: "Medo do escuro", text: "Brunna teme a cripta." }], 2)
+        await saveCampaignMemory(id, { kind: "fato", title: "Segredo do mestre", text: "O prefeito mente.", visibility: "master", turnNumber: 3 })
+        await rewindTo({ asOf: 1_500, deleteAfter: 3_000 })
+        expect(remote("A Torre")).toMatchObject({ status: "archived" })
+        expect(fake.state.memories.size).toBe(5)
+
+        expect(await rewind.purgeCampaignMemories(id, new Map())).toBe(5)
+        expect(fake.state.memories.size).toBe(0)
+        expect(await rewind.purgeCampaignMemories(id, new Map())).toBe(0)
+    })
+
+    it("rede fora: lança MemoryRewindUnavailableError e nada é excluído", async () => {
+        fake.state.down = true
+        await expect(rewind.purgeCampaignMemories(id, new Map())).rejects.toBeInstanceOf(rewind.MemoryRewindUnavailableError)
+        fake.state.down = false
+        expect(fake.state.memories.size).toBe(3)
+    })
+})

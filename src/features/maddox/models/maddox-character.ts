@@ -1,5 +1,14 @@
 import mongoose, { Schema, type Model, type Types } from "mongoose"
-import { MADDOX_CHARACTER_PORTRAIT_STATUSES, MADDOX_CHARACTER_STATUSES, MADDOX_INTERVIEW_STATUSES, type MaddoxCharacterPortraitStatus, type MaddoxCharacterStatus, type MaddoxInterviewStatus } from "../constants"
+import {
+    MADDOX_CHARACTER_PORTRAIT_STATUSES,
+    MADDOX_CHARACTER_STATUSES,
+    MADDOX_INTERVIEW_STATUSES,
+    MADDOX_SHEET_RESTORE_STATUSES,
+    type MaddoxCharacterPortraitStatus,
+    type MaddoxCharacterStatus,
+    type MaddoxInterviewStatus,
+    type MaddoxSheetRestoreStatus,
+} from "../constants"
 
 /**
  * Personagem jogável de uma campanha — `maddox_characters`. O perfil é narrativo (seções em Markdown,
@@ -27,6 +36,11 @@ export interface IMaddoxCharacter {
     currentStatePublic?: boolean
     interview: { status: MaddoxInterviewStatus; scriptVersion: number | null }
     status: MaddoxCharacterStatus
+    /**
+     * Ajuste da ficha pelo Maddox depois do reinício da campanha (DND-50), quando não há cópia nem retrato do início: a
+     * ficha volta ao fim da entrevista. `pending` bloqueia "Iniciar campanha"; `failed` deixa a ficha como estava.
+     */
+    sheetRestore?: { resetId: string; status: MaddoxSheetRestoreStatus; error: string | null; startedAt: Date; updatedAt: Date } | null
     createdAt: Date
     updatedAt: Date
 }
@@ -53,6 +67,13 @@ const MaddoxCharacterSchema = new Schema<IMaddoxCharacter>(
             scriptVersion: { type: Number, default: null },
         },
         status: { type: String, enum: MADDOX_CHARACTER_STATUSES, default: "active" },
+        sheetRestore: {
+            type: new Schema(
+                { resetId: { type: String, required: true }, status: { type: String, enum: MADDOX_SHEET_RESTORE_STATUSES, required: true }, error: { type: String, default: null }, startedAt: { type: Date, required: true }, updatedAt: { type: Date, required: true } },
+                { _id: false },
+            ),
+            default: null,
+        },
     },
     { collection: "maddox_characters", timestamps: true, versionKey: false },
 )

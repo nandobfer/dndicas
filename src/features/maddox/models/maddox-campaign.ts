@@ -95,6 +95,13 @@ export interface IMaddoxCampaign {
      * são levadas ao alvo gravado (`asOf` nulo = o estado mais novo). A rotina de sincronização das memórias também tenta.
      */
     memoryRepair?: { asOf: number | null; keepAfter: number | null; known: { id: string; ref: MaddoxMemoryChannelRef }[]; at: Date } | null
+    /**
+     * Reinício da campanha (DND-50): a campanha voltou ao lobby do fim das entrevistas. `cleaning` = a limpeza da partida
+     * ainda roda (ou parou num reinício do processo e é retomada); `memories: "pending"` = as memórias da partida anterior
+     * ainda não foram apagadas no Engramind (a rotina e o próximo início tentam de novo). `npcTokenBoxes` guarda os tokens
+     * cifrados dos NPCs Opex apagados, para limpar os canais deles depois. Some quando a campanha é iniciada de novo.
+     */
+    reset?: MaddoxCampaignReset | null
     /** Mostra a CD dos testes aos jogadores (Maddox 5); padrão = secreta. */
     showCheckDc: boolean
     /** Imagens automáticas nas cenas (Maddox 10): o dono desliga na campanha; o pedido manual continua. */
@@ -137,6 +144,20 @@ export interface IMaddoxCampaign {
     invite: { token: string | null; rotatedAt: Date | null }
     createdAt: Date
     updatedAt: Date
+}
+
+export interface MaddoxCampaignReset {
+    id: string
+    status: "cleaning" | "done"
+    previousStatus: MaddoxCampaignStatus
+    /** Turno em que a mesa estava (auditoria). */
+    previousTurn?: number
+    byUserId: string
+    startedAt: Date
+    completedAt: Date | null
+    memories: "pending" | "done"
+    npcTokenBoxes: Record<string, unknown>
+    lastError: string | null
 }
 
 /** Operação da volta em andamento (gravada na trava para a retomada depois de um reinício). */
@@ -199,6 +220,7 @@ const MaddoxCampaignSchema = new Schema<IMaddoxCampaign>(
             default: null,
         },
         memoryRepair: { type: Schema.Types.Mixed, default: null },
+        reset: { type: Schema.Types.Mixed, default: null },
         showCheckDc: { type: Boolean, default: false },
         sceneImages: { type: Boolean, default: true },
         hidePlayerActions: { type: Boolean, default: false },

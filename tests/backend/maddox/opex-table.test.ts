@@ -34,9 +34,12 @@ vi.mock("@/features/maddox/server/settings", async () => {
 })
 vi.mock("@/features/ai/server/settings", () => ({ availability: vi.fn(async () => ({ available: true, reason: null })) }))
 vi.mock("@/features/maddox/server/game-presence", () => ({ onlineUserIds: vi.fn(async () => (presence.online ? new Set(presence.online) : null)) }))
+/** Decisão do Opex segurada (provedor que ignora o sinal), para o reinício da campanha no meio dela (DND-50). */
+const opexGate: { hold: Promise<void> | null } = { hold: null }
 vi.mock("@/lib/ai/stream", () => ({
     generateAiText: vi.fn(async (request: AiStreamRequest) => {
         opexCalls.push(request)
+        if (opexGate.hold) await opexGate.hold
         const next = opexReplies.shift() ?? JSON.stringify({ acao: "nada", texto: "" })
         if (next instanceof Error) throw next
         return { text: next, usage: null, durationMs: 1 }
@@ -65,6 +68,13 @@ const fakeMaster = {
 vi.mock("@/features/maddox/server/game-master", () => ({ getMaddoxMaster: vi.fn(async () => fakeMaster) }))
 const validateDeclaration = vi.fn<(input: { content: string }) => Promise<{ valid: boolean; reason: string }>>(async () => ({ valid: true, reason: "" }))
 vi.mock("@/features/maddox/server/action-validation", () => ({ validateDeclaration }))
+
+vi.mock("@/features/engramind/server/campaign-rewind", () => ({
+    MemoryRewindUnavailableError: class extends Error {},
+    npcTokenBoxesOf: vi.fn(async () => new Map()),
+    purgeCampaignMemories: vi.fn(async () => 0),
+}))
+vi.mock("@/features/engramind/server/campaign-channels", () => ({ syncCampaignChannelLifecycle: vi.fn(async () => undefined), provisionCampaignMemoryNetworkSafely: vi.fn(async () => true) }))
 
 const { MaddoxCampaignMemberModel, MaddoxCampaignMessageModel, MaddoxCampaignModel, MaddoxCharacterModel } = await import("@/features/maddox/models")
 const campaigns = await import("@/features/maddox/server/campaigns")
@@ -134,6 +144,7 @@ beforeEach(async () => {
     fakeMaster.answer.mockClear()
     validateDeclaration.mockClear()
     saveOpexCharacterMemories.mockClear()
+    opexGate.hold = null
 })
 
 describe("Personagens Opex na mesa (DND-26)", () => {
@@ -314,5 +325,40 @@ describe("Personagens Opex na mesa (DND-26)", () => {
         const state = await game.getGameState(id, owner)
         expect(state.turn.number).toBe(2)
         expect(state.participants.some((item) => item.memberId === opexId)).toBe(false)
+    })
+})
+
+describe("reinício da campanha com o Personagem Opex decidindo (DND-50)", () => {
+    it("a decisão é interrompida: nada da vez do Opex é gravado e o reinício não espera o provedor", async () => {
+        const { id, owner } = await table()
+        const tork = await addReadyOpex(id, owner, "Tork", 10)
+        await game.startCampaign(id, owner)
+        await settle(id)
+
+        let release!: () => void
+        opexGate.hold = new Promise<void>((resolve) => (release = resolve))
+        opexReplies.push(declare(id, { acao: "declarar", texto: "Ergo o escudo.", memorias: [{ titulo: "Confiança em Kael", texto: "Kael parece corajoso." }] }))
+        await game.submitGameAction(id, { kind: "declaration", content: "Abro a porta." }, owner)
+        await vi.waitFor(() => expect(opexCalls).toHaveLength(1))
+        expect((await MaddoxCampaignModel.findById(id).lean())!.turn.opexActor).toMatchObject({ memberId: new mongoose.Types.ObjectId(tork) })
+
+        const { resetCampaign, waitForCampaignResets } = await import("@/features/maddox/server/campaign-reset")
+        const startedAt = Date.now()
+        await resetCampaign(id, owner)
+        expect(Date.now() - startedAt).toBeLessThan(4_000)
+        release()
+        await settle(id)
+        await waitForCampaignResets()
+
+        expect(await messagesOf(id)).toHaveLength(0)
+        expect(saveOpexCharacterMemories).not.toHaveBeenCalled()
+        expect(opexCalls).toHaveLength(1)
+        const campaign = await MaddoxCampaignModel.findById(id).lean()
+        expect(campaign!.status).toBe("lobby")
+        expect(campaign!.turn.opexActor ?? null).toBeNull()
+        expect(campaign!.reset).toMatchObject({ status: "done" })
+        const member = await MaddoxCampaignMemberModel.findById(tork).lean()
+        expect(member!.status).toBe("joined")
+        expect(member!.opex?.run?.status ?? "idle").not.toBe("failed")
     })
 })

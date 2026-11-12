@@ -1,7 +1,8 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
 import { ArrowLeft, Dices, History, Hourglass, MessageCircle, Swords } from "lucide-react"
 import { toast } from "sonner"
@@ -11,7 +12,7 @@ import { EmptyState } from "@/components/feedback/EmptyState"
 import { ErrorState } from "@/components/feedback/ErrorState"
 import { useAuth } from "@/core/hooks/useAuth"
 import { apiErrorCode, apiErrorMessage } from "@/lib/api"
-import { MADDOX_TURN_PHASE_LABELS } from "../../constants"
+import { MADDOX_RESET_NOTICE_PARAM, MADDOX_RESET_NOTICE_VALUE, MADDOX_RESET_TEXTS, MADDOX_TURN_PHASE_LABELS } from "../../constants"
 import type { MaddoxGameMessageDto, MaddoxGameStateDto } from "../../game-types"
 import type { MaddoxGameActionInput } from "../../game-schemas"
 import { actionOptionsView, combatBannerText, newestRewindNoticeId, composerBlockReason, masterBannerText, opexActingView, opexBannerText, reminderBlockReason, turnProgress, visibleLiveGenerations } from "../../game-view"
@@ -81,6 +82,8 @@ export function GamePage({ campaignId }: { campaignId: string }) {
         )
     }
     const state = game.data
+    // Reinício da campanha (DND-50): a mesa aberta volta à tela da campanha com o aviso.
+    if (state.status !== "active" && state.resetAt) return <ResetRedirect campaignId={campaignId} />
     if (state.status !== "active") {
         return (
             <div className="space-y-6">
@@ -90,6 +93,19 @@ export function GamePage({ campaignId }: { campaignId: string }) {
         )
     }
     return <GameTable state={state} presence={presence} stream={stream} />
+}
+
+function ResetRedirect({ campaignId }: { campaignId: string }) {
+    const router = useRouter()
+    useEffect(() => {
+        router.replace(`/campanhas/${campaignId}?${MADDOX_RESET_NOTICE_PARAM}=${MADDOX_RESET_NOTICE_VALUE}`)
+    }, [campaignId, router])
+    return (
+        <div className="space-y-6" aria-busy="true" data-testid="reset-redirect">
+            <BackLink campaignId={campaignId} />
+            <EmptyState icon={Hourglass} title={MADDOX_RESET_TEXTS.notice} description="Voltando à tela da campanha…" />
+        </div>
+    )
 }
 
 function BackLink({ campaignId }: { campaignId: string }) {

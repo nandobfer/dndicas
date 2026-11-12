@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto"
 import { loggerFor } from "@/lib/logger"
 import type { DiceRollResponse } from "@/features/dice-roller/types"
 import type { MaddoxGameStreamLine, MaddoxLiveGenerationDto, MaddoxLiveRollDto } from "../game-types"
+import { MADDOX_JOB_ABORT_GRACE_MS } from "../constants"
 import type { TacticalDraftCombatant } from "./tactical-combat"
 
 /**
@@ -25,6 +26,8 @@ interface CampaignHub {
     live: Map<string, MaddoxLiveGenerationDto>
     listeners: Set<Listener>
     jobs: Map<string, MaddoxJobState>
+    /** Sobe a cada `cancelCampaignJobs` (DND-50): o job que entrou antes dela é pulado quando chega a vez dele. */
+    epoch: number
 }
 
 /** O que a geração faz: narração do turno do mestre (rodada de testes `round`) ou resposta a uma pergunta. */
@@ -110,6 +113,8 @@ export interface MaddoxDraftActionOptions {
 }
 
 interface MaddoxJobState {
+    /** Interrupção do job (reinício da campanha, DND-50). */
+    controller: AbortController
     meta: MaddoxJobMeta | null
     checks: MaddoxDraftCheck[]
     combat: MaddoxDraftCombatEvent[]
@@ -147,13 +152,16 @@ export interface MaddoxDraftReminder {
 
 const log = loggerFor({ module: "maddox", feature: "game-live" })
 
-const globalHub = globalThis as unknown as { __maddoxGameHub?: Map<string, CampaignHub> }
+const globalHub = globalThis as unknown as { __maddoxGameHub?: Map<string, CampaignHub>; __maddoxAbortedJobs?: Set<string> }
 const hubs: Map<string, CampaignHub> = (globalHub.__maddoxGameHub ??= new Map())
+/** Jobs interrompidos pelo reinício (DND-50): a geração que ainda roda em segundo plano não grava pelas ferramentas. */
+const abortedJobs: Set<string> = (globalHub.__maddoxAbortedJobs ??= new Set())
+const ABORTED_JOBS_MAX = 500
 
 function hubOf(campaignId: string): CampaignHub {
     let hub = hubs.get(campaignId)
     if (!hub) {
-        hub = { tail: Promise.resolve(), pending: 0, live: new Map(), listeners: new Set(), jobs: new Map() }
+        hub = { tail: Promise.resolve(), pending: 0, live: new Map(), listeners: new Set(), jobs: new Map(), epoch: 0 }
         hubs.set(campaignId, hub)
     }
     return hub
@@ -177,20 +185,50 @@ function emit(campaignId: string, line: MaddoxGameStreamLine) {
 
 export interface MaddoxJob {
     jobId: string
+    /** Abortado quando a campanha é reiniciada (DND-50): o job deve parar e não gravar mais nada. */
+    signal: AbortSignal
 }
+
+/** Resolve quando o sinal aborta (a fila não espera um job interrompido que ignore o sinal). */
+const whenAborted = (signal: AbortSignal) =>
+    new Promise<"aborted">((resolve) => {
+        if (signal.aborted) resolve("aborted")
+        else signal.addEventListener("abort", () => resolve("aborted"), { once: true })
+    })
 
 /**
  * Põe uma geração na fila da campanha (uma por vez). Devolve a promessa do job, que nunca rejeita: a falha é
- * logada (o job deve tratar e gravar as próprias falhas).
+ * logada (o job deve tratar e gravar as próprias falhas). Um job interrompido por `cancelCampaignJobs` libera a fila na
+ * hora, mesmo que ainda não tenha terminado; o que entrou antes da interrupção e ainda não rodou é pulado.
  */
 export function enqueueMaddoxJob(campaignId: string, label: string, run: (job: MaddoxJob) => Promise<void>, meta: MaddoxJobMeta | null = null): Promise<void> {
     const hub = hubOf(campaignId)
     hub.pending += 1
     const jobId = randomUUID()
+    const epoch = hub.epoch
     const next = hub.tail.then(async () => {
-        hub.jobs.set(jobId, { meta, checks: [], combat: [], sceneImage: null, actionOptions: [], npcPortraits: [], workspace: null, liveId: null, reminders: [], opexNpcConsults: new Map(), opexNpcFailures: [] })
+        if (hub.epoch !== epoch) {
+            hub.pending -= 1
+            prune(campaignId)
+            log.info({ campaignId, job: label }, "[maddox] geração da mesa descartada: a campanha foi reiniciada")
+            return
+        }
+        const controller = new AbortController()
+        hub.jobs.set(jobId, { controller, meta, checks: [], combat: [], sceneImage: null, actionOptions: [], npcPortraits: [], workspace: null, liveId: null, reminders: [], opexNpcConsults: new Map(), opexNpcFailures: [] })
         try {
-            await run({ jobId })
+            const work = run({ jobId, signal: controller.signal })
+            // O job que segue rodando depois da interrupção não derruba o processo com uma rejeição solta.
+            work.catch(() => undefined)
+            const outcome = await Promise.race([work, whenAborted(controller.signal)])
+            if (outcome === "aborted") {
+                // A vaga só é liberada quando o job interrompido termina (o que ele gravar no meio sai na limpeza que vem
+                // depois na fila), com uma folga curta de teto para um job que ignore o sinal.
+                let timer: ReturnType<typeof setTimeout> | null = null
+                const settled = await Promise.race([work.then(() => true, () => true), new Promise<false>((resolve) => (timer = setTimeout(() => resolve(false), MADDOX_JOB_ABORT_GRACE_MS)))])
+                if (timer) clearTimeout(timer)
+                if (settled) log.info({ campaignId, job: label }, "[maddox] geração da mesa interrompida: a campanha foi reiniciada")
+                else log.warn({ campaignId, job: label, graceMs: MADDOX_JOB_ABORT_GRACE_MS }, "[maddox] geração interrompida não terminou dentro da folga: a fila segue sem ela")
+            }
         } catch (error) {
             log.error({ err: error instanceof Error ? error.message : String(error), campaignId, job: label }, "[maddox] falha numa geração da mesa")
         } finally {
@@ -219,6 +257,38 @@ export async function waitForCampaignIdle(campaignId: string): Promise<void> {
 
 export function isActiveMaddoxJob(campaignId: string, jobId: string): boolean {
     return hubs.get(campaignId)?.jobs.has(jobId) ?? false
+}
+
+/** O job foi interrompido pelo reinício da campanha (DND-50). */
+export function isAbortedMaddoxJob(jobId: string): boolean {
+    return abortedJobs.has(jobId)
+}
+
+/** Sinal de interrupção do job em andamento (`null` = o job já terminou ou foi interrompido). */
+export function maddoxJobSignal(campaignId: string, jobId: string): AbortSignal | null {
+    return hubs.get(campaignId)?.jobs.get(jobId)?.controller.signal ?? null
+}
+
+/**
+ * Reinício da campanha (DND-50): interrompe o job em andamento (sinal abortado; ele deixa de ser um job ativo, então o
+ * token de turno do MCP e as ferramentas param de valer), descarta os que esperam a vez e encerra as gerações ao vivo.
+ * Devolve quantos jobs foram afetados.
+ */
+export function cancelCampaignJobs(campaignId: string): number {
+    const hub = hubs.get(campaignId)
+    if (!hub) return 0
+    hub.epoch += 1
+    const affected = hub.pending
+    for (const [jobId, job] of hub.jobs) {
+        job.controller.abort()
+        abortedJobs.add(jobId)
+    }
+    while (abortedJobs.size > ABORTED_JOBS_MAX) abortedJobs.delete(abortedJobs.values().next().value!)
+    hub.jobs.clear()
+    for (const live of hub.live.values()) emit(campaignId, { type: "live-end", liveId: live.liveId, messageId: null, error: null })
+    hub.live.clear()
+    prune(campaignId)
+    return affected
 }
 
 /** Tipo e rodada do job em andamento (`null` = job sem metadados ou que já terminou). */
@@ -448,20 +518,21 @@ export function beginLive(campaignId: string, input: Pick<MaddoxLiveGenerationDt
     return {
         liveId: live.liveId,
         delta(text) {
-            if (ended || !text) return
+            if (ended || !text || !hubs.get(campaignId)?.live.has(live.liveId)) return
             live.text += text
             emit(campaignId, { type: "delta", liveId: live.liveId, text })
         },
         tool(running) {
-            if (ended || live.tool === running) return
+            if (ended || live.tool === running || !hubs.get(campaignId)?.live.has(live.liveId)) return
             live.tool = running
             emit(campaignId, { type: "tool", liveId: live.liveId, running })
         },
         end(result) {
             if (ended) return
             ended = true
-            hubs.get(campaignId)?.live.delete(live.liveId)
-            emit(campaignId, { type: "live-end", liveId: live.liveId, ...result })
+            // Já encerrada por `cancelCampaignJobs` (reinício): os ouvintes já receberam o fim.
+            const removed = hubs.get(campaignId)?.live.delete(live.liveId) ?? false
+            if (removed) emit(campaignId, { type: "live-end", liveId: live.liveId, ...result })
             prune(campaignId)
         },
     }

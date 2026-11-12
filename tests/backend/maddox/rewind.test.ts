@@ -339,6 +339,25 @@ describe("ir ao turno, andar e retomar", () => {
         expect((await goto(id, owner, 2)).turn).toMatchObject({ number: 2, phase: "players" })
     })
 
+    it("declaração que perde a corrida para a trava da volta não deixa mensagem, nem descartada", async () => {
+        const { id, seats } = await playTo(4)
+        // A volta marca a declaração como descartada e toma a fase do mestre entre a gravação e a contagem: a contagem falha
+        // e a compensação precisa apagar a mensagem mesmo descartada (o filtro de descarte esconderia a exclusão).
+        const create = MaddoxCampaignMessageModel.create.bind(MaddoxCampaignMessageModel) as (...args: unknown[]) => Promise<{ _id: mongoose.Types.ObjectId; content?: string }>
+        const spy = vi.spyOn(MaddoxCampaignMessageModel, "create").mockImplementationOnce((async (doc: Record<string, unknown>) => {
+            const created = await create(doc)
+            if (doc.content === "Perde a corrida") {
+                await MaddoxCampaignModel.updateOne({ _id: id }, { $set: { "turn.phase": "master", "turn.generating": { token: "volta", startedAt: new Date(), rewind: { kind: "goto" } } } })
+                await MaddoxCampaignMessageModel.updateOne({ _id: created._id }, { $set: { discardedBy: { rewindId: "r-concorrente", at: new Date() } } })
+            }
+            return created
+        }) as never)
+        await expect(game.submitGameAction(id, { kind: "declaration", content: "Perde a corrida" }, seats[1]!.userId)).rejects.toMatchObject({ status: 409, code: "TURN_CLOSED" })
+        spy.mockRestore()
+        expect((await allMessages(id)).filter((message) => message.content === "Perde a corrida")).toHaveLength(0)
+        await MaddoxCampaignModel.updateOne({ _id: id }, { $set: { "turn.phase": "players", "turn.generating": null } })
+    })
+
     it("duas voltas ao mesmo tempo: uma passa e a outra responde 409; declaração concorrente nunca fica órfã", async () => {
         const { id, owner, seats } = await playTo(4)
         const results = await Promise.allSettled([rewind.rewindToTurn(id, { turnNumber: 2 }, owner), rewind.rewindToTurn(id, { turnNumber: 1 }, owner), game.submitGameAction(id, { kind: "declaration", content: "Concorrente" }, seats[1]!.userId)])
