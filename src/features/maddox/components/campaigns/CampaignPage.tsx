@@ -12,7 +12,7 @@ import { ErrorState } from "@/components/feedback/ErrorState"
 import { EmptyState } from "@/components/feedback/EmptyState"
 import { GlassCard as Card, GlassCardContent as CardContent, GlassCardDescription as CardDescription, GlassCardHeader as CardHeader, GlassCardTitle as CardTitle } from "@/components/ui/glass-card"
 import { useAuth } from "@/core/hooks/useAuth"
-import { MADDOX_CHARACTER_UNNAMED_LABEL, MADDOX_OPEX_INTERVIEW_MODE_LABELS, MADDOX_OPEX_UNNAMED_LABEL, MADDOX_RESET_NOTICE_PARAM, MADDOX_RESET_NOTICE_VALUE, MADDOX_RESET_TEXTS, MADDOX_RIGOR_LEVEL_DEFS, MADDOX_TACTICAL_COMBAT_RIGORS, MADDOX_TURN_PHASE_LABELS, maddoxSheetRestoreFailedMessage } from "../../constants"
+import { MADDOX_CHARACTER_UNNAMED_LABEL, MADDOX_OPEX_INTERVIEW_MODE_LABELS, MADDOX_OPEX_UNNAMED_LABEL, MADDOX_RESET_NOTICE_PARAM, MADDOX_RESET_NOTICE_VALUE, MADDOX_RESET_TEXTS, MADDOX_RIGOR_LEVEL_DEFS, MADDOX_TACTICAL_COMBAT_RIGORS, MADDOX_TURN_PHASE_LABELS, maddoxSheetRestoreFailedMessage, memberAvatarContext } from "../../constants"
 import type { MaddoxCampaignCharacterDto, MaddoxCampaignDetailDto, MaddoxCampaignMemberDto } from "../../campaign-types"
 import { useMaddoxCampaign, useMaddoxCampaignsRealtime, useRemoveMaddoxMember, useResetMaddoxCampaign, useRetryMaddoxCharacterPortrait, useRetryMaddoxSheetRestore } from "../../hooks/useMaddoxCampaigns"
 import { useStartMaddoxCampaign } from "../../hooks/useMaddoxGame"
@@ -225,7 +225,7 @@ function CampaignView({ campaign, userId }: { campaign: MaddoxCampaignDetailDto;
                         <ul className="divide-y divide-white/5" aria-label="Participantes">
                             {campaign.members.map((member) => (
                                 <motion.li key={member.id} layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-wrap items-center gap-3 py-3">
-                                    <MemberAvatar name={member.character?.name || member.name} imageUrl={member.character?.portraitUrl ?? member.avatarUrl} color={member.character ? color : undefined} className="h-11 w-11" />
+                                    <MemberAvatar name={member.character?.name || member.name} imageUrl={member.character?.portraitUrl ?? member.avatarUrl} color={member.character ? color : undefined} context={memberAvatarContext({ opex: member.kind === "opex", role: member.role, playerName: member.character?.name ? member.name : null })} className="h-11 w-11" />
                                     <div className="min-w-0 flex-1">
                                         <p className="flex items-center gap-1.5 truncate text-sm font-medium text-white">
                                             {member.character?.name ? member.character.name : <span className="text-white/50">{member.kind === "opex" ? MADDOX_OPEX_UNNAMED_LABEL : member.character ? MADDOX_CHARACTER_UNNAMED_LABEL : "Personagem ainda não criado"}</span>}

@@ -4,7 +4,7 @@ import Link from "next/link"
 import { ScrollText, UserRound } from "lucide-react"
 import { Markdown } from "@/components/ui/opex/markdown"
 import { GlassModal, GlassModalContent, GlassModalDescription, GlassModalHeader, GlassModalTitle } from "@/components/ui/glass-modal"
-import { MADDOX_PROFILE_SECTIONS } from "../../constants"
+import { MADDOX_PROFILE_SECTIONS, MADDOX_AVATAR_CONTEXT } from "../../constants"
 import type { MaddoxCampaignCharacterDto } from "../../campaign-types"
 import { MemberAvatar } from "./campaign-visuals"
 
@@ -35,7 +35,7 @@ export function CharacterProfileDialog({ character, playerName, color, own, onOp
                     <div className="space-y-5">
                         <GlassModalHeader>
                             <GlassModalTitle className="flex items-center gap-3">
-                                <MemberAvatar name={character.name} imageUrl={character.portraitUrl} color={color} className="h-12 w-12" />
+                                <MemberAvatar name={character.name} imageUrl={character.portraitUrl} color={color} context={own ? MADDOX_AVATAR_CONTEXT.mine : `Personagem de ${playerName}`} className="h-12 w-12" />
                                 <span className="truncate">{character.name}</span>
                             </GlassModalTitle>
                             <GlassModalDescription className="flex items-center gap-1">

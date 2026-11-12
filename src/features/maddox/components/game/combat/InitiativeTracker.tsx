@@ -1,5 +1,6 @@
 "use client"
 
+import { MADDOX_AVATAR_CONTEXT } from "../../../constants"
 import { motion } from "framer-motion"
 import { AlertTriangle, Brain, Check, Clock, HeartPulse, ListOrdered, Loader2, Skull, Swords } from "lucide-react"
 import { cn } from "@/core/utils"
@@ -69,7 +70,7 @@ export function InitiativeTracker({ combat, title, color, compact = false }: { c
                                 {slot.initiative ?? "…"}
                             </span>
                             {slot.kind === "character" ? (
-                                <MemberAvatar name={slot.name} imageUrl={slot.portraitUrl} color={slot.active ? color : rarityColors.rare} className="h-7 w-7 shrink-0" />
+                                <MemberAvatar name={slot.name} imageUrl={slot.portraitUrl} color={slot.active ? color : rarityColors.rare} context={slot.opex ? MADDOX_AVATAR_CONTEXT.opex : MADDOX_AVATAR_CONTEXT.character} className="h-7 w-7 shrink-0" />
                             ) : (
                                 <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border" style={{ borderColor: `${slot.side === "aliado" ? rarityColors.uncommon : COMBAT_COLOR}66` }}>
                                     {slot.defeated ? <Skull className="h-3.5 w-3.5 text-white/60" aria-hidden /> : <Swords className="h-3.5 w-3.5" style={{ color: slot.side === "aliado" ? rarityColors.uncommon : COMBAT_COLOR }} aria-hidden />}

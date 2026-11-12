@@ -5,6 +5,7 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import { AlertCircle, ArrowDown, BookOpen, EyeOff, HelpCircle, Loader2, MinusCircle } from "lucide-react"
 import { Button } from "@/components/ui/opex/button"
 import { Markdown } from "@/components/ui/opex/markdown"
+import { MADDOX_AVATAR_CONTEXT, messageAvatarContext } from "../../constants"
 import type { MaddoxGameMessageDto, MaddoxLiveGenerationDto } from "../../game-types"
 import { opexActingLabel, type MaddoxActionOptionsView } from "../../game-view"
 import { GameActionOptions } from "./GameActionOptions"
@@ -221,7 +222,7 @@ export function GameMessageList({ messages, myMemberId, maddoxAvatarUrl, color, 
                     </MaddoxBubble>
                 )}
                 {opexActing && (
-                    <SpeakerBubble key={`opex-acting-${opexActing.memberId}`} name={opexActing.characterName} avatarUrl={opexActing.portraitUrl} color={color} badge={<OpexChip />} testId="opex-acting">
+                    <SpeakerBubble key={`opex-acting-${opexActing.memberId}`} name={opexActing.characterName} avatarUrl={opexActing.portraitUrl} color={color} context={MADDOX_AVATAR_CONTEXT.opex} badge={<OpexChip />} testId="opex-acting">
                         <WritingIndicator color={color} label={opexActingLabel(opexActing.characterName)} />
                     </SpeakerBubble>
                 )}
@@ -341,7 +342,7 @@ function GameMessage({ message, mine, replyTo, maddoxAvatarUrl, color }: { messa
     const question = message.kind === "question"
     return (
         <motion.div {...bubble} className={`flex items-start gap-2.5 pb-3 ${mine ? "flex-row-reverse" : ""}`} data-testid={question ? "game-question" : "game-declaration"}>
-            <MemberAvatar name={name} imageUrl={message.portraitUrl} color={color} className="mt-0.5 h-7 w-7 shrink-0 self-start" />
+            <MemberAvatar name={name} imageUrl={message.portraitUrl} color={color} context={messageAvatarContext({ opex: message.opex, mine })} className="mt-0.5 h-7 w-7 shrink-0 self-start" />
             <div className={`min-w-0 max-w-[85%] space-y-1 break-words rounded-2xl border px-3.5 py-2 text-sm text-foreground ${mine ? "rounded-tr-sm border-primary/30 bg-primary/15" : "rounded-tl-sm border-white/10 bg-white/[0.05]"}`}>
                 <p className="flex items-center gap-1 text-xs font-semibold text-white/80">
                     {name}
@@ -360,17 +361,17 @@ function GameMessage({ message, mine, replyTo, maddoxAvatarUrl, color }: { messa
 
 function MaddoxBubble({ avatarUrl, color, testId, children }: { avatarUrl: string | null; color: string; testId?: string; children: React.ReactNode }) {
     return (
-        <SpeakerBubble name="Maddox" avatarUrl={avatarUrl} color={color} testId={testId ?? "maddox-writing"}>
+        <SpeakerBubble name="Maddox" avatarUrl={avatarUrl} color={color} context={MADDOX_AVATAR_CONTEXT.maddox} testId={testId ?? "maddox-writing"}>
             {children}
         </SpeakerBubble>
     )
 }
 
 /** Balão à esquerda de quem fala sem ser eu: o Maddox e o Personagem Opex agindo (DND-45). */
-function SpeakerBubble({ name, avatarUrl, color, badge, testId, children }: { name: string; avatarUrl: string | null; color: string; badge?: React.ReactNode; testId: string; children: React.ReactNode }) {
+function SpeakerBubble({ name, avatarUrl, color, context, badge, testId, children }: { name: string; avatarUrl: string | null; color: string; context: string; badge?: React.ReactNode; testId: string; children: React.ReactNode }) {
     return (
         <motion.div {...bubble} className="flex items-start gap-2.5 pb-4" data-testid={testId}>
-            <MemberAvatar name={name} imageUrl={avatarUrl} color={color} className="mt-0.5 h-7 w-7 shrink-0 self-start" />
+            <MemberAvatar name={name} imageUrl={avatarUrl} color={color} context={context} className="mt-0.5 h-7 w-7 shrink-0 self-start" />
             <div className="min-w-0 max-w-[85%] space-y-1 break-words rounded-2xl rounded-tl-sm border bg-white/[0.03] px-3.5 py-2.5 text-sm text-foreground" style={{ borderColor: `${color}40` }}>
                 <p className="flex items-center gap-1 text-xs font-semibold" style={{ color }}>
                     {name}

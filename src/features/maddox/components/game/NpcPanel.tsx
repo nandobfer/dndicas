@@ -1,5 +1,6 @@
 "use client"
 
+import { npcAvatarContext } from "../../constants"
 import Link from "next/link"
 import { Loader2, Paintbrush, UserRound } from "lucide-react"
 import { GlassCard as Card, GlassCardContent as CardContent, GlassCardHeader as CardHeader, GlassCardTitle as CardTitle } from "@/components/ui/glass-card"
@@ -43,19 +44,20 @@ export function NpcPanel({ npcs, color, campaignId, portraits = null, manageOpex
                             const painting = Boolean(npc.portraitGenerating) || portraits?.requesting === npc.id
                             return (
                                 <li key={npc.id} className={cn("flex min-w-0 items-center gap-2", npc.status === "dead" && "opacity-50")} data-testid={`npc-${npc.id}`} data-status={npc.status}>
+                                    {/* Avatar fora do link (DND-55): é um botão próprio (retrato grande), não pode ficar aninhado na navegação. */}
+                                    <span className="relative shrink-0">
+                                        <MemberAvatar name={npc.name} imageUrl={npc.portraitUrl} color={color} context={npcAvatarContext(npc.status, npc.opex)} className={cn("h-9 w-9 shrink-0", npc.status === "dead" && "grayscale")} />
+                                        {painting && (
+                                            <span className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-full bg-black/60" role="status" aria-label={`Pintando o retrato de ${npc.name}`}>
+                                                <Loader2 className="h-3.5 w-3.5 animate-spin text-white" aria-hidden />
+                                            </span>
+                                        )}
+                                    </span>
                                     <Link
                                         href={journalHref(campaignId, { npcId: npc.id })}
                                         className="-m-1 flex min-w-0 flex-1 items-center gap-2 rounded-lg p-1 transition-colors hover:bg-white/[0.05]"
                                         title={`Ver ${npc.name} no diário`}
                                     >
-                                        <span className="relative shrink-0">
-                                            <MemberAvatar name={npc.name} imageUrl={npc.portraitUrl} color={color} className={cn("h-9 w-9 shrink-0", npc.status === "dead" && "grayscale")} />
-                                            {painting && (
-                                                <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/60" role="status" aria-label={`Pintando o retrato de ${npc.name}`}>
-                                                    <Loader2 className="h-3.5 w-3.5 animate-spin text-white" aria-hidden />
-                                                </span>
-                                            )}
-                                        </span>
                                         <span className="min-w-0 whitespace-normal break-words text-sm text-white">
                                             {npc.name}
                                             {npc.opex && <OpexChip className="ml-1 align-middle" />}

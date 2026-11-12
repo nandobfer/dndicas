@@ -299,6 +299,36 @@ export const MADDOX_QUEST_STATUS_DEFS: Record<MaddoxQuestStatus, { label: string
 /** Situação dos NPCs para os jogadores. */
 export const MADDOX_NPC_STATUS_LABELS: Record<MaddoxNpcStatus, string> = { active: "Ativo", inactive: "Inativo", dead: "Morto", unknown: "Paradeiro desconhecido" }
 
+// ── Avatares (DND-55) ─────────────────────────────────────────────────────────
+
+/** Linha de contexto do popover e do retrato grande de cada avatar: quem é. */
+export const MADDOX_AVATAR_CONTEXT = {
+    maddox: "Mestre da mesa",
+    character: "Personagem",
+    mine: "Seu personagem",
+    opex: "Personagem Opex",
+    npc: "NPC",
+    opexNpc: "NPC Opex",
+    owner: "Dono",
+    player: "Jogador",
+} as const
+
+/** "NPC" (ou "NPC Opex"), com a situação quando não está ativo: "NPC · Morto". */
+export function npcAvatarContext(status: MaddoxNpcStatus, opex = false) {
+    const label = opex ? MADDOX_AVATAR_CONTEXT.opexNpc : MADDOX_AVATAR_CONTEXT.npc
+    return status === "active" ? label : `${label} · ${MADDOX_NPC_STATUS_LABELS[status]}`
+}
+
+/** Personagem que falou ou agiu na mesa: "Personagem Opex", "Seu personagem" ou "Personagem". */
+export const messageAvatarContext = ({ opex, mine }: { opex?: boolean; mine: boolean }) => (opex ? MADDOX_AVATAR_CONTEXT.opex : mine ? MADDOX_AVATAR_CONTEXT.mine : MADDOX_AVATAR_CONTEXT.character)
+
+/** Personagem de um membro: "Personagem Opex", ou o papel com o nome de quem joga ("Jogador · Ana"). */
+export function memberAvatarContext({ opex, role, playerName }: { opex?: boolean; role?: "owner" | "player" | null; playerName?: string | null }) {
+    if (opex) return MADDOX_AVATAR_CONTEXT.opex
+    const label = role === "owner" ? MADDOX_AVATAR_CONTEXT.owner : role === "player" ? MADDOX_AVATAR_CONTEXT.player : MADDOX_AVATAR_CONTEXT.character
+    return playerName ? `${label} · ${playerName}` : label
+}
+
 export const MADDOX_TURN_PHASES = ["master", "players"] as const
 export type MaddoxTurnPhase = (typeof MADDOX_TURN_PHASES)[number]
 
