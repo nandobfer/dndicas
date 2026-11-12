@@ -44,7 +44,7 @@ const opexAi = vi.hoisted(() => ({ decide: vi.fn<(input: { prompt: string }) => 
 vi.mock("@/features/maddox/server/opex-player", async (importOriginal) => ({
     ...(await importOriginal<typeof import("@/features/maddox/server/opex-player")>()),
     loadOpexModel: vi.fn(async () => ({ settings: {}, model: { provider: "fake" } })),
-    opexPromptContext: vi.fn(async () => ({ instructions: "", memories: "", basePrompt: "", campaign: { name: "x", rigor: "equilibrado", setting: "", openingSituation: "", state: { scene: "", location: "", situation: "", pendingDecision: "" } }, character: null })),
+    opexPromptContext: vi.fn(async () => ({ instructions: "", ownerGuidance: "", memories: "", table: [], basePrompt: "", campaign: { name: "x", rigor: "equilibrado", setting: "", openingSituation: "", state: { scene: "", location: "", situation: "", pendingDecision: "" } }, character: null })),
     decideOpex: opexAi.decide,
 }))
 vi.mock("@/features/engramind/server/opex-characters", () => ({ saveOpexCharacterMemories: vi.fn(async () => undefined) }))
