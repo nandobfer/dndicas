@@ -44,6 +44,8 @@ export interface IMaddoxCampaignSnapshot {
     /** Primeiras palavras da narração do Maddox no turno (lista "Voltar ao turno…"). */
     excerpt: string
     state: Record<string, unknown> | null
+    /** Progressão de nível (DND-56): `progression`, `levelUps` e `chapters` da campanha. Ausente em retratos antigos. */
+    progression?: { progression: unknown; levelUps: unknown[]; chapters: unknown[] } | null
     /** Origem: o `turn` inteiro da campanha; turno: só a vez do combate tático. */
     turn: Record<string, unknown> | null
     npcs: Record<string, unknown>[]
@@ -74,6 +76,7 @@ const SnapshotSchema = new Schema<IMaddoxCampaignSnapshot>(
         boundaryMessageId: { type: Schema.Types.ObjectId, default: null },
         excerpt: { type: String, default: "" },
         state: { type: Schema.Types.Mixed, default: null },
+        progression: { type: Schema.Types.Mixed, default: null },
         turn: { type: Schema.Types.Mixed, default: null },
         npcs: { type: Schema.Types.Mixed, default: () => [] },
         characters: { type: Schema.Types.Mixed, default: () => [] },

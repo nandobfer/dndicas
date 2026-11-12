@@ -74,7 +74,8 @@ export async function resetCampaign(campaignId: string, userId: string): Promise
     const reset: MaddoxCampaignReset = { id: randomUUID(), status: "cleaning", previousStatus: campaign.status, previousTurn: campaign.turn?.number ?? 0, byUserId: userId, startedAt: new Date(), completedAt: null, memories: "pending", npcTokenBoxes: {}, lastError: null }
     const flipped = await MaddoxCampaignModel.updateOne(
         { _id: campaign._id, status: { $in: [...MADDOX_RESET_STATUSES] } },
-        { $set: { status: "lobby", reset, turn: EMPTY_TURN, rewind: null, memoryRepair: null, state: EMPTY_STATE, startedAt: null } },
+        // DND-56: subidas, níveis declarados, marco pendente e capítulos recomeçam (o modo de progressão fica).
+        { $set: { status: "lobby", reset, turn: EMPTY_TURN, rewind: null, memoryRepair: null, state: EMPTY_STATE, startedAt: null, levelUps: [], chapters: [], progression: campaign.progression ? { mode: campaign.progression.mode ?? null, declared: [], pendingMilestone: null } : null } },
     )
     if (flipped.modifiedCount === 0) {
         // Outro reinício venceu a corrida: termina o dele.
