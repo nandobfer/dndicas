@@ -345,7 +345,7 @@ export const MADDOX_GAME_CHANGED_EVENT = "maddox.game.changed"
  * reação (`combat-reaction`). `rewind` (DND-44) é a linha de aviso "O dono voltou a mesa para o turno X" / "O dono retomou o
  * turno N": nunca é descartada e fica fora da transcrição do narrador, do Opex e da busca do Diário.
  */
-export const MADDOX_GAME_MESSAGE_KINDS = ["narration", "declaration", "pass", "question", "answer", "check", "combat", "combat-action", "combat-roll", "combat-reaction", "reminder", "combat-prep", "rewind", "hit-points", "sheet-change"] as const
+export const MADDOX_GAME_MESSAGE_KINDS = ["narration", "declaration", "pass", "question", "answer", "check", "combat", "combat-action", "combat-roll", "combat-reaction", "reminder", "combat-prep", "rewind", "hit-points", "sheet-change", "level-up", "experience", "chapter"] as const
 export type MaddoxGameMessageKind = (typeof MADDOX_GAME_MESSAGE_KINDS)[number]
 
 /** O que o jogador envia no próprio turno. */
@@ -804,7 +804,7 @@ export interface MaddoxScriptTopic {
 // ── JEV ───────────────────────────────────────────────────────────────────────
 
 /** Decisões que poderão usar o JEV (System One) nas próximas entregas. Por enquanto só configuráveis. */
-export const MADDOX_JEV_DECISIONS = ["question-or-action", "free-action-validity", "requires-check", "combat-boundary", "combat-option-cost", "master-knowledge", "interview-complete", "scene-image", "sneak-attack-condition", "combat-adjust-plausible"] as const
+export const MADDOX_JEV_DECISIONS = ["question-or-action", "free-action-validity", "requires-check", "combat-boundary", "combat-option-cost", "master-knowledge", "interview-complete", "scene-image", "sneak-attack-condition", "combat-adjust-plausible", "level-milestone"] as const
 export type MaddoxJevDecision = (typeof MADDOX_JEV_DECISIONS)[number]
 
 export const MADDOX_JEV_DECISION_DEFS: Record<MaddoxJevDecision, { label: string; description: string }> = {
@@ -818,6 +818,7 @@ export const MADDOX_JEV_DECISION_DEFS: Record<MaddoxJevDecision, { label: string
     "scene-image": { label: "Gerar imagem na cena", description: "Antes de gerar a imagem pedida pelo Maddox, o JEV confere se a narração corresponde mesmo à situação configurada (filtro contra excesso)." },
     "sneak-attack-condition": { label: "Condição do ataque furtivo", description: "No combate tático, sem vantagem nem desvantagem, se há um aliado adjacente ao alvo para o ataque furtivo valer. Desligada, decide uma geração curta do narrador." },
     "combat-adjust-plausible": { label: "Pedido de ajuste fora das regras", description: "Antes de o Maddox examinar um pedido de ajuste de opção no combate, o JEV recusa na hora o que claramente tenta burlar as regras da ficha." },
+    "level-milestone": { label: "Marco de subida de nível", description: "No modo Marco, depois de um fim de combate, de uma missão concluída ou de um capítulo encerrado, se o grupo atingiu o marco para subir de nível. Desligada, decide uma geração curta do narrador." },
 }
 
 // ── OpenCode ──────────────────────────────────────────────────────────────────
@@ -1152,3 +1153,66 @@ export const DEFAULT_MADDOX_OPEX_CHARACTER_INSTRUCTIONS = [
     "Seja concreto e breve nas declarações: diga o que o personagem tenta fazer e como, em uma a três frases.",
     "Fale sempre em português do Brasil.",
 ].join("\n")
+
+// ── Progressão de nível (DND-56) ─────────────────────────────────────────────
+
+/** Modo de progressão da campanha (graus com ficha), escolhido só na criação. Campanhas antigas = "marco". */
+export const MADDOX_PROGRESSION_MODES = ["marco", "experiencia"] as const
+export type MaddoxProgressionMode = (typeof MADDOX_PROGRESSION_MODES)[number]
+export const MADDOX_PROGRESSION_DEFAULT: MaddoxProgressionMode = "marco"
+export const MADDOX_PROGRESSION_MODE_DEFS: Record<MaddoxProgressionMode, { label: string; description: string }> = {
+    marco: { label: "Marco", description: "O grupo sobe junto quando a história atinge um marco (fim de combate, missão concluída ou capítulo encerrado), avaliado pelo Maddox." },
+    experiencia: { label: "Experiência", description: "Cada personagem ganha XP pelos monstros do combate tático e pelas recompensas do Maddox, e sobe ao atingir o limiar do D&D 2024." },
+}
+
+/** Situação de cada degrau de subida (um por personagem e por nível). */
+export const MADDOX_LEVEL_UP_STATUSES = ["waiting-combat", "pending", "deciding", "failed", "done"] as const
+export type MaddoxLevelUpStatus = (typeof MADDOX_LEVEL_UP_STATUSES)[number]
+
+/** Acontecimentos que disparam a decisão do marco. */
+export const MADDOX_MILESTONE_TRIGGERS = ["combat-end", "quest-completed", "chapter-end", "question"] as const
+export type MaddoxMilestoneTrigger = (typeof MADDOX_MILESTONE_TRIGGERS)[number]
+export const MADDOX_MILESTONE_TRIGGER_LABELS: Record<MaddoxMilestoneTrigger, string> = {
+    "combat-end": "fim de combate",
+    "quest-completed": "missão concluída",
+    "chapter-end": "capítulo encerrado",
+    question: "pergunta de um jogador",
+}
+
+/** Desfechos de adversário que dão XP no combate tático (derrotado, morto, rendido, capturado, posto em fuga ou poupado). */
+export const MADDOX_XP_DEFEATED_OUTCOMES = ["morto", "derrotado", "capturado", "rendeu-se", "fugiu", "poupado"] as const
+
+export const MADDOX_LEVEL_MILESTONE_TIMEOUT_MS = 20_000
+export const MADDOX_LEVEL_MILESTONE_CONSUMPTION_ORIGIN = "maddox-level-milestone"
+export const MADDOX_LEVEL_UP_CONSUMPTION_ORIGIN = "maddox-opex-level-up"
+export const MADDOX_SPELL_SWAP_CONSUMPTION_ORIGIN = "maddox-spell-swap"
+export const MADDOX_SPELL_SWAP_TIMEOUT_MS = 30_000
+
+/** Texto genérico para quem não é dono quando a subida do Opex falha (o dono vê o motivo). */
+export const MADDOX_LEVEL_UP_FAILED_MESSAGE = "A subida de nível deste Personagem Opex não foi concluída. Aguardando o dono da campanha."
+
+export const MADDOX_PROGRESSION_TOOL_NAMES = {
+    evaluate: "evaluate_level_milestone",
+    declare: "declare_level_up",
+    chapter: "end_chapter",
+    grant: "grant_experience",
+} as const
+
+export const MADDOX_CHAPTER_TITLE_MAX = 120
+export const MADDOX_CHAPTER_SUMMARY_MAX = 4_000
+export const MADDOX_LEVEL_UP_REASON_MAX = 500
+export const MADDOX_EXPERIENCE_GRANT_MAX = 1_000_000
+
+export const MADDOX_LEVEL_UP_TEXT = {
+    banner: "Subir de nível",
+    bannerPending: (name: string, level: number) => `${name} pode subir para o nível ${level}.`,
+    bannerOwnerFailed: (name: string, level: number) => `A subida de ${name} para o nível ${level} falhou. Conclua no wizard da ficha.`,
+    cardTitle: "Subida de nível",
+    pending: "Pendente",
+    deciding: "Decidindo",
+    waitingCombat: "Depois do combate",
+    failed: "Pendente (dono)",
+    done: "Concluído",
+    experienceTitle: "Experiência",
+    chapterTitle: "Capítulo encerrado",
+} as const

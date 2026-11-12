@@ -311,6 +311,11 @@ async function afterCombatEnded(campaign: CampaignRef, combat: IMaddoxCombat, tu
     await step("memory", () => saveCombatMemory(campaign._id, combat, turnNumber))
     await step("rewards", () => applyCombatRewards(campaign, combat._id))
     await step("image", () => onCombatEnded(combat))
+    // Progressão de nível (DND-56): XP dos monstros (tático, modo Experiência), subidas que esperavam o fim do combate
+    // tático e a decisão do marco quando a geração ainda não a tomou (fim forçado).
+    await step("experience", async () => (await import("./combat-experience")).grantCombatExperience(campaign._id, combat, turnNumber))
+    if (combat.mode === "tactical") await step("level-ups", async () => (await import("./level-ups")).releaseCombatLevelUps(campaign._id))
+    await step("milestone", async () => (await import("./level-milestone")).milestoneAfterCombat(campaign._id, combat, turnNumber))
 }
 
 /** Linha de cada adversário com desfecho ("Varn — Morto"). */

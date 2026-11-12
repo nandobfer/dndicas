@@ -215,6 +215,8 @@ async function runMasterTurn(campaignId: Types.ObjectId, token: string, turnNumb
             live.end({ messageId: String(message!._id), error: null })
             // Lembranças desta narração (DND-25): guardadas como memória ou usadas só agora, depois da narração gravada.
             await (await import("./reminders")).commitReminders(campaignId, jobId, turnNumber)
+            // Progressão de nível (DND-56): capítulo, XP e declaração pedidos nesta geração, e a orientação do marco.
+            await (await import("./level-ups")).commitProgression(campaignId, jobId, turnNumber)
             // Imagens nas cenas (Maddox 10): a pedida nesta narração fica ligada a ela; os retratos marcados, aos NPCs.
             await scheduleDraftImages(campaignId, jobId, turnNumber, round, message!._id)
             if (drafts.length) log.info({ campaignId: String(campaignId), turnNumber, round, checks: drafts.length }, "[maddox] Maddox pediu testes")
@@ -769,6 +771,8 @@ export async function answerQuestion(campaignId: Types.ObjectId, jobId: string, 
         const message = await MaddoxCampaignMessageModel.create({ campaignId, turnNumber, phase: "players", kind: "answer", content: error ? "" : content, error, replyToId: questionId })
         stored = message.content
         live.end({ messageId: String(message._id), error })
+        // "Avaliar marco de nível" (DND-56): a subida acionada pela resposta entra logo abaixo dela.
+        if (!error) await (await import("./level-ups")).commitProgression(campaignId, jobId, turnNumber)
     } catch (failure) {
         live.end({ messageId: null, error: MADDOX_ANSWER_FAILED_MESSAGE })
         throw failure

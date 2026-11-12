@@ -123,10 +123,34 @@ export interface IMaddoxCampaignMessage {
     combatPrep: { combatId: Types.ObjectId; actorKey: string; characterName: string; changes: CombatPrepChange[]; question?: { prepId: string; text: string; status: "awaiting" | "answered" | "expired"; answer: string | null; deadline: Date; settled?: boolean; halted?: "discarded" | "failed" | null } | null } | null
     /** Linha de aviso da volta a um turno (DND-44, `kind: "rewind"`): ida ao turno X ou retomada do turno N. */
     rewindNotice?: { event: "goto" | "resume"; turnNumber: number; originTurn: number } | null
+    /**
+     * Card "Subida de nível" (`kind: "level-up"`, DND-56): os degraus vivem em `campaign.levelUps` (status e ganhos lidos
+     * na hora); o card só guarda quais são, o nível e o motivo. `content` fica vazio.
+     */
+    levelUp?: IMaddoxLevelUpCard | null
+    /** Card de XP (`kind: "experience"`, DND-56): total e quanto cada personagem ganhou. */
+    experience?: IMaddoxExperienceCard | null
+    /** Linha de capítulo encerrado (`kind: "chapter"`, DND-56). */
+    chapter?: { chapterId: Types.ObjectId; title: string; summary: string } | null
     /** Descartada por uma volta pendente (DND-44): some de todas as leituras (`discard-filter.ts`). */
     discardedBy?: IMaddoxDiscardMark | null
     createdAt: Date
     updatedAt: Date
+}
+
+export interface IMaddoxLevelUpCard {
+    declarationId: string | null
+    source: "marco" | "experiencia"
+    toLevel: number
+    reason: string
+    levelUpIds: Types.ObjectId[]
+}
+
+export interface IMaddoxExperienceCard {
+    source: "combat" | "grant"
+    reason: string
+    total: number
+    entries: { characterId: Types.ObjectId; characterName: string; amount: number; total: number }[]
 }
 
 export interface IMaddoxOpexNpcFailure {
@@ -184,6 +208,9 @@ const MaddoxCampaignMessageSchema = new Schema<IMaddoxCampaignMessage>(
         combatTurn: { type: Boolean, default: false },
         reminder: { type: Schema.Types.Mixed, default: null },
         combatPrep: { type: Schema.Types.Mixed, default: null },
+        levelUp: { type: Schema.Types.Mixed, default: null },
+        experience: { type: Schema.Types.Mixed, default: null },
+        chapter: { type: Schema.Types.Mixed, default: null },
         rewindNotice: { type: new Schema({ event: { type: String, enum: ["goto", "resume"], required: true }, turnNumber: Number, originTurn: Number }, { _id: false }), default: null },
         actionOptions: {
             type: [

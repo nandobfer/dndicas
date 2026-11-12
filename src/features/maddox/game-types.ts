@@ -17,7 +17,10 @@ import type {
     MaddoxGameMessageKind,
     MaddoxRigorLevel,
     MaddoxTurnPhase,
+    MaddoxLevelUpStatus,
+    MaddoxProgressionMode,
 } from "./constants"
+import type { LevelUpGains } from "@/features/character-sheets/level-up/level-up-types"
 
 /** DTOs da mesa (Maddox 3). Todos os membros recebem os mesmos dados; `me` é o que muda por usuário. */
 
@@ -67,7 +70,47 @@ export interface MaddoxGameMessageDto {
     combatPrep?: MaddoxCombatPrepCardDto | null
     /** Linha de aviso da volta a um turno (DND-44, `kind: "rewind"`). */
     rewindNotice?: { event: "goto" | "resume"; turnNumber: number; originTurn: number } | null
+    /** Card "Subida de nível" (`kind: "level-up"`, DND-56): status de cada personagem lido na hora. */
+    levelUp?: MaddoxLevelUpCardDto | null
+    /** Card de XP (`kind: "experience"`, DND-56). */
+    experience?: MaddoxExperienceCardDto | null
+    /** Capítulo encerrado (`kind: "chapter"`, DND-56). */
+    chapter?: { title: string; summary: string } | null
     createdAt: string
+}
+
+/** Um degrau de subida de nível (personagem e nível), DND-56. */
+export interface MaddoxLevelUpStepDto {
+    id: string
+    characterId: string
+    characterName: string
+    kind: "human" | "opex"
+    fromLevel: number
+    toLevel: number
+    status: MaddoxLevelUpStatus
+    /** O que o personagem ganhou (concluído). */
+    gains: LevelUpGains | null
+    /** Falha do Personagem Opex: o motivo só para o dono; os demais, a mensagem genérica. */
+    error: string | null
+    /** O personagem é de quem vê. */
+    mine: boolean
+    /** Quem vê pode concluir este degrau agora no wizard (o próprio personagem; o dono, o Opex com falha). */
+    canComplete: boolean
+    sheetId: string | null
+}
+
+export interface MaddoxLevelUpCardDto {
+    toLevel: number
+    reason: string
+    source: MaddoxProgressionMode
+    entries: MaddoxLevelUpStepDto[]
+}
+
+export interface MaddoxExperienceCardDto {
+    source: "combat" | "grant"
+    reason: string
+    total: number
+    entries: { characterId: string; characterName: string; amount: number; total: number }[]
 }
 
 /** Situação de uma lembrança: esperando a próxima narração, guardada como memória ou usada só naquela narração. */
@@ -406,6 +449,8 @@ export interface MaddoxGameStateDto {
         declared: boolean
         /** Minha ficha D&D (só a minha; graus com ficha). */
         sheet: { id: string; slug: string } | null
+        /** Subidas de nível que quem vê pode concluir agora (DND-56): o wizard abre sozinho e o aviso fica até concluir. */
+        levelUps?: MaddoxLevelUpStepDto[]
         /** Combate tático (Maddox 7). */
         combat?: MaddoxMyCombatDto | null
         /**
