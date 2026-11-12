@@ -6,7 +6,7 @@ import { BookOpen, Image as ImageIcon, Loader2, MapPin, MessageCircle, Search, S
 import { Input } from "@/components/ui/opex/input"
 import { rarityColors } from "@/lib/config/colors"
 import { cn } from "@/lib/utils"
-import { MADDOX_CAMPAIGN_MEMORY_KIND_LABELS, MADDOX_NPC_STATUS_LABELS, MADDOX_QUEST_STATUS_DEFS } from "../../constants"
+import { MADDOX_CAMPAIGN_MEMORY_KIND_LABELS, MADDOX_NPC_STATUS_LABELS, MADDOX_QUEST_STATUS_DEFS, MADDOX_AVATAR_CONTEXT, npcAvatarContext } from "../../constants"
 import { accentInsensitivePattern } from "../../journal-search"
 import { MADDOX_JOURNAL_QUERY_MIN } from "../../journal-schemas"
 import type { MaddoxJournalSearchDto, MaddoxJournalSearchGroup } from "../../journal-types"
@@ -123,7 +123,7 @@ export function JournalSearchResults({ campaignId, color, result, onNavigate }: 
                         badge={npc.status === "dead" || npc.status === "unknown" ? MADDOX_NPC_STATUS_LABELS[npc.status] : null}
                         excerpt={npc.excerpt}
                         query={q}
-                        avatar={<MemberAvatar name={npc.name} imageUrl={npc.portraitUrl} color={color} className="h-7 w-7 shrink-0" />}
+                        avatar={<MemberAvatar name={npc.name} imageUrl={npc.portraitUrl} color={color} context={npcAvatarContext(npc.status)} className="h-7 w-7 shrink-0" />}
                     />
                 )}
             </Group>
@@ -155,7 +155,7 @@ export function JournalSearchResults({ campaignId, color, result, onNavigate }: 
                         title={member.characterName}
                         excerpt={member.excerpt}
                         query={q}
-                        avatar={<MemberAvatar name={member.characterName} imageUrl={member.portraitUrl} color={color} className="h-7 w-7 shrink-0" />}
+                        avatar={<MemberAvatar name={member.characterName} imageUrl={member.portraitUrl} color={color} context={MADDOX_AVATAR_CONTEXT.character} className="h-7 w-7 shrink-0" />}
                     />
                 )}
             </Group>
@@ -216,9 +216,8 @@ function ResultGroup({ title, icon: Icon, color, testId, children }: { title: st
 
 function ResultLink({ href, onNavigate, title, excerpt, query, badge, chip, avatar }: { href: string; onNavigate?: () => void; title: string; excerpt: string; query: string; badge?: string | null; chip?: ReactNode; avatar?: ReactNode }) {
     return (
-        <li>
-            <Link href={href} onClick={onNavigate} className={cn("flex items-start gap-2.5 px-3 py-2 transition-colors hover:bg-white/[0.05] focus-visible:bg-white/[0.05] focus-visible:outline-none")} data-testid="journal-search-hit">
-                {avatar}
+        <li className="relative">
+            <Link href={href} onClick={onNavigate} className={cn("flex items-start gap-2.5 px-3 py-2 transition-colors hover:bg-white/[0.05] focus-visible:bg-white/[0.05] focus-visible:outline-none", avatar && "pl-[3.125rem]")} data-testid="journal-search-hit">
                 <span className="min-w-0 flex-1 space-y-0.5">
                     <span className="flex flex-wrap items-center gap-1.5 text-sm font-medium text-white">
                         <HighlightedText text={title} query={query} />
@@ -232,6 +231,8 @@ function ResultLink({ href, onNavigate, title, excerpt, query, badge, chip, avat
                     )}
                 </span>
             </Link>
+            {/* Avatar fora do link (DND-55): é um botão próprio (retrato grande) e não pode ficar aninhado na navegação. */}
+            {avatar && <span className="absolute left-3 top-2 z-10 flex">{avatar}</span>}
         </li>
     )
 }

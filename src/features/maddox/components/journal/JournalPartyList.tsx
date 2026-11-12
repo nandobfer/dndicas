@@ -21,17 +21,18 @@ export function JournalPartyList({ campaignId, color, myMemberId }: { campaignId
         <div className="grid gap-3 lg:grid-cols-2" aria-label="Personagens do grupo">
             {items.map((member) => {
                 const anchor = journalAnchor.member(member.memberId)
+                const whose = member.memberId === myMemberId ? "Seu personagem" : member.opex ? "Personagem Opex (controlado por IA)" : `Personagem de ${member.playerName}`
                 return (
                     <JournalItemCard key={member.memberId} anchor={anchor} highlighted={target === anchor} color={color} testId={`journal-member-${member.memberId}`}>
                         <header className="flex items-center gap-3">
-                            <MemberAvatar name={member.characterName} imageUrl={member.portraitUrl} color={color} className="h-12 w-12 shrink-0" />
+                            <MemberAvatar name={member.characterName} imageUrl={member.portraitUrl} color={color} context={whose} className="h-12 w-12 shrink-0" />
                             <div className="min-w-0">
                                 <h3 className="flex flex-wrap items-center gap-1.5 break-words text-base font-semibold text-white">
                                     {member.characterName}
                                     {member.opex && <OpexChip />}
                                 </h3>
                                 <p className="flex items-center gap-1 text-xs text-white/60">
-                                    <UserRound className="h-3 w-3" aria-hidden /> {member.memberId === myMemberId ? "Seu personagem" : member.opex ? "Personagem Opex (controlado por IA)" : `Personagem de ${member.playerName}`}
+                                    <UserRound className="h-3 w-3" aria-hidden /> {whose}
                                 </p>
                             </div>
                         </header>

@@ -15,7 +15,7 @@ import { getDiceCriticalState } from "@/features/dice-roller/critical-state"
 import { partsFromCalc } from "@/features/dice-roller/dice-breakdown"
 import type { DiceRollPreset, DiceRollResponse } from "@/features/dice-roller/types"
 import { checkKindLabel, checkModeLabel, checkModifier, checkTitle, signed } from "../../check-modifier"
-import { MADDOX_CHECK_DIE_HIDE_MS } from "../../constants"
+import { MADDOX_CHECK_DIE_HIDE_MS, messageAvatarContext } from "../../constants"
 import type { MaddoxGameMessageDto } from "../../game-types"
 import { MemberAvatar, RarityChip } from "../campaigns/campaign-visuals"
 
@@ -106,7 +106,7 @@ export function GameCheckCard({ message, mine, color, replay, onRoll }: Props) {
                 {critical && <CriticalHighlight state={critical} rounded={{ inner: "rounded-xl", border: "rounded-xl" }} />}
                 <div className="relative z-10 flex flex-col gap-3 sm:flex-row sm:items-stretch">
                     <div className="flex min-w-0 flex-1 items-start gap-2.5">
-                        <MemberAvatar name={name} imageUrl={message.portraitUrl} color={accent} className="mt-0.5 h-8 w-8 shrink-0 self-start" />
+                        <MemberAvatar name={name} imageUrl={message.portraitUrl} color={accent} context={messageAvatarContext({ opex: message.opex, mine })} className="mt-0.5 h-8 w-8 shrink-0 self-start" />
                         <div className="min-w-0 flex-1 space-y-1">
                             <p className="flex flex-wrap items-center gap-1.5 text-xs text-white/60">
                                 <Dices className="h-3.5 w-3.5" style={{ color: accent }} aria-hidden />

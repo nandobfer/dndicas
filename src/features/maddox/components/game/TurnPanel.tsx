@@ -1,5 +1,6 @@
 "use client"
 
+import { memberAvatarContext } from "../../constants"
 import { useState } from "react"
 import { Crown, Dices, SkipForward, Users } from "lucide-react"
 import { Button } from "@/components/ui/opex/button"
@@ -55,7 +56,7 @@ export function TurnPanel({ state, presence, color, skipping, onSkip, rollingFor
                         return (
                             <li key={participant.memberId} className="flex flex-wrap items-center gap-2.5 py-2.5" data-testid={`seat-${participant.memberId}`}>
                                 <div className="relative">
-                                    <MemberAvatar name={participant.characterName ?? participant.name} imageUrl={participant.portraitUrl} color={color} className="h-9 w-9" />
+                                    <MemberAvatar name={participant.characterName ?? participant.name} imageUrl={participant.portraitUrl} color={color} context={memberAvatarContext({ opex: participant.opex, role: participant.role, playerName: participant.name })} className="h-9 w-9" />
                                     {presence.available && !participant.opex && (
                                         <span
                                             className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-background"

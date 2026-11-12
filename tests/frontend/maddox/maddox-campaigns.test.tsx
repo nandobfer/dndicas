@@ -99,18 +99,21 @@ beforeEach(() => {
     for (const fn of [push, get, post, put, patch, del]) fn.mockReset()
 })
 
+/** O card da lista (DND-55: o link é esticado por baixo do conteúdo, que fica no card, não dentro do link). */
+const cardOf = (link: HTMLElement) => link.closest<HTMLElement>('[data-testid="campaign-card"]')!
+
 describe("lista de campanhas", () => {
     it("um card por campanha, com cores de raridade e link para a página da campanha", async () => {
         get.mockResolvedValue(ok([listItem(), listItem({ id: "c2", name: "Mar de Cinzas", rigor: "narrativo", status: "active", myRole: "player", ownerName: "Ana" })]))
         renderWithQueryClient(<CampaignsPage />)
 
-        const first = await screen.findByRole("link", { name: "Abrir a campanha Brumas de Valdrenn" })
-        expect(first).toHaveAttribute("href", "/campanhas/c1")
+        const first = cardOf(await screen.findByRole("link", { name: "Abrir a campanha Brumas de Valdrenn" }))
+        expect(screen.getByRole("link", { name: "Abrir a campanha Brumas de Valdrenn" })).toHaveAttribute("href", "/campanhas/c1")
         expect(screen.getByRole("link", { name: "Abrir a campanha Mar de Cinzas" })).toHaveAttribute("href", "/campanhas/c2")
         expect(sameColor(within(first).getByText("Fiel ao D&D").style.color, rarityColors.legendary)).toBe(true)
         expect(within(first).getByText("Dono")).toBeInTheDocument()
         expect(within(first).getByText("Você ainda não criou seu personagem")).toBeInTheDocument()
-        const second = screen.getByRole("link", { name: "Abrir a campanha Mar de Cinzas" })
+        const second = cardOf(screen.getByRole("link", { name: "Abrir a campanha Mar de Cinzas" }))
         expect(sameColor(within(second).getByText("Narrativo").style.color, rarityColors.common)).toBe(true)
         expect(within(second).getByText("Jogador")).toBeInTheDocument()
         expect(get).toHaveBeenCalledWith("/maddox/campaigns")
@@ -135,7 +138,7 @@ describe("lista de campanhas", () => {
         get.mockResolvedValue(ok([listItem({ lastSceneImageUrl: "https://cdn.example/cena-2.png", coverUrl: "https://cdn.example/capa.png" }), listItem({ id: "c2", name: "Mar de Cinzas", rigor: "narrativo" })]))
         renderWithQueryClient(<CampaignsPage />)
 
-        const first = await screen.findByRole("link", { name: "Abrir a campanha Brumas de Valdrenn" })
+        const first = cardOf(await screen.findByRole("link", { name: "Abrir a campanha Brumas de Valdrenn" }))
         const image = within(first).getByTestId("campaign-cover-image")
         expect(image).toHaveAttribute("src", "https://cdn.example/cena-2.png")
         expect(image.className).toContain("object-cover")
@@ -146,7 +149,7 @@ describe("lista de campanhas", () => {
         expect(within(first).queryByTestId("campaign-cover-swords")).not.toBeInTheDocument()
 
         // Sem imagem: gradiente e espadas como antes.
-        const second = screen.getByRole("link", { name: "Abrir a campanha Mar de Cinzas" })
+        const second = cardOf(screen.getByRole("link", { name: "Abrir a campanha Mar de Cinzas" }))
         expect(within(second).queryByTestId("campaign-cover-image")).not.toBeInTheDocument()
         expect(within(second).getByTestId("campaign-cover-gradient").getAttribute("style")).toContain(`${rigorColor("narrativo")}26`)
         expect(within(second).getByTestId("campaign-cover-swords")).toBeInTheDocument()
@@ -155,7 +158,7 @@ describe("lista de campanhas", () => {
     it("capa (DND-35): sem imagem de cena usa a capa da campanha, também atrás do gradiente", async () => {
         get.mockResolvedValue(ok([listItem({ coverUrl: "https://cdn.example/capa.png" })]))
         renderWithQueryClient(<CampaignsPage />)
-        const card = await screen.findByRole("link", { name: "Abrir a campanha Brumas de Valdrenn" })
+        const card = cardOf(await screen.findByRole("link", { name: "Abrir a campanha Brumas de Valdrenn" }))
         expect(within(card).getByTestId("campaign-cover-image")).toHaveAttribute("src", "https://cdn.example/capa.png")
         expect(within(card).getByTestId("campaign-cover-gradient")).toBeInTheDocument()
         expect(within(card).queryByTestId("campaign-cover-swords")).not.toBeInTheDocument()
@@ -164,10 +167,25 @@ describe("lista de campanhas", () => {
     it("capa (DND-35): imagem que não carrega volta às espadas", async () => {
         get.mockResolvedValue(ok([listItem({ lastSceneImageUrl: "https://cdn.example/sumiu.png" })]))
         renderWithQueryClient(<CampaignsPage />)
-        const card = await screen.findByRole("link", { name: "Abrir a campanha Brumas de Valdrenn" })
+        const card = cardOf(await screen.findByRole("link", { name: "Abrir a campanha Brumas de Valdrenn" }))
         fireEvent.error(within(card).getByTestId("campaign-cover-image"))
         await waitFor(() => expect(within(card).queryByTestId("campaign-cover-image")).not.toBeInTheDocument())
         expect(within(card).getByTestId("campaign-cover-swords")).toBeInTheDocument()
+    })
+
+    it("avatares do card (DND-55): ficam fora do link, abrem o retrato sem navegar e o link continua cobrindo o card", async () => {
+        get.mockResolvedValue(ok([listItem()]))
+        renderWithQueryClient(<CampaignsPage />)
+        const link = await screen.findByRole("link", { name: "Abrir a campanha Brumas de Valdrenn" })
+        const card = cardOf(link)
+        const lyra = within(card).getByRole("button", { name: "Ver retrato de Lyra" })
+        expect(lyra.closest("a")).toBeNull()
+        expect(link.className).toContain("absolute inset-0")
+        expect(within(card).getByRole("button", { name: "Ver retrato de Marina Dona" })).toBeInTheDocument()
+        fireEvent.click(lyra)
+        const viewer = await screen.findByTestId("member-portrait-viewer")
+        expect(viewer).toHaveTextContent("Lyra")
+        expect(viewer).toHaveTextContent("Jogador · Ana Jogadora")
     })
 
     it("sem campanhas mostra o estado vazio em pt-BR", async () => {

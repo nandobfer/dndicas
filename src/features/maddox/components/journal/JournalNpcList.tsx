@@ -1,7 +1,7 @@
 "use client"
 
 import { UserRound } from "lucide-react"
-import { MADDOX_NPC_STATUS_LABELS } from "../../constants"
+import { MADDOX_NPC_STATUS_LABELS, npcAvatarContext } from "../../constants"
 import { useMaddoxJournalNpcs } from "../../hooks/useMaddoxJournal"
 import { MemberAvatar, OpexChip } from "../campaigns/campaign-visuals"
 import { OpexNpcActions } from "../game/OpexNpcActions"
@@ -43,7 +43,7 @@ export function JournalNpcList({ campaignId, color, manageOpex = false }: { camp
                     return (
                         <JournalItemCard key={npc.id} anchor={anchor} highlighted={target === anchor} color={color} dimmed={gone} testId={`journal-npc-${npc.id}`}>
                             <header className="flex items-center gap-3">
-                                <MemberAvatar name={npc.name} imageUrl={npc.portraitUrl} color={color} className={cn("h-10 w-10 shrink-0", gone && "grayscale")} />
+                                <MemberAvatar name={npc.name} imageUrl={npc.portraitUrl} color={color} context={npcAvatarContext(npc.status, npc.opex)} className={cn("h-10 w-10 shrink-0", gone && "grayscale")} />
                                 <div className="min-w-0 flex-1">
                                     <h3 className="break-words text-sm font-semibold text-white">
                                         {npc.name}

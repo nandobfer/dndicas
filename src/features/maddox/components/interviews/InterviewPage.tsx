@@ -10,7 +10,7 @@ import { Markdown } from "@/components/ui/opex/markdown"
 import { EmptyState } from "@/components/feedback/EmptyState"
 import { ErrorState } from "@/components/feedback/ErrorState"
 import { useAuth } from "@/core/hooks/useAuth"
-import { MADDOX_PROFILE_SECTIONS, MADDOX_SHEET_RIGORS, type MaddoxScriptKind } from "../../constants"
+import { MADDOX_PROFILE_SECTIONS, MADDOX_SHEET_RIGORS, type MaddoxScriptKind, MADDOX_AVATAR_CONTEXT } from "../../constants"
 import type { MaddoxCampaignDetailDto } from "../../campaign-types"
 import { useMaddoxCampaign, useMaddoxCampaignsRealtime } from "../../hooks/useMaddoxCampaigns"
 import { useMaddoxInterview } from "../../hooks/useMaddoxInterview"
@@ -305,7 +305,7 @@ function ProfileSummary({ campaign }: { campaign: MaddoxCampaignDetailDto }) {
         <section className="space-y-4 rounded-xl border border-white/10 bg-white/[0.03] p-5" aria-label="Perfil do personagem">
             {character && (
                 <div className="flex items-center gap-3">
-                    <MemberAvatar name={character.name} imageUrl={character.portraitUrl} color={rigorColor(campaign.rigor)} className="h-16 w-16" />
+                    <MemberAvatar name={character.name} imageUrl={character.portraitUrl} color={rigorColor(campaign.rigor)} context={MADDOX_AVATAR_CONTEXT.mine} className="h-16 w-16" />
                     <div className="min-w-0">
                         <p className="truncate text-base font-semibold text-white">{character.name}</p>
                         {generating && (

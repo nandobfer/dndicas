@@ -8,7 +8,7 @@ import { ptBR } from "date-fns/locale"
 import { Crown, Swords, UserRound, Users } from "lucide-react"
 import { rarityColors } from "@/lib/config/colors"
 import type { MaddoxCampaignListItemDto } from "../../campaign-types"
-import { MADDOX_CHARACTER_UNNAMED_LABEL, MADDOX_TACTICAL_COMBAT_RIGORS } from "../../constants"
+import { MADDOX_AVATAR_CONTEXT, MADDOX_CHARACTER_UNNAMED_LABEL, MADDOX_TACTICAL_COMBAT_RIGORS, memberAvatarContext } from "../../constants"
 import { MemberAvatar, OpexChip, CombatDifficultyChip, DensityChip, RarityChip, RigorChip, StartingLevelChip, StartingStageLine, StatusChip, rigorColor } from "./campaign-visuals"
 
 const VISIBLE_AVATARS = 5
@@ -23,7 +23,7 @@ function CampaignCover({ imageUrl, color }: { imageUrl: string | null; color: st
     const [failedUrl, setFailedUrl] = useState<string | null>(null)
     const url = imageUrl && imageUrl !== failedUrl ? imageUrl : null
     return (
-        <div className="relative flex h-28 shrink-0 items-center justify-center overflow-hidden sm:h-auto sm:w-44">
+        <div className="pointer-events-none relative flex h-28 shrink-0 items-center justify-center overflow-hidden sm:h-auto sm:w-44">
             {url && (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={url} alt="" data-testid="campaign-cover-image" onError={() => setFailedUrl(url)} className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
@@ -41,15 +41,20 @@ export function CampaignCard({ campaign, index = 0 }: { campaign: MaddoxCampaign
     const extra = campaign.members.length - VISIBLE_AVATARS
     return (
         <motion.li initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, delay: Math.min(index, 8) * 0.04 }} className="list-none">
-            <Link
-                href={`/campanhas/${campaign.id}`}
-                aria-label={`Abrir a campanha ${campaign.name}`}
-                className="group relative flex flex-col overflow-hidden rounded-xl border border-white/10 bg-white/[0.03] backdrop-blur-sm transition-all hover:-translate-y-0.5 hover:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary sm:flex-row"
+            {/*
+              Link esticado (DND-55): o link cobre o card inteiro por baixo e o conteúdo não recebe o ponteiro, então clicar em
+              qualquer ponto abre a campanha. Os avatares ficam numa camada acima, fora do link: são botões próprios (retrato
+              grande) e não podem ficar aninhados na navegação.
+            */}
+            <div
+                className="group relative flex flex-col overflow-hidden rounded-xl border border-white/10 bg-white/[0.03] backdrop-blur-sm transition-all hover:-translate-y-0.5 hover:bg-white/[0.06] has-[[data-card-link]:focus-visible]:ring-2 has-[[data-card-link]:focus-visible]:ring-primary sm:flex-row"
                 style={{ boxShadow: `inset 3px 0 0 ${color}` }}
+                data-testid="campaign-card"
             >
+                <Link href={`/campanhas/${campaign.id}`} aria-label={`Abrir a campanha ${campaign.name}`} data-card-link className="absolute inset-0 z-0 rounded-xl focus-visible:outline-none" />
                 <CampaignCover imageUrl={campaign.lastSceneImageUrl ?? campaign.coverUrl} color={color} />
 
-                <div className="flex min-w-0 flex-1 flex-col gap-3 p-4">
+                <div className="pointer-events-none relative flex min-w-0 flex-1 flex-col gap-3 p-4">
                     <div className="flex flex-wrap items-start justify-between gap-2">
                         <div className="min-w-0">
                             <h2 className="truncate text-lg font-semibold text-white">{campaign.name}</h2>
@@ -75,7 +80,9 @@ export function CampaignCard({ campaign, index = 0 }: { campaign: MaddoxCampaign
                         <div className="flex items-center gap-2 text-sm text-white/70">
                             {campaign.myCharacter ? (
                                 <>
-                                    <MemberAvatar name={campaign.myCharacter.name || MADDOX_CHARACTER_UNNAMED_LABEL} imageUrl={campaign.myCharacter.portraitUrl} color={color} className="h-7 w-7" />
+                                    <span className="pointer-events-auto relative z-10 flex">
+                                        <MemberAvatar name={campaign.myCharacter.name || MADDOX_CHARACTER_UNNAMED_LABEL} imageUrl={campaign.myCharacter.portraitUrl} color={color} context={MADDOX_AVATAR_CONTEXT.mine} className="h-7 w-7" />
+                                    </span>
                                     <span>
                                         Seu personagem: <span className="font-medium text-white">{campaign.myCharacter.name || MADDOX_CHARACTER_UNNAMED_LABEL}</span>
                                     </span>
@@ -85,9 +92,14 @@ export function CampaignCard({ campaign, index = 0 }: { campaign: MaddoxCampaign
                             )}
                         </div>
                         <div className="flex items-center gap-3">
-                            <div className="flex -space-x-2" aria-label={`${campaign.members.length} participante(s)`}>
+                            <div className="pointer-events-auto relative z-10 flex -space-x-2" role="group" aria-label={`${campaign.members.length} participante(s)`}>
                                 {campaign.members.slice(0, VISIBLE_AVATARS).map((member) => (
-                                    <MemberAvatar key={member.id} name={member.character?.name || member.name} imageUrl={member.character?.portraitUrl ?? member.avatarUrl} />
+                                    <MemberAvatar
+                                        key={member.id}
+                                        name={member.character?.name || member.name}
+                                        imageUrl={member.character?.portraitUrl ?? member.avatarUrl}
+                                        context={memberAvatarContext({ opex: member.kind === "opex", role: member.role, playerName: member.character?.name ? member.name : null })}
+                                    />
                                 ))}
                                 {extra > 0 && <span className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-background bg-white/10 text-[11px] text-white/80">+{extra}</span>}
                             </div>
@@ -107,7 +119,7 @@ export function CampaignCard({ campaign, index = 0 }: { campaign: MaddoxCampaign
                         {campaign.turnNumber > 0 ? ` · turno ${campaign.turnNumber}` : ""}
                     </p>
                 </div>
-            </Link>
+            </div>
         </motion.li>
     )
 }

@@ -14,7 +14,7 @@ import { getDiceCriticalState } from "@/features/dice-roller/critical-state"
 import type { DiceRollPreset, DiceRollResponse } from "@/features/dice-roller/types"
 import { modeReasonText, parseDiceExpression } from "../../../combat-rules"
 import type { CombatActionStep } from "../../../combat-types"
-import { MADDOX_CHECK_DIE_HIDE_MS, MADDOX_COMBAT_ADJUST_TEXT_MAX } from "../../../constants"
+import { MADDOX_CHECK_DIE_HIDE_MS, MADDOX_COMBAT_ADJUST_TEXT_MAX, messageAvatarContext } from "../../../constants"
 import type { MaddoxCombatPreparationDto, MaddoxGameCombatEventDto, MaddoxGameMessageDto } from "../../../game-types"
 import { MemberAvatar, OpexChip, RarityChip } from "../../campaigns/campaign-visuals"
 import { COMBAT_COLOR } from "../GameCombatCard"
@@ -221,7 +221,7 @@ export function CombatActionCard({ message, mine, replay, stepReplays, onRoll, o
                 {critical && <CriticalHighlight state="critical-success" rounded={{ inner: "rounded-xl", border: "rounded-xl" }} />}
                 <div className="relative z-10 flex flex-col gap-3 sm:flex-row sm:items-stretch">
                     <div className="flex min-w-0 flex-1 items-start gap-2.5">
-                        {action.actorKind === "character" ? <MemberAvatar name={action.actorName} imageUrl={message.portraitUrl} color={accent} className="mt-0.5 h-8 w-8 shrink-0" /> : <Icon className="mt-1 h-5 w-5 shrink-0" style={{ color: accent }} aria-hidden />}
+                        {action.actorKind === "character" ? <MemberAvatar name={action.actorName} imageUrl={message.portraitUrl} color={accent} context={messageAvatarContext({ opex: message.opex, mine })} className="mt-0.5 h-8 w-8 shrink-0" /> : <Icon className="mt-1 h-5 w-5 shrink-0" style={{ color: accent }} aria-hidden />}
                         <div className="min-w-0 flex-1 space-y-1.5">
                             <p className="flex flex-wrap items-center gap-1.5 text-xs text-white/60">
                                 <RarityChip color={accent}>{action.actorKind === "character" ? ECONOMY_LABELS[action.economy] : "Adversário"}</RarityChip>
@@ -347,7 +347,7 @@ function PlayerRollCard({ message, mine, replay, onRoll }: { message: MaddoxGame
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="pb-4" data-testid="combat-roll-card" data-kind={roll.kind} data-status={roll.status}>
             <div className="flex flex-col gap-3 rounded-2xl border bg-white/[0.03] p-3.5 sm:flex-row sm:items-center" style={{ borderColor: `${accent}55`, boxShadow: `inset 3px 0 0 ${accent}` }}>
                 <div className="flex min-w-0 flex-1 items-start gap-2.5">
-                    <MemberAvatar name={name} imageUrl={message.portraitUrl} color={accent} className="mt-0.5 h-8 w-8 shrink-0" />
+                    <MemberAvatar name={name} imageUrl={message.portraitUrl} color={accent} context={messageAvatarContext({ opex: message.opex, mine })} className="mt-0.5 h-8 w-8 shrink-0" />
                     <div className="min-w-0 flex-1 space-y-1">
                         <p className="flex items-center gap-1.5 text-xs text-white/60">
                             <Icon className="h-3.5 w-3.5" style={{ color: accent }} aria-hidden />

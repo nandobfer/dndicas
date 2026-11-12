@@ -458,7 +458,8 @@ describe("layout e estilo da conversa", () => {
         expect(outside[0]!.className).toMatch(/\bw-7\b/)
         expect(outside[0]!.className).toContain("self-start")
         expect(outside[0]!.className).toContain("shrink-0")
-        expect(message.querySelector("[class*='ring-']")).toBeNull()
+        // O anel de foco do avatar (botão do retrato, DND-55) não conta: nada em volta do texto.
+        expect([bubble, ...bubble.querySelectorAll("*")].some((element) => /\bring-/.test(element.getAttribute("class") ?? ""))).toBe(false)
     })
 
     it("pontinhos e cursor ficam dentro da bolha; a citação do catálogo ao vivo aparece em negrito, nunca como {{", async () => {

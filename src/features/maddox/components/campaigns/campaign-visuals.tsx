@@ -1,11 +1,11 @@
 "use client"
 
 import type { ReactNode } from "react"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/opex/avatar"
 import { rarityColors } from "@/lib/config/colors"
 import { cn } from "@/lib/utils"
 import { MADDOX_CAMPAIGN_STATUS_DEFS, MADDOX_COMBAT_DIFFICULTY_DEFAULT, MADDOX_COMBAT_DIFFICULTY_LEVEL_DEFS, MADDOX_DEFAULT_DENSITY, MADDOX_DENSITY_LEVEL_DEFS, MADDOX_INTERVIEW_STATUS_DEFS, MADDOX_RIGOR_LEVEL_DEFS, type MaddoxCampaignStatus, type MaddoxCombatDifficultyLevel, type MaddoxDensityLevel, type MaddoxInterviewStatus, type MaddoxRigorLevel } from "../../constants"
 import { worldNames, type WorldCatalog } from "../../world-catalog"
+import { MemberPortraitAvatar, StaticMemberAvatar } from "./member-portrait"
 
 /** Cor de raridade do nível de rigor (comum → lendário). */
 export const rigorColor = (rigor: MaddoxRigorLevel) => rarityColors[MADDOX_RIGOR_LEVEL_DEFS[rigor].rarity]
@@ -45,22 +45,14 @@ export const CombatDifficultyChip = ({ level }: { level: MaddoxCombatDifficultyL
 )
 export const StatusChip = ({ status }: { status: MaddoxCampaignStatus }) => <RarityChip color={statusColor(status)}>{MADDOX_CAMPAIGN_STATUS_DEFS[status].label}</RarityChip>
 
-const initials = (name: string) =>
-    name
-        .split(/\s+/)
-        .filter(Boolean)
-        .slice(0, 2)
-        .map((part) => part[0]?.toUpperCase())
-        .join("") || "?"
-
-/** Avatar de um membro: retrato do personagem, senão a foto do usuário, senão as iniciais. */
-export function MemberAvatar({ name, imageUrl, color, className }: { name: string; imageUrl: string | null; color?: string; className?: string }) {
-    return (
-        <Avatar className={cn("h-8 w-8 border-2 border-background", className)} style={color ? { borderColor: color } : undefined}>
-            {imageUrl && <AvatarImage src={imageUrl} alt={name} className="object-cover" />}
-            <AvatarFallback className="bg-white/10 text-[11px] text-white/80">{initials(name)}</AvatarFallback>
-        </Avatar>
-    )
+/**
+ * Avatar de um membro: retrato do personagem, senão a foto do usuário, senão as iniciais. Desde a DND-55 é interativo:
+ * o hover mostra o popover expandido (retrato, nome e `context`) e o clique abre o retrato grande. `interactive={false}`
+ * volta ao avatar estático. Por ser um botão, não pode ficar dentro de link ou de outro botão.
+ */
+export function MemberAvatar({ name, imageUrl, color, className, context, interactive = true }: { name: string; imageUrl: string | null; color?: string; className?: string; context?: string | null; interactive?: boolean }) {
+    if (!interactive) return <StaticMemberAvatar name={name} imageUrl={imageUrl} color={color} className={className} />
+    return <MemberPortraitAvatar name={name} imageUrl={imageUrl} color={color} context={context} className={className} />
 }
 
 /** Situação da entrevista (cenário ou personagem) na cor de raridade. */

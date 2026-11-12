@@ -12,7 +12,8 @@ A **entrega 8 (DND-14, #204)** — modo fiel ao D&D: mundo, povos e classes rest
 A **entrega 10 (DND-10, #203)** — imagens nas cenas (situações e frequência configuráveis, pedido manual do dono e retrato de NPC) — está
 em "Imagens nas cenas (Maddox 10)". A **DND-22 (#230)** — densidade das narrações e a aba Imagens no diário — está em "Densidade
 das narrações e imagens no diário (DND-22)". A **DND-31 (#244)** — personagem criado pela entrevista, sem formulário, e o retrato
-gerado ao confirmar a síntese — está em "Retrato do personagem (DND-31)".
+gerado ao confirmar a síntese — está em "Retrato do personagem (DND-31)". A **DND-55 (#292)** — popover no hover e retrato grande
+no clique de qualquer avatar — está em "Avatares: popover e retrato grande (DND-55)".
 
 Código: `src/features/maddox/` (`constants`, `schemas`, `types`, `script-draft`, `models/`, `server/`,
 `hooks/`, `components/settings/`).
@@ -187,7 +188,7 @@ Telas (`src/features/maddox/components/campaigns/`, rotas pt-BR):
 
 | Rota | Conteúdo |
 | --- | --- |
-| `/campanhas` | Campanhas em que sou **dono ou membro ativo** (`joined`), da mais recente; um card largo por linha (capa: a **última imagem de cena** da campanha — DND-35 —, senão `coverUrl`, sempre atrás do gradiente na cor do rigor; sem imagem, gradiente e espadas; chips de rigor/status/papel em cores de raridade, meu personagem, avatares dos membros, "atualizada há…"). Clicar abre a campanha. "Nova campanha" abre a criação |
+| `/campanhas` | Campanhas em que sou **dono ou membro ativo** (`joined`), da mais recente; um card largo por linha (capa: a **última imagem de cena** da campanha — DND-35 —, senão `coverUrl`, sempre atrás do gradiente na cor do rigor; sem imagem, gradiente e espadas; chips de rigor/status/papel em cores de raridade, meu personagem, avatares dos membros, "atualizada há…"). Clicar abre a campanha (link esticado; os avatares abrem o retrato — DND-55). "Nova campanha" abre a criação |
 | `/campanhas/[id]` | Cabeçalho, lobby (participantes e personagens), "Criar personagem" (link para a entrevista de personagem), "Gerar retrato (de novo)", "Editar" (dono), "Reiniciar campanha" (dono, campanha já iniciada, com confirmação — DND-50), "Sair da campanha" (jogador), "Remover" (dono, com confirmação) e o painel "Convidar jogadores" (dono) |
 | `/campanhas/convite/[token]` | Resumo da campanha do link e "Entrar na campanha". Sem login vai ao login e volta; sem a permissão mostra "Acesso restrito" |
 
@@ -2050,13 +2051,48 @@ nem corte; instruções com a escrita única), `narrator-prompt.test.ts` (regras
 linha do `suggest_actions`), `maddox-game-stream.test.ts` (`live-text`) e, na tela, `ask-master-button.test.tsx` (anel, miolo,
 movimento reduzido, desabilitado, clique e os outros botões sem anel).
 
+## Avatares: popover e retrato grande (DND-55)
+
+Todo avatar do módulo — jogador, Personagem Opex, NPC (inclusive NPC Opex) e o próprio Maddox — passa por `MemberAvatar`
+(`components/campaigns/campaign-visuals.tsx`), que monta `MemberPortraitAvatar` (`components/campaigns/member-portrait.tsx`).
+Vale em toda a mesa (diário do chat, cards de ação, rolagem e teste, iniciativa, "Na mesa", "NPCs conhecidos"), no Diário (NPCs,
+grupo, busca), nas entrevistas, na página da campanha, no perfil do personagem e na lista de campanhas.
+
+| Interação | Comportamento |
+|---|---|
+| Hover (só ponteiro `mouse`) | Abre o popover depois de `MADDOX_PORTRAIT_HOVER_OPEN_MS` (200 ms); retrato de ~176 px (`object-cover`) em vidro, borda na `color` do avatar, nome e a linha de contexto. Fecha `MADDOX_PORTRAIT_HOVER_CLOSE_MS` (150 ms) depois que o ponteiro sai do avatar **e** do popover — dois sinais de presença separados (`portrait-hover.ts`, decisão pura), então ir do avatar ao popover não fecha. Também fecha ao rolar qualquer contêiner, com Esc e ao abrir o retrato grande. Radix Popover (`side="right"`, vira perto das bordas, `collisionPadding` 8, largura `min(14rem, 100vw − 16px)`, `z-[100]`), montado só aberto e sem roubar o foco |
+| Clique, toque, Enter/Espaço | O avatar é um `<button>` nativo (`aria-label="Ver retrato de <nome>"`, `aria-haspopup="dialog"`); o clique faz `preventDefault` + `stopPropagation` e abre o retrato grande: diálogo Radix escuro, imagem `w-[min(90vw,90vh)]` em `object-contain`, nome e contexto abaixo. Fecha com X ("Fechar retrato"), Esc, Enter e clique fora; o foco fica preso no diálogo e volta ao avatar. Eventos do portal não sobem pela árvore do React até o pai |
+| Sem retrato (ou imagem que não carrega) | Popover e retrato grande mostram as iniciais grandes na cor do avatar e "Sem retrato" — nunca vazio |
+| Toque | Não há hover: o toque abre direto o retrato grande |
+
+**Contrato do `MemberAvatar`:** `className` (tamanho, margens, `grayscale` do NPC morto) vai para o botão, então o avatar ocupa o
+mesmo lugar de antes; `context` é a linha "quem é"; `interactive={false}` devolve o avatar estático (sem botão). Os rótulos ficam em
+`constants.ts`: `MADDOX_AVATAR_CONTEXT` ("Mestre da mesa", "Personagem", "Seu personagem", "Personagem Opex", "NPC", "NPC Opex",
+"Dono", "Jogador"), `npcAvatarContext(status, opex)` ("NPC · Morto"), `messageAvatarContext({ opex, mine })` (falas, ações, rolagens
+e testes da mesa) e `memberAvatarContext({ opex, role, playerName })` ("Jogador · Ana", lobby, "Na mesa" e lista).
+
+**Nunca dentro de link ou de outro botão.** Por ser um botão, o avatar não fica aninhado em navegação: no painel "NPCs conhecidos"
+ele é irmão do link do diário; na busca do Diário fica numa camada `absolute` sobre a linha (o link ganha `pl-[3.125rem]`); no card
+da lista de campanhas o link "Abrir a campanha …" é esticado (`absolute inset-0`, anel de foco no card por `has-[…:focus-visible]`),
+o conteúdo é `pointer-events-none` e os avatares ficam `pointer-events-auto` numa camada acima. No perfil do personagem (`CharacterProfileDialog`) o avatar fica
+ao lado do `GlassModalTitle`, fora dele, para o nome do diálogo ser só o do personagem. Ao pôr um avatar novo dentro de algo
+clicável ou de um título, use o mesmo padrão. Fora do Maddox, `UserMini` já abre a foto pelo `GlassImage`; nenhuma outra tela do módulo usa avatar
+de fora.
+
+Testes: `tests/frontend/maddox/portrait-hover.test.ts` (a decisão do hover, inclusive entrar no popover antes de sair do avatar) e
+`maddox-member-avatar.test.tsx` (textos literais de `messageAvatarContext`/`memberAvatarContext`/`npcAvatarContext`, contexto ao passar
+o mouse no `TurnPanel` e no chat da mesa, nome do diálogo do perfil, hover por papel, atraso, tolerância, rolagem, toque, clique, as quatro formas de fechar, teclado,
+sem retrato e imagem quebrada, propagação bloqueada, `className`, painel de NPCs e busca do Diário fora do link); o card da lista em
+`maddox-campaigns.test.tsx`.
+
+
 ## Testes
 
 `tests/backend/maddox/*` (configuração, roteiros, avatar, sessões, rotas, `campaigns.test.ts` com MongoDB em
 memória, `campaign-routes.test.ts`, `grant-maddox-play.test.ts`; Personagens Opex: `opex-interview.test.ts`,
 `opex-table.test.ts`, `opex-combat.test.ts`, `opex-prompt.test.ts`, `grant-maddox-opex.test.ts`; NPCs Opex: `opex-npc-tools.test.ts`,
 `opex-npc-combat.test.ts`, `opex-npc-routes.test.ts` e `tests/backend/engramind/opex-npcs.test.ts`) e `tests/frontend/maddox/*`
-(`maddox-tab.test.tsx`, `maddox-campaigns.test.tsx`, `maddox-campaigns-realtime.test.tsx`, `maddox-opex.test.tsx`, `maddox-opex-npc.test.tsx`; happy-dom).
+(`maddox-tab.test.tsx`, `maddox-campaigns.test.tsx`, `maddox-member-avatar.test.tsx`, `maddox-campaigns-realtime.test.tsx`, `maddox-opex.test.tsx`, `maddox-opex-npc.test.tsx`; happy-dom).
 Reiniciar campanha (DND-50): `campaign-reset.test.ts` (reinício completo — o que apaga e o que preserva —, só o dono, fases aceitas,
 duas vezes seguidas, limpeza interrompida retomada, Engramind fora com início recusado e rotina, narração em andamento interrompida
 sem gravar e job da fila descartado, narração interrompida no meio da gravação, job preso liberado pela folga com o próximo job executando, teto da espera pelos Opex, `resetAt` no estado da

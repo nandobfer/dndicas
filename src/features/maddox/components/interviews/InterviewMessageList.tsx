@@ -1,5 +1,6 @@
 "use client"
 
+import { MADDOX_AVATAR_CONTEXT } from "../../constants"
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import { AlertTriangle, ArrowDown, Loader2, RotateCcw } from "lucide-react"
@@ -120,7 +121,7 @@ function MaddoxMessage({ avatarUrl, color, live, children }: { avatarUrl: string
     return (
         <motion.div {...bubble} className="flex items-start gap-2.5 pb-4" data-live={live ? "true" : undefined} data-testid="maddox-message">
             {/* Tamanho fixo e alinhado ao topo: no flex, um filho sem altura própria esticaria até a altura da fala. */}
-            <MemberAvatar name="Maddox" imageUrl={avatarUrl} color={color} className="mt-0.5 h-7 w-7 shrink-0 self-start" />
+            <MemberAvatar name="Maddox" imageUrl={avatarUrl} color={color} context={MADDOX_AVATAR_CONTEXT.maddox} className="mt-0.5 h-7 w-7 shrink-0 self-start" />
             <div
                 className="min-w-0 max-w-[85%] space-y-1 break-words rounded-2xl rounded-tl-sm border bg-white/[0.03] px-3.5 py-2.5 text-sm text-foreground"
                 style={{ borderColor: `${color}40` }}
