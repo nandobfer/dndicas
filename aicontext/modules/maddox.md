@@ -1972,7 +1972,7 @@ o campo de resposta e o prazo (`CombatPrepQuestionCard`). Respondida ou vencida,
 "Resposta enviada" ou "Prazo encerrado" (`question.settled: false`); só com a preparação pronta ele diz "Sua mesa está pronta". O
 prazo vencido tira o campo de resposta do card na hora. Se a preparação parar sem concluir, o card fica num estado final, sem
 spinner e sem o campo (`question.halted`): `discarded` quando o combate termina ou o personagem sai (`discard`,
-`discardCombatPreps`, `discardMemberPrep`) e `failed` quando a execução falha. "Tentar de novo" volta o card a "concluindo". A resposta chega por `POST
+`discardCombatPreps`, `discardMemberPrep`) e `failed` quando a execução falha. "Tentar de novo" volta o card a "concluindo"; "Seguir sem preparação" o encerra (`halted: null`, `settled: true`). A resposta chega por `POST
 /api/maddox/campaigns/[id]/game/combat/preps/[prepId]/answer` (`{ text }`; responde o dono do personagem e, pelo Personagem Opex, o
 dono da campanha; auditada). A preparação volta para a fila com a resposta no prompt e sem nova pergunta. Sem resposta em
 `MADDOX_COMBAT_PREP_ANSWER_TIMEOUT_MS` (3 min; testes mudam `combatPrepTiming.answerMs`), a preparação conclui sem a escolha (o

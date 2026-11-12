@@ -1250,6 +1250,27 @@ describe("DND-51 — a preparação pergunta ao jogador quando falta uma escolha
         expect(await cardOfLyra()).toMatchObject({ halted: "discarded" })
     }, 20_000)
 
+    it("F11: falha depois da resposta e o dono segue sem preparação — o card deixa de dizer que falhou", async () => {
+        reviewFor((answer) => answer)
+        const { id, kael, lyra, cardOf } = await initiativeScene()
+        await rollInitiatives(id, { kael, lyra }, cardOf)
+        await settleCampaign(id)
+        const cardOfLyra = async () => (await game.getGameState(id, lyra.userId)).messages.find((message) => message.kind === "combat-prep" && message.combatPrep?.characterName === "Lyra")!.combatPrep!.question
+        const prep = (await prepsOf(id)).find((item) => item.characterName === "Lyra")!
+        combatPrepAi.review.mockImplementation(async (input) => {
+            if (input.characterName === "Lyra") throw new Error("fora do ar")
+            return { sheetChanges: [], modify: [], remove: [], add: [] }
+        })
+        await combatPrep.answerCombatPrep(id, String(prep._id), "Sabedoria", lyra.userId)
+        await combatPrep.waitForCombatPreps()
+        await settleCampaign(id)
+        expect(await cardOfLyra()).toMatchObject({ halted: "failed" })
+        await combatPrep.skipCombatPrep(id, String(prep._id), kael.userId)
+        await settleCampaign(id)
+        expect((await MaddoxCombatPrepModel.findById(prep._id).lean())!.status).toBe("skipped")
+        expect(await cardOfLyra()).toMatchObject({ halted: null, settled: true })
+    }, 20_000)
+
     it("sem resposta no prazo, conclui sem a escolha (o atributo fica vazio) e avisa no card", async () => {
         combatPrep.combatPrepTiming.answerMs = 40
         try {

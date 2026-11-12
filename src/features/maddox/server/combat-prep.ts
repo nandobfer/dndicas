@@ -883,7 +883,8 @@ export async function skipCombatPrep(campaignId: string, prepId: string, userId:
     const riders: CombatPrepRider[] = context?.sneakAttack ? [{ key: "sneak-attack", dice: context.sneakAttack, source: "server", reason: null }] : []
     const updated = await MaddoxCombatPrepModel.updateOne({ _id: prep._id, status: "failed" }, { $set: { status: "skipped", overlay: emptyOverlay(), riders, changes: [], finishedAt: new Date(), jobId: null } })
     if (updated.modifiedCount === 0) throw new DomainError(409, "A preparação mudou. Atualize a mesa.", "PREP_CHANGED")
-    if (prep.messageId && prep.question) await MaddoxCampaignMessageModel.updateOne({ _id: prep.messageId }, { $set: { "combatPrep.question.settled": true } })
+    // Revisão DND-51 (F11): a falha deixa de valer no card (a mesa segue com a lista base).
+    if (prep.messageId && prep.question) await MaddoxCampaignMessageModel.updateOne({ _id: prep.messageId }, { $set: { "combatPrep.question.settled": true, "combatPrep.question.halted": null } })
     await recordAudit({ userId, entidade: MADDOX_CAMPAIGN_AUDIT_ENTITY, entidadeId: String(campaign._id), acao: AcaoAuditoria.ATUALIZAR, depois: { combatPrep: String(prep._id), character: prep.characterName, decision: "skip" } })
     log.info({ campaignId, prepId, character: prep.characterName }, "[maddox] dono seguiu sem a preparação da ficha")
     await afterPrepSettled(campaign._id, prep)
