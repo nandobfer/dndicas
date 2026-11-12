@@ -421,6 +421,7 @@ export const updateBuildInput = z.object({
         .max(20)
         .optional()
         .describe("Magias que não vêm da classe: as da espécie e as dos talentos (ex.: os truques e a magia do Iniciado em Magia). Substitui a lista"),
+    semMagiasExtras: z.array(ref).max(20).optional().describe("Espécie ou talento que o texto faz parecer conceder magia, mas não concede (tira a cobrança de `magiasExtras` dele). Substitui a lista"),
     atributoConjuracao: z.enum(["Inteligência", "Sabedoria", "Carisma"]).optional().describe("Atributo de conjuração que o JOGADOR escolheu quando a espécie ou o talento oferece a escolha"),
     equipamento: z
         .array(z.object({ item: ref, quantidade: z.number().int().min(1).max(999).optional(), equipado: z.boolean().optional() }))
@@ -643,6 +644,7 @@ export async function applyBuildInput(doc: Pick<IMaddoxInterview, "messages" | "
         }
         next.extraSpells = extra
     }
+    if (input.semMagiasExtras !== undefined) next.noExtraSpellSources = [...new Set(input.semMagiasExtras.map((value) => value.trim()))]
     if (input.atributoConjuracao !== undefined) next.spellcastingAttribute = ABILITY_BY_LABEL[input.atributoConjuracao] ?? null
 
     const cantrips = await resolveSpells(input.truques, true)
@@ -692,7 +694,8 @@ function extraSpellSources(build: IMaddoxCharacterBuild, catalog: BuildCatalog):
     return out
 }
 
-const grantsSpells = (text: string | undefined) => /\btruques?\b|\bmagias? de 1|\bvoc[eê] (sabe|conhece|aprende)\b/i.test(text ?? "")
+/** Revisão DND-51 (F7): só termos de magia ("você aprende três idiomas" não é magia). */
+const grantsSpells = (text: string | undefined) => /\btruques?\b|\bmagias?\b|\bc[ií]rculo\b|\bfeiti[cç]os?\b/i.test(text ?? "")
 
 /**
  * DND-51: a espécie ou um talento que concede magias (texto com "truque") e ainda não tem magia extra registrada; e o
@@ -702,10 +705,11 @@ function extraSpellsMissing(build: IMaddoxCharacterBuild, catalog: BuildCatalog)
     const extra = build.extraSpells ?? []
     const missing: string[] = []
     const raceText = (catalog.race?.traits ?? []).map((trait) => trait.description).join(" ")
-    if (catalog.race && grantsSpells(raceText) && !extra.some((spell) => spell.source.kind === "race")) missing.push(`magias da espécie ${catalog.race.name} (\`magiasExtras\`)`)
+    const without = new Set((build.noExtraSpellSources ?? []).map(normalizeCatalogName))
+    if (catalog.race && grantsSpells(raceText) && !without.has(normalizeCatalogName(catalog.race.name)) && !extra.some((spell) => spell.source.kind === "race")) missing.push(`magias da espécie ${catalog.race.name} (\`magiasExtras\`)`)
     const feats = [catalog.originFeat, ...build.feats.map((feat) => (feat.id ? (catalog.feats.get(feat.id) ?? null) : null))].filter((feat): feat is CatalogFeat => Boolean(feat))
     for (const feat of feats) {
-        if (grantsSpells((feat as CatalogFeat & { description?: string }).description) && !extra.some((spell) => spell.source.kind === "feat" && spell.source.name === feat.name)) missing.push(`magias do talento ${feat.name} (\`magiasExtras\`)`)
+        if (grantsSpells((feat as CatalogFeat & { description?: string }).description) && !without.has(normalizeCatalogName(feat.name)) && !extra.some((spell) => spell.source.kind === "feat" && spell.source.name === feat.name)) missing.push(`magias do talento ${feat.name} (\`magiasExtras\`)`)
     }
     if (extra.length && !spellSource(catalog)?.attribute && !build.spellcastingAttribute) missing.push("atributo de conjuração das magias da espécie e dos talentos (escolha do jogador: `atributoConjuracao`)")
     return missing

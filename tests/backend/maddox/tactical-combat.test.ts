@@ -1201,7 +1201,9 @@ describe("DND-51 — a preparação pergunta ao jogador quando falta uma escolha
         expect(card.combatPrep!.question).toMatchObject({ prepId: String(prep._id), status: "awaiting", answer: null })
         // Só o jogador do personagem responde.
         await expect(combatPrep.answerCombatPrep(id, String(prep._id), "Sabedoria", kael.userId)).rejects.toMatchObject({ code: "FORBIDDEN" })
-        await combatPrep.answerCombatPrep(id, String(prep._id), "Quero Sabedoria", lyra.userId)
+        const answered = await combatPrep.answerCombatPrep(id, String(prep._id), "Quero Sabedoria", lyra.userId)
+        // Enquanto a preparação conclui, o card mostra a resposta enviada, não "mesa pronta".
+        expect(answered.messages.find((message) => message.kind === "combat-prep")!.combatPrep!.question).toMatchObject({ status: "answered", settled: false })
         await combatPrep.waitForCombatPreps()
         await settleCampaign(id)
         expect((await CharacterSheet.findById(lyra.sheetId).lean<{ spellcastingAttribute: string }>())!.spellcastingAttribute).toBe("wisdom")
@@ -1210,7 +1212,7 @@ describe("DND-51 — a preparação pergunta ao jogador quando falta uma escolha
         expect(combatPrepAi.review).toHaveBeenLastCalledWith(expect.objectContaining({ characterName: "Lyra", question: expect.objectContaining({ answer: "Quero Sabedoria" }) }))
         expect((await MaddoxCombatModel.findOne({ campaignId: id }).lean())!.tactical!.phase).toBe("running")
         const after = (await game.getGameState(id, lyra.userId)).messages.find((message) => message.kind === "combat-prep" && message.combatPrep?.characterName === "Lyra")!
-        expect(after.combatPrep!.question).toMatchObject({ status: "answered", answer: "Quero Sabedoria" })
+        expect(after.combatPrep!.question).toMatchObject({ status: "answered", answer: "Quero Sabedoria", settled: true })
         expect(after.combatPrep!.changes.some((change) => change.label === "Atributo de conjuração" && change.applied)).toBe(true)
         await expect(combatPrep.answerCombatPrep(id, String(prep._id), "de novo", lyra.userId)).rejects.toMatchObject({ code: "PREP_NOT_ASKING" })
     })
@@ -1219,10 +1221,20 @@ describe("DND-51 — a preparação pergunta ao jogador quando falta uma escolha
         combatPrep.combatPrepTiming.answerMs = 40
         try {
             reviewFor(() => null)
+            // A passada depois do prazo fica segura: o card já deixou de oferecer a resposta.
+            const hold = deferred()
+            const answerless = combatPrepAi.review.getMockImplementation()!
+            combatPrepAi.review.mockImplementation(async (input) => {
+                if ((input as { question?: unknown }).question) await hold.gate
+                return answerless(input)
+            })
             const { id, kael, lyra, cardOf } = await initiativeScene()
             await rollInitiatives(id, { kael, lyra }, cardOf)
-            await settleCampaign(id)
-            await new Promise((resolve) => setTimeout(resolve, 120))
+            await vi.waitFor(async () => {
+                const card = (await game.getGameState(id, lyra.userId)).messages.find((message) => message.kind === "combat-prep" && message.combatPrep?.characterName === "Lyra")!
+                expect(card.combatPrep!.question).toMatchObject({ status: "expired", settled: false })
+            })
+            hold.release()
             await combatPrep.waitForCombatPreps()
             await settleCampaign(id)
             const prep = (await prepsOf(id)).find((item) => item.characterName === "Lyra")!

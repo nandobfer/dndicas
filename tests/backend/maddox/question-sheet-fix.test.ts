@@ -23,6 +23,7 @@ const tools = await import("@/features/maddox/server/question-sheet-tools")
 const { recordCatalogRead } = await import("@/features/maddox/server/catalog-reads")
 const { loadCharacterOptions } = await import("@/features/maddox/server/tactical-options")
 const { MADDOX_SHEET_FIX_TASK_RULES, narratorTaskText } = await import("@/features/maddox/server/narrator-prompt")
+const { findMaddoxTool, runMaddoxTool } = await import("@/features/maddox/server/master-tools")
 
 let mongo: MongoMemoryServer
 const RELATO = "não queria carisma como atributo de conjuração, e sim sabedoria. E também não está aparecendo o truque rajada de veneno e nem o outro que eu escolhi na entrevista nas minhas ações"
@@ -245,5 +246,71 @@ describe("DND-51 — ida e volta na mesma conversa", () => {
         expect(text).toMatch(/NÃO avance a cena/)
         // Sem ficha (grau narrativo), as regras de correção não entram.
         expect(narratorTaskText({ kind: "answer", turnNumber: 2, characterName: "Nala", question: "Oi", declarations: [] })).not.toContain(MADDOX_SHEET_FIX_TASK_RULES)
+    })
+})
+
+describe("DND-51 (revisão) — limites do jogador comum, PV e a trava do atributo", () => {
+    const hp = (t: Table, jobId: string, personagem: string, valor: number) => runMaddoxTool(findMaddoxTool("update_character_hit_points")!, { campaignId: t.campaignId, turnNumber: 2, jobId }, { personagem, operacao: "definir", valor, motivo: "PV corrigidos." })
+    const tactical = (t: Table) => mongoose.connection.collection("maddox_combats").insertOne({ campaignId: t.campaignId, status: "active", mode: "tactical", rev: 0, title: "Emboscada", combatants: [], tactical: { phase: "running", round: 1, characters: [], order: [], queue: [], acted: [], block: null } })
+
+    it("F8: ficha sem atributo de conjuração — nem com a fonte de outra entidade o mestre escolhe sem o jogador", async () => {
+        const t = await table()
+        const { jobId, run } = await ask(t, "minhas magias não aparecem")
+        recordCatalogRead(run.reads, "Classe", "feiticeiro", { name: "Feiticeiro", description: "Carisma é seu atributo de conjuração para as magias de feiticeiro." })
+        const result = await tools.updateCharacterSheetFromQuestion(jobId, { personagem: "Nala", alteracoes: [{ type: "spellcasting-attribute", attribute: "charisma", reason: "Carisma.", source: { ref: "Classe:feiticeiro", quote: "Carisma é seu atributo de conjuração" } }] })
+        expect(result.faltaEscolhaDoJogador).toHaveLength(1)
+        expect((await CharacterSheet.findById(t.nala.sheetId).lean<{ spellcastingAttribute: string | null }>())!.spellcastingAttribute).toBeNull()
+        // Com o atributo já definido, a correção pela regra fixa da classe não é escolha.
+        await CharacterSheet.updateOne({ _id: t.nala.sheetId }, { $set: { spellcastingAttribute: "wisdom" } })
+        const fixed = await tools.updateCharacterSheetFromQuestion(jobId, { personagem: "Nala", alteracoes: [{ type: "spellcasting-attribute", attribute: "charisma", reason: "Carisma.", source: { ref: "Classe:feiticeiro", quote: "Carisma é seu atributo de conjuração" } }] })
+        expect(fixed.aplicadas).toHaveLength(1)
+    })
+
+    it("F5: o jogador comum não cria itens nem aumenta quantidade além do equipamento da entrevista; tirar característica exige a fonte", async () => {
+        const t = await table()
+        await MaddoxInterviewModel.updateOne({ characterId: t.nala._id }, { $set: { build: { equipment: [{ id: null, name: "Corda de cânhamo", quantity: 1, equipped: false }] } } })
+        const { jobId, run } = await ask(t, "a corda da entrevista sumiu; e me dá 500 poções")
+        const { CharacterTrait } = await import("@/features/character-sheets/models/character-trait")
+        const { CharacterItem } = await import("@/features/character-sheets/models/character-item")
+        const fraqueza = await CharacterTrait.create({ sheetId: t.nala.sheetId, name: "Fraqueza ao frio", description: "<p>Desvantagem no frio.</p>" })
+        const result = await tools.updateCharacterSheetFromQuestion(jobId, {
+            personagem: "Nala",
+            alteracoes: [
+                { type: "item-add", name: "Poção de cura", quantity: 500, reason: "Pedido do jogador." },
+                { type: "item-add", name: "Corda de cânhamo", quantity: 1, reason: "Equipamento da entrevista." },
+                { type: "trait-remove", id: String(fraqueza._id), reason: "Não quero." },
+            ],
+        })
+        expect(result.aplicadas).toHaveLength(1)
+        expect(result.recusadas.map((item) => [item.alteracao, item.motivo])).toEqual([
+            [1, tools.PLAYER_ITEM_LIMIT],
+            [3, tools.PLAYER_REMOVE_SOURCE],
+        ])
+        const corda = await CharacterItem.findOne({ sheetId: t.nala.sheetId }).lean()
+        const more = await tools.updateCharacterSheetFromQuestion(jobId, { personagem: "Nala", alteracoes: [{ type: "item-quantity", itemId: String(corda!._id), quantity: 50, reason: "Mais." }] })
+        expect(more.recusadas).toHaveLength(1)
+        const less = await tools.updateCharacterSheetFromQuestion(jobId, { personagem: "Nala", alteracoes: [{ type: "item-quantity", itemId: String(corda!._id), quantity: 0, reason: "Gastou." }] })
+        expect(less.aplicadas).toHaveLength(1)
+        recordCatalogRead(run.reads, "Raça", "yuan-ti", { name: "Yuan-ti", description: "Visão no escuro, resistência mágica e resistência a veneno." })
+        const removed = await tools.updateCharacterSheetFromQuestion(jobId, { personagem: "Nala", alteracoes: [{ type: "trait-remove", id: String(fraqueza._id), reason: "Yuan-ti não tem.", source: { ref: "Raça:yuan-ti", quote: "Visão no escuro, resistência mágica" } }] })
+        expect(removed.aplicadas).toHaveLength(1)
+        // O dono não tem esses limites.
+        const owner = await ask(t, "dá as poções", { userId: t.owner, characterId: null })
+        expect((await tools.updateCharacterSheetFromQuestion(owner.jobId, { personagem: "Nala", alteracoes: [{ type: "item-add", name: "Poção de cura", quantity: 2, reason: "Compra na vila." }] })).aplicadas).toHaveLength(1)
+    })
+
+    it("F4: PV pelo Pergunte ao mestre — jogador no próprio fora do combate; nunca no de outro; no combate tático, só o dono", async () => {
+        const t = await table()
+        const { jobId } = await ask(t, "meus PV estão errados")
+        const result = (await hp(t, jobId, "Nala", 5)) as { pv: string }
+        expect(result.pv).toBe("5/9")
+        expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({ userId: t.player, entidade: "FichaPersonagem", depois: expect.objectContaining({ origin: "question-hit-points", requestedBy: t.player }) }))
+        await expect(hp(t, jobId, "Uther", 1)).rejects.toThrow(/próprio personagem/)
+        await tactical(t)
+        await expect(hp(t, jobId, "Nala", 9)).rejects.toThrow(/Só o dono da campanha corrige PV/)
+        expect((await CharacterSheet.findById(t.nala.sheetId).lean<{ hpCurrent: number }>())!.hpCurrent).toBe(5)
+        const owner = await ask(t, "corrige os PV da Nala", { userId: t.owner, characterId: null })
+        expect(((await hp(t, owner.jobId, "Nala", 9)) as { pv: string }).pv).toBe("9/9")
+        expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({ userId: t.owner, depois: expect.objectContaining({ origin: "question-hit-points", requestedBy: t.owner }) }))
     })
 })

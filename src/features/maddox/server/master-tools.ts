@@ -409,14 +409,14 @@ export const MADDOX_MASTER_TOOLS: readonly MaddoxMasterTool[] = [
         }),
         async execute(context, input) {
             const [{ changeCharacterHitPoints, HitPointsError }, { questionRun }] = await Promise.all([import("./hit-points"), import("./question-runs")])
-            // DND-51: no "Pergunte ao mestre", vale também no combate tático, só para o personagem de quem perguntou (o dono, qualquer um).
+            // DND-51: no "Pergunte ao mestre", só o personagem de quem perguntou (o dono, qualquer um); no combate tático, só o dono.
             const run = questionRun(context.jobId)
             if (run && !run.askerIsOwner) {
                 const own = run.askerCharacterId ? await MaddoxCharacterModel.findById(run.askerCharacterId).select("name").lean<{ name: string }>() : null
                 if (!own || keyOf(own.name) !== keyOf(input.personagem)) throw new MaddoxToolError("Quem perguntou só pode corrigir os PV do próprio personagem.")
             }
             try {
-                const result = await changeCharacterHitPoints({ campaignId: context.campaignId, characterName: input.personagem, operation: input.operacao, dice: input.dados ?? null, value: input.valor ?? null, hitDice: input.dadosDeVida ?? null, reason: clip(input.motivo, MADDOX_TOOL_NAME_MAX * 2), turnNumber: context.turnNumber, origin: run ? "question" : "narrator", requestedBy: run?.askerUserId ?? null })
+                const result = await changeCharacterHitPoints({ campaignId: context.campaignId, characterName: input.personagem, operation: input.operacao, dice: input.dados ?? null, value: input.valor ?? null, hitDice: input.dadosDeVida ?? null, reason: clip(input.motivo, MADDOX_TOOL_NAME_MAX * 2), turnNumber: context.turnNumber, origin: run ? "question" : "narrator", requestedBy: run?.askerUserId ?? null, ownerRequest: Boolean(run?.askerIsOwner) })
                 return { saved: true, personagem: result.characterName, pv: `${result.after}/${result.hpMax}`, antes: result.before }
             } catch (error) {
                 if (error instanceof HitPointsError) throw new MaddoxToolError(error.message)

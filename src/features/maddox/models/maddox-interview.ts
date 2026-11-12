@@ -83,6 +83,8 @@ export interface IMaddoxCharacterBuild {
      * magia do Iniciado em Magia) — com a fonte. Opcional: entrevistas antigas não têm.
      */
     extraSpells?: IMaddoxExtraSpell[]
+    /** DND-51 (revisão, F7): espécie ou talento declarados sem magia (não cobram `magiasExtras`). */
+    noExtraSpellSources?: string[]
     /** DND-51: atributo de conjuração escolhido pelo jogador (regra com lista, como espécie ou talento). */
     spellcastingAttribute?: AttributeType | null
     equipment: { id: string | null; name: string; quantity: number; equipped: boolean }[]

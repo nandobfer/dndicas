@@ -1,6 +1,7 @@
 import { Types } from "mongoose"
 import { loggerFor } from "@/lib/logger"
 import { normalizeCatalogName } from "../catalog-markup"
+import { plainText } from "../combat-options"
 import { combatSheetChangeSchema, requiresCatalogSource, type CombatSheetChange } from "../combat-prep-schemas"
 import { freshEconomy, type CombatFlags } from "../combat-rules"
 import type { CombatPrepChange, TacticalCharacterState } from "../combat-types"
@@ -124,8 +125,9 @@ export async function updateCharacterSheetFromQuestion(jobId: string | undefined
         parsed.push(change)
         indexOf.set(change, index + 1)
     })
-    const { screenPlayerChoices } = await import("./sheet-choice-rules")
-    const screen = await screenPlayerChoices(parsed, run.reads, run.playerTexts)
+    const limited = await withPlayerLimits(run, character, parsed, (change, motivo) => refused.push({ alteracao: indexOf.get(change) ?? 0, motivo }))
+    const { screenPlayerChoices, choiceSheetOf } = await import("./sheet-choice-rules")
+    const screen = await screenPlayerChoices(limited, run.reads, run.playerTexts, await choiceSheetOf(character.sheetId))
     for (const item of screen.refused) refused.push({ alteracao: indexOf.get(item.change) ?? 0, motivo: item.refused ?? "recusada" })
     const campaign = await MaddoxCampaignModel.findById(run.campaignId).select("ownerId").lean<Pick<IMaddoxCampaign, "_id" | "ownerId">>()
     const { applySheetChanges } = await import("./combat-sheet-writes")
@@ -147,6 +149,63 @@ export async function updateCharacterSheetFromQuestion(jobId: string | undefined
         recusadas: refused,
         ...(screen.refused.length ? { faltaEscolhaDoJogador: screen.refused.map((item) => item.refused), orientacao: "Pergunte ao jogador e grave depois com o trecho da resposta dele em `choice.quote`." } : {}),
     }
+}
+
+export const PLAYER_ITEM_LIMIT = "item ganho na história entra pela narração; pelo Pergunte ao mestre, o jogador só repõe o equipamento escolhido na entrevista (o dono da campanha corrige qualquer item)"
+export const PLAYER_REMOVE_SOURCE = "para tirar uma característica ou um talento da ficha, cite a regra do catálogo que mostra que o personagem não o tem (`source`)"
+
+/**
+ * Revisão DND-51 (F5): o que o jogador comum NÃO faz sozinho pelo "Pergunte ao mestre" (o dono da campanha faz tudo):
+ * - acrescentar item ou aumentar a quantidade além do equipamento da entrevista (itens ganhos entram pela narração);
+ * - tirar característica ou talento sem a fonte do catálogo lida nesta resposta.
+ * Diminuir quantidade, remover item, equipar e as demais correções seguem livres (com as travas de fonte e de escolha).
+ */
+async function withPlayerLimits(run: QuestionRun, character: CharacterRow, changes: readonly CombatSheetChange[], refuse: (change: CombatSheetChange, motivo: string) => void): Promise<CombatSheetChange[]> {
+    if (run.askerIsOwner) return [...changes]
+    const needsEquipment = changes.some((change) => change.type === "item-add" || change.type === "item-quantity")
+    const equipment = needsEquipment ? await interviewEquipment(new Types.ObjectId(run.campaignId), character._id) : []
+    const { CharacterItem } = await import("@/features/character-sheets/models/character-item")
+    const out: CombatSheetChange[] = []
+    for (const change of changes) {
+        if (change.type === "item-add" || change.type === "item-quantity") {
+            let catalogId: string | null = null
+            let name = ""
+            let current = 0
+            if (change.type === "item-add") {
+                catalogId = change.catalogItemId ?? null
+                name = change.name ?? ""
+                const existing = catalogId && Types.ObjectId.isValid(catalogId) ? await CharacterItem.findOne({ sheetId: character.sheetId, catalogItemId: new Types.ObjectId(catalogId) }).select("quantity").lean<{ quantity?: number }>() : null
+                current = existing ? (existing.quantity ?? 1) : 0
+            } else {
+                const item = Types.ObjectId.isValid(change.itemId) ? await CharacterItem.findOne({ _id: new Types.ObjectId(change.itemId), sheetId: character.sheetId }).select("catalogItemId name quantity").lean<{ catalogItemId?: Types.ObjectId | null; name: string; quantity?: number }>() : null
+                catalogId = item?.catalogItemId ? String(item.catalogItemId) : null
+                name = item?.name ?? ""
+                current = item?.quantity ?? 1
+                if (change.quantity <= current) {
+                    out.push(change)
+                    continue
+                }
+            }
+            const wanted = normalizeCatalogName(plainText(name))
+            const entry = equipment.find((item) => (catalogId && item.id === catalogId) || (wanted && normalizeCatalogName(item.name) === wanted))
+            const total = change.type === "item-add" ? current + change.quantity : change.quantity
+            if (!entry || total > entry.quantity) {
+                refuse(change, PLAYER_ITEM_LIMIT)
+                continue
+            }
+        }
+        if ((change.type === "trait-remove" || change.type === "feat-remove") && checkCatalogSource(change.source, run.reads)) {
+            refuse(change, PLAYER_REMOVE_SOURCE)
+            continue
+        }
+        out.push(change)
+    }
+    return out
+}
+
+async function interviewEquipment(campaignId: Types.ObjectId, characterId: Types.ObjectId): Promise<{ id: string | null; name: string; quantity: number }[]> {
+    const interview = await MaddoxInterviewModel.findOne({ campaignId, kind: "character", characterId }).select("build").lean<Pick<IMaddoxInterview, "build">>()
+    return interview?.build?.equipment ?? []
 }
 
 const changeText = (change: CombatPrepChange) => `${change.label}: ${change.before} → ${change.after}`

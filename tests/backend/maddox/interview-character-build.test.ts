@@ -434,6 +434,23 @@ describe("ficha completa pela entrevista de personagem", () => {
         expect(attack!.attackBonus).toBe("+3")
     })
 
+    it("DND-51 (F7): talento sem magia cujo texto diz \"você aprende\" não cobra magias; com magia, cobra até gravar ou declarar sem magia", async () => {
+        const campaignId = await characterInterview("fiel-dnd", 1)
+        await attributesWithSoldierBonus(campaignId)
+        const base = { raca: "Humano", classe: "Guerreiro", origem: "Soldado", periciasClasse: ["Percepção", "Sobrevivência"], estiloLuta: "Defesa", equipamento: [{ item: "Espada longa", equipado: true }], idiomas: ["Comum"] }
+        await mongoose.connection.collection("feats").updateOne({ _id: cat.feats.savage }, { $set: { description: "Você aprende três idiomas e sabe falar com os animais da sua terra." } })
+        scripted.push([call("update_character_build", base), say("Ok.")])
+        await run(await interviews.sendInterviewMessage(campaignId, "character", { content: "Guerreiro." }, ids.ana))
+        expect((lastTool("update_character_build").output as { faltando: string[] }).faltando).toEqual([])
+        await mongoose.connection.collection("feats").updateOne({ _id: cat.feats.savage }, { $set: { description: "Você aprende um truque à sua escolha." } })
+        scripted.push([call("update_character_build", base), say("Ok.")])
+        await run(await interviews.sendInterviewMessage(campaignId, "character", { content: "De novo." }, ids.ana))
+        expect((lastTool("update_character_build").output as { faltando: string[] }).faltando).toEqual([expect.stringContaining("magias do talento Atacante Selvagem")])
+        scripted.push([call("update_character_build", { semMagiasExtras: ["Atacante Selvagem"] }), say("Ok.")])
+        await run(await interviews.sendInterviewMessage(campaignId, "character", { content: "Ele não tem magia." }, ids.ana))
+        expect((lastTool("update_character_build").output as { faltando: string[] }).faltando).toEqual([])
+    })
+
     it("refazer a ficha não duplica itens, ataques nem magias", async () => {
         const campaignId = await characterInterview("fiel-dnd", 1)
         await attributesWithSoldierBonus(campaignId)

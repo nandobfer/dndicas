@@ -603,10 +603,10 @@ async function runCombatPrep(campaignId: Types.ObjectId, prepId: Types.ObjectId,
             const raw = await ai.reviewCombatSheet({ campaign, characterName: claimed.characterName, sheetText: context.sheetText, optionsText: context.optionsText, sneakAttack: context.sneakAttack, reads, jobId, ...(question ? { question: { text: question.text, answer: question.answer } } : {}) })
             const interpretation = interpretPrep(raw, context, reads)
             // DND-51: a escolha do jogador (atributo de conjuração de uma lista, magia escolhida) nunca é do Maddox.
-            const { screenPlayerChoices, refusalsOf } = await import("./sheet-choice-rules")
+            const { screenPlayerChoices, refusalsOf, choiceSheetOf } = await import("./sheet-choice-rules")
             const { interviewPlayerTexts } = await import("./question-runs")
             const playerTexts = [...(await interviewPlayerTexts(campaignId, claimed.characterId)), ...(question?.answer ? [question.answer] : [])]
-            const screen = await screenPlayerChoices(interpretation.sheetChanges, reads, playerTexts)
+            const screen = await screenPlayerChoices(interpretation.sheetChanges, reads, playerTexts, await choiceSheetOf(active.state.sheetId))
             const asked = !question ? (interpretation.question ?? (screen.refused.length ? fallbackQuestion(screen.refused.map((item) => item.value)) : null)) : null
             if (asked) {
                 if (await askPlayer(campaignId, claimed, jobId, asked)) {
@@ -743,10 +743,11 @@ export function fallbackQuestion(values: readonly string[]): string {
     return `Antes do combate, preciso de uma escolha sua que a ficha não registra (sugestão do Maddox: ${[...new Set(values)].join(", ")}). O que você escolhe? Responda com o nome do que escolher.`
 }
 
-function questionCard(prep: Pick<PrepDoc, "_id" | "question">) {
+/** `settled` (revisão DND-51, F2): a preparação terminou; antes disso o card não diz "mesa pronta". */
+function questionCard(prep: Pick<PrepDoc, "_id" | "question" | "status">) {
     const question = prep.question
     if (!question) return null
-    return { prepId: String(prep._id), text: question.text, status: question.expired ? ("expired" as const) : question.answer ? ("answered" as const) : ("awaiting" as const), answer: question.answer, deadline: question.deadline }
+    return { prepId: String(prep._id), text: question.text, status: question.expired ? ("expired" as const) : question.answer ? ("answered" as const) : ("awaiting" as const), answer: question.answer, deadline: question.deadline, settled: prep.status === "ready" || prep.status === "skipped" }
 }
 
 /** A preparação para com a pergunta: nada é gravado; o card privado traz o campo de resposta. */
@@ -788,9 +789,16 @@ function clearAnswerTimer(prepId: Types.ObjectId) {
 /** Prazo vencido: a preparação volta para a fila e conclui sem a escolha. */
 async function expireQuestion(prepId: Types.ObjectId): Promise<boolean> {
     clearAnswerTimer(prepId)
-    const updated = await MaddoxCombatPrepModel.updateOne({ _id: prepId, status: "awaiting-player" }, { $set: { status: "pending", "question.expired": true } })
-    if (updated.modifiedCount > 0) log.info({ prepId: String(prepId) }, "[maddox] pergunta da preparação venceu; segue sem a escolha")
-    return updated.modifiedCount > 0
+    const expired = await MaddoxCombatPrepModel.findOneAndUpdate({ _id: prepId, status: "awaiting-player" }, { $set: { status: "pending", "question.expired": true } }, { returnDocument: "after" }).lean<PrepDoc>()
+    if (!expired) return false
+    log.info({ prepId: String(prepId) }, "[maddox] pergunta da preparação venceu; segue sem a escolha")
+    // Revisão DND-51 (F3): o card deixa de oferecer o campo de resposta na hora.
+    if (expired.messageId) {
+        await MaddoxCampaignMessageModel.updateOne({ _id: expired.messageId }, { $set: { "combatPrep.question.status": "expired", "combatPrep.question.settled": false } })
+        const { publishGameChanged } = await import("./game")
+        await publishGameChanged(expired.campaignId)
+    }
+    return true
 }
 
 /**
@@ -812,7 +820,7 @@ export async function answerCombatPrep(campaignId: string, prepId: string, text:
     const updated = await MaddoxCombatPrepModel.updateOne({ _id: prep._id, status: "awaiting-player" }, { $set: { status: "pending", "question.answer": answer, "question.answeredAt": new Date() } })
     if (updated.modifiedCount === 0) throw new DomainError(409, "Esta pergunta já foi respondida ou o prazo acabou.", "PREP_NOT_ASKING")
     clearAnswerTimer(prep._id)
-    if (prep.messageId) await MaddoxCampaignMessageModel.updateOne({ _id: prep.messageId }, { $set: { "combatPrep.question.status": "answered", "combatPrep.question.answer": answer } })
+    if (prep.messageId) await MaddoxCampaignMessageModel.updateOne({ _id: prep.messageId }, { $set: { "combatPrep.question.status": "answered", "combatPrep.question.answer": answer, "combatPrep.question.settled": false } })
     await recordAudit({ userId, entidade: MADDOX_CAMPAIGN_AUDIT_ENTITY, entidadeId: String(campaign._id), acao: AcaoAuditoria.ATUALIZAR, depois: { combatPrep: String(prep._id), character: prep.characterName, decision: "answer", answer } })
     log.info({ campaignId, prepId, character: prep.characterName }, "[maddox] jogador respondeu à pergunta da preparação")
     await scheduleCombatPreps(campaign._id)
@@ -854,6 +862,7 @@ export async function skipCombatPrep(campaignId: string, prepId: string, userId:
     const riders: CombatPrepRider[] = context?.sneakAttack ? [{ key: "sneak-attack", dice: context.sneakAttack, source: "server", reason: null }] : []
     const updated = await MaddoxCombatPrepModel.updateOne({ _id: prep._id, status: "failed" }, { $set: { status: "skipped", overlay: emptyOverlay(), riders, changes: [], finishedAt: new Date(), jobId: null } })
     if (updated.modifiedCount === 0) throw new DomainError(409, "A preparação mudou. Atualize a mesa.", "PREP_CHANGED")
+    if (prep.messageId && prep.question) await MaddoxCampaignMessageModel.updateOne({ _id: prep.messageId }, { $set: { "combatPrep.question.settled": true } })
     await recordAudit({ userId, entidade: MADDOX_CAMPAIGN_AUDIT_ENTITY, entidadeId: String(campaign._id), acao: AcaoAuditoria.ATUALIZAR, depois: { combatPrep: String(prep._id), character: prep.characterName, decision: "skip" } })
     log.info({ campaignId, prepId, character: prep.characterName }, "[maddox] dono seguiu sem a preparação da ficha")
     await afterPrepSettled(campaign._id, prep)

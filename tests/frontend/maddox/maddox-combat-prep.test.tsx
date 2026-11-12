@@ -194,7 +194,7 @@ describe("DND-51 — a preparação pergunta ao jogador e a correção aparece n
 
     it("card com a pergunta, o campo de resposta e o prazo; responder envia o texto", async () => {
         const onAnswer = vi.fn(async () => undefined)
-        render(<CombatPrepCard message={{ ...base, combatPrep: { characterName: "Nala", changes: [], question: { prepId: "p1", text: "Qual atributo de conjuração você usa?", status: "awaiting", answer: null, deadline } } }} onAnswer={onAnswer} />)
+        render(<CombatPrepCard message={{ ...base, combatPrep: { characterName: "Nala", changes: [], question: { prepId: "p1", text: "Qual atributo de conjuração você usa?", status: "awaiting", answer: null, deadline, settled: false } } }} onAnswer={onAnswer} />)
         expect(screen.getByTestId("combat-prep-question-text")).toHaveTextContent("Qual atributo de conjuração você usa?")
         expect(screen.queryByText(/Sua mesa está pronta/)).not.toBeInTheDocument()
         expect(screen.getByText(/o combate segue sem essa escolha/)).toBeInTheDocument()
@@ -206,12 +206,24 @@ describe("DND-51 — a preparação pergunta ao jogador e a correção aparece n
     })
 
     it("depois da resposta, o card da mesa pronta mostra a pergunta e o que o jogador respondeu (ou que o prazo venceu)", () => {
-        const { unmount } = render(<CombatPrepCard message={{ ...base, combatPrep: { characterName: "Nala", changes: [{ area: "ficha", label: "Atributo de conjuração", before: "nenhum", after: "Sabedoria", reason: "Sua escolha.", applied: true }], question: { prepId: "p1", text: "Qual atributo?", status: "answered", answer: "Sabedoria", deadline } } }} />)
+        const { unmount } = render(<CombatPrepCard message={{ ...base, combatPrep: { characterName: "Nala", changes: [{ area: "ficha", label: "Atributo de conjuração", before: "nenhum", after: "Sabedoria", reason: "Sua escolha.", applied: true }], question: { prepId: "p1", text: "Qual atributo?", status: "answered", answer: "Sabedoria", deadline, settled: true } } }} />)
         expect(screen.getByText(/Sua mesa está pronta/)).toBeInTheDocument()
         expect(screen.getByTestId("combat-prep-question-done")).toHaveTextContent("Sua resposta: Sabedoria")
         unmount()
-        render(<CombatPrepCard message={{ ...base, combatPrep: { characterName: "Nala", changes: [], question: { prepId: "p1", text: "Qual atributo?", status: "expired", answer: null, deadline } } }} />)
+        render(<CombatPrepCard message={{ ...base, combatPrep: { characterName: "Nala", changes: [], question: { prepId: "p1", text: "Qual atributo?", status: "expired", answer: null, deadline, settled: true } } }} />)
         expect(screen.getByTestId("combat-prep-question-done")).toHaveTextContent("Sem resposta no prazo.")
+    })
+
+    it("respondida ou vencida, enquanto a preparação roda, o card não diz mesa pronta nem oferece o campo", () => {
+        const { unmount } = render(<CombatPrepCard message={{ ...base, combatPrep: { characterName: "Nala", changes: [], question: { prepId: "p1", text: "Qual atributo?", status: "answered", answer: "Sabedoria", deadline, settled: false } } }} onAnswer={vi.fn(async () => undefined)} />)
+        expect(screen.getByTestId("combat-prep-concluding")).toHaveTextContent("Resposta enviada")
+        expect(screen.getByTestId("combat-prep-concluding")).toHaveTextContent("Sua resposta: Sabedoria")
+        expect(screen.queryByText(/Sua mesa está pronta/)).not.toBeInTheDocument()
+        expect(screen.queryByText(/Nenhuma mudança/)).not.toBeInTheDocument()
+        unmount()
+        render(<CombatPrepCard message={{ ...base, combatPrep: { characterName: "Nala", changes: [], question: { prepId: "p1", text: "Qual atributo?", status: "expired", answer: null, deadline, settled: false } } }} onAnswer={vi.fn(async () => undefined)} />)
+        expect(screen.getByTestId("combat-prep-concluding")).toHaveTextContent("Prazo encerrado")
+        expect(screen.queryByTestId("combat-prep-answer")).not.toBeInTheDocument()
     })
 
     it('o selo "Pergunta ao jogador" na ordem e a linha pública da correção da ficha', () => {

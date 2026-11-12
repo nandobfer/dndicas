@@ -950,7 +950,7 @@ async function messagesDto(all: MessageDoc[], viewer: MessagesViewer): Promise<M
             ...(message.kind === "narration" ? { actionOptions: actionOptionsFor(message, viewer) } : {}),
             // O motivo bruto do provedor só vai ao dono; para os demais o campo nem é serializado (DND-27).
             ...opexNpcFailuresDto(message, viewer, knownFailureNpcs),
-            ...(message.kind === "combat-prep" && message.combatPrep ? { combatPrep: { characterName: message.combatPrep.characterName, changes: message.combatPrep.changes ?? [], question: message.combatPrep.question ? { ...message.combatPrep.question, deadline: new Date(message.combatPrep.question.deadline).toISOString() } : null } } : {}),
+            ...(message.kind === "combat-prep" && message.combatPrep ? { combatPrep: { characterName: message.combatPrep.characterName, changes: message.combatPrep.changes ?? [], question: message.combatPrep.question ? { ...message.combatPrep.question, deadline: new Date(message.combatPrep.question.deadline).toISOString(), settled: message.combatPrep.question.settled !== false } : null } } : {}),
             ...(message.kind === "rewind" && message.rewindNotice ? { rewindNotice: { event: message.rewindNotice.event, turnNumber: message.rewindNotice.turnNumber, originTurn: message.rewindNotice.originTurn } } : {}),
             createdAt: new Date(message.createdAt).toISOString(),
         }

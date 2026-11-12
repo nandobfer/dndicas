@@ -477,6 +477,21 @@ export function CombatPrepCard({ message, busy = false, onAnswer }: { message: M
     const question = prep.question ?? null
     // DND-51: a preparação parou com uma pergunta ao jogador; o card traz o campo de resposta até ela chegar.
     if (question?.status === "awaiting") return <CombatPrepQuestionCard characterName={prep.characterName} question={question} busy={busy} onAnswer={onAnswer} />
+    // Respondida ou vencida, mas a preparação ainda roda: o card não diz "mesa pronta" antes da hora.
+    if (question && !question.settled) {
+        return (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="pb-4" data-testid="combat-prep-concluding">
+                <div className="space-y-1.5 rounded-2xl border bg-white/[0.03] p-3.5 text-xs" style={{ borderColor: `${rarityColors.rare}55`, boxShadow: `inset 3px 0 0 ${rarityColors.rare}` }}>
+                    <p className="flex items-center gap-1.5 font-semibold uppercase tracking-wide" style={{ color: rarityColors.rare }}>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> {question.status === "expired" ? "Prazo encerrado" : "Resposta enviada"} · {prep.characterName}
+                    </p>
+                    <p className="whitespace-pre-wrap break-words text-white/70">{question.text}</p>
+                    {question.answer ? <p className="whitespace-pre-wrap break-words text-white/90">Sua resposta: {question.answer}</p> : <p className="text-white/60">Sem resposta no prazo: a preparação segue sem essa escolha.</p>}
+                    <p className="text-white/60">O mestre está concluindo a preparação da sua mesa…</p>
+                </div>
+            </motion.div>
+        )
+    }
     return (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="pb-4" data-testid="combat-prep-card">
             <div className="space-y-2 rounded-2xl border bg-white/[0.03] p-3.5" style={{ borderColor: `${rarityColors.uncommon}55`, boxShadow: `inset 3px 0 0 ${rarityColors.uncommon}` }}>

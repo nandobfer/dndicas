@@ -113,18 +113,29 @@ export interface ApplySheetRestoreContext {
     campaignId: string
     characterName: string
     auditUserId: string
-    /**
-     * DND-51: o que a entrevista registrou (a conversa e as escolhas), normalizado (`normalizeChoiceText`). Magias, talentos,
-     * características e ataques de truque citados nela nunca saem da ficha no reinício, mesmo fora da referência.
-     */
-    interviewCorpus?: string
+    /** DND-51: o que a entrevista registrou (escolhas estruturadas e a fala do jogador) — nunca sai da ficha no reinício. */
+    interviewProtection?: InterviewProtection
 }
 
-/** DND-51: o registro foi escolhido na entrevista (o nome dele aparece na conversa ou nas escolhas gravadas). */
-export function choseInInterview(row: Row, corpus: string | undefined): boolean {
-    if (!corpus) return false
-    const name = normalizeChoiceText(plainText(String(row.name ?? "")))
-    return name.length >= 3 && ` ${corpus} `.includes(` ${name} `)
+/**
+ * Revisão DND-51 (F6): a proteção vem primeiro do que é estruturado — as escolhas do `build` (truques, magias, magias da
+ * espécie e dos talentos, talentos, estilo de luta) e os registros da referência (magias, ataques, talentos, traços), por
+ * nome exato. Para entrevistas antigas, que não gravavam as magias da espécie e dos talentos, vale também o texto das
+ * falas do JOGADOR e da síntese final do Maddox (nunca as opções que o Maddox listou no meio da conversa).
+ */
+export interface InterviewProtection {
+    names: Set<string>
+    corpus: string
+}
+
+const nameKey = (value: unknown) => normalizeChoiceText(plainText(String(value ?? "")))
+
+/** DND-51: o registro foi escolhido na entrevista. */
+export function choseInInterview(row: Row, protection: InterviewProtection | undefined): boolean {
+    if (!protection) return false
+    const name = nameKey(row.name)
+    if (name.length < 3) return false
+    return protection.names.has(name) || ` ${protection.corpus} `.includes(` ${name} `)
 }
 
 const PROTECTED_COLLECTIONS: readonly SheetRestoreCollection[] = ["spells", "feats", "traits"]
@@ -168,7 +179,10 @@ export async function applySheetRestore(changes: readonly SheetRestoreChange[], 
                 const found = await model.findOne({ _id: new Types.ObjectId(change.id), sheetId }).lean<Row>()
                 // DND-51: o reinício zera a história, não as escolhas da entrevista (magias, talentos, características e o
                 // ataque dos truques).
-                const chosen = found && (PROTECTED_COLLECTIONS.includes(change.collection) || (change.collection === "attacks" && isAutoSpellAttack(found))) && choseInInterview(found, context.interviewCorpus)
+                // Ataque comum só pelo nome exato da referência (a arma da entrevista); o do truque também pela fala do jogador.
+                const chosen =
+                    found &&
+                    (PROTECTED_COLLECTIONS.includes(change.collection) || (change.collection === "attacks" && isAutoSpellAttack(found)) ? choseInInterview(found, context.interviewProtection) : change.collection === "attacks" && Boolean(context.interviewProtection?.names.has(nameKey(found.name))))
                 if (chosen) log.info({ sheetId: String(sheetId), collection: change.collection, name: plainText(String(found.name ?? "")) }, "[maddox] reinício manteve uma escolha da entrevista")
                 const row = found && !chosen ? await model.findOneAndDelete({ _id: found._id, sheetId }).lean<Row>() : null
                 if (!row) {
@@ -249,12 +263,15 @@ async function computeReference(campaign: CampaignDoc, character: CharacterDoc, 
     }
 }
 
-/** DND-51: a conversa da entrevista, as escolhas gravadas e os textos da referência, normalizados (o que o reinício preserva). */
-export function interviewCorpusOf(interview: Pick<IMaddoxInterview, "messages" | "build">, reference: SheetReference): string {
+/** DND-51: o que o reinício preserva (escolhas estruturadas por nome exato; falas do jogador e síntese final por texto). */
+export function interviewProtectionOf(interview: Pick<IMaddoxInterview, "messages" | "build">, reference: SheetReference): InterviewProtection {
     const build = interview.build
-    const names = [...(build?.cantrips ?? []), ...(build?.spells ?? []), ...(build?.extraSpells ?? []), ...(build?.feats ?? []), ...(build?.fightingStyle ? [build.fightingStyle] : [])].map((ref) => ref.name)
+    const chosen = [...(build?.cantrips ?? []), ...(build?.spells ?? []), ...(build?.extraSpells ?? []), ...(build?.feats ?? []), ...(build?.fightingStyle ? [build.fightingStyle] : [])].map((ref) => ref.name)
+    const rows = SHEET_RESTORE_COLLECTIONS.filter((collection) => collection !== "items").flatMap((collection) => reference.rows[collection].map((row) => row.name))
+    const names = new Set([...chosen, ...rows].map(nameKey).filter((name) => name.length >= 3))
     const fields = (["classFeatures", "speciesTraits", "featuresNotes"] as const).map((field) => plainText(String(reference.fields[field] ?? "")))
-    return normalizeChoiceText([...(interview.messages ?? []).map((message) => message.content ?? ""), ...names, ...fields].join("\n"))
+    const spoken = (interview.messages ?? []).filter((message) => message.role === "user" || message.proposal).map((message) => message.content ?? "")
+    return { names, corpus: normalizeChoiceText([...spoken, ...fields].join("\n")) }
 }
 
 function interviewText(character: CharacterDoc): string {
@@ -286,7 +303,7 @@ async function runSheetRestore(characterId: Types.ObjectId, resetId: string): Pr
         const { reviewSheetRestore } = await import("./sheet-restore-ai")
         const response = await reviewSheetRestore({ campaign, characterName: character.name, currentText: currentSheetText(current), referenceText: referenceSheetText(reference), interviewText: interviewText(character) })
         const { changes, invalid } = parseSheetRestoreChanges(response)
-        const result = await applySheetRestore(changes, reference, { sheetId: character.sheetId, campaignId: String(campaign._id), characterName: character.name, auditUserId: campaign.reset?.byUserId ?? campaign.ownerId, interviewCorpus: interviewCorpusOf(interview, reference) })
+        const result = await applySheetRestore(changes, reference, { sheetId: character.sheetId, campaignId: String(campaign._id), characterName: character.name, auditUserId: campaign.reset?.byUserId ?? campaign.ownerId, interviewProtection: interviewProtectionOf(interview, reference) })
         log.info({ campaignId: String(campaign._id), characterId: String(characterId), applied: result.applied, skipped: result.skipped + invalid }, "[maddox] ficha ajustada pelo Maddox no reinício")
         outcome = { status: "done", error: null }
     } catch (error) {

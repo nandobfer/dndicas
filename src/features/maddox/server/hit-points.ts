@@ -35,6 +35,8 @@ export interface HitPointsRequest {
     origin: "narrator" | "combat-open" | "question"
     /** DND-51: quem pediu pelo "Pergunte ao mestre" (vai na auditoria). */
     requestedBy?: string | null
+    /** DND-51: o pedido veio do dono da campanha (só ele corrige PV pelo "Pergunte ao mestre" no combate tático). */
+    ownerRequest?: boolean
 }
 
 export interface HitPointsResult {
@@ -54,6 +56,8 @@ export async function changeCharacterHitPoints(request: HitPointsRequest): Promi
     const { findActiveTactical, mutateTactical } = await import("./tactical-combat")
     const combat = await findActiveTactical(request.campaignId)
     if (request.origin === "narrator" && combat) throw new HitPointsError("Há um combate tático em andamento: os PV mudam pelas ações dos jogadores e pelo `apply_effect`.")
+    // Revisão DND-51 (F4): no combate tático, o jogador comum não corrige PV pelo "Pergunte ao mestre" (só o dono da campanha).
+    if (request.origin === "question" && combat && !request.ownerRequest) throw new HitPointsError("Há um combate tático em andamento: os PV mudam pelas ações. Só o dono da campanha corrige PV pelo \"Pergunte ao mestre\" durante o combate.")
     const reason = request.reason.trim()
     if (!reason) throw new HitPointsError("Informe o motivo da mudança de PV.")
 

@@ -267,6 +267,8 @@ export interface MaddoxCombatPrepQuestionDto {
     answer: string | null
     /** ISO: depois disso a preparação segue sem a escolha. */
     deadline: string
+    /** A preparação terminou (só então o card diz "Sua mesa está pronta"). */
+    settled: boolean
 }
 
 export interface MaddoxCombatRewardDto {

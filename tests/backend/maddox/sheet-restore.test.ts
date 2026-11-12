@@ -45,12 +45,12 @@ vi.mock("@/features/engramind/server/campaign-rewind", () => ({
 }))
 
 /** Ficha do fim da entrevista calculada pelo servidor (o construtor real precisa do catálogo inteiro). */
-const reference = vi.hoisted(() => ({ calls: 0 }))
+const reference = vi.hoisted(() => ({ calls: 0, attacks: [] as Record<string, unknown>[] }))
 vi.mock("@/features/maddox/server/sheet-builder", async (importOriginal) => ({
     ...(await importOriginal<typeof import("@/features/maddox/server/sheet-builder")>()),
     computeCharacterSheet: vi.fn(async (input: { sheetId: mongoose.Types.ObjectId }) => {
         reference.calls++
-        return { set: { hpMax: 12, hpCurrent: 12, level: 1 }, items: [{ sheetId: input.sheetId, name: "<p>Espada longa</p>", quantity: 1, equipped: true }], attacks: [], spells: [] }
+        return { set: { hpMax: 12, hpCurrent: 12, level: 1 }, items: [{ sheetId: input.sheetId, name: "<p>Espada longa</p>", quantity: 1, equipped: true }], attacks: reference.attacks.map((attack) => ({ ...attack, sheetId: input.sheetId })), spells: [] }
     }),
 }))
 
@@ -72,6 +72,7 @@ const { CharacterItem } = await import("@/features/character-sheets/models/chara
 const { CharacterSpell } = await import("@/features/character-sheets/models/character-spell")
 const { CharacterAttack } = await import("@/features/character-sheets/models/character-attack")
 const { CharacterFeat } = await import("@/features/character-sheets/models/character-feat")
+const { CharacterTrait } = await import("@/features/character-sheets/models/character-trait")
 const campaigns = await import("@/features/maddox/server/campaigns")
 const game = await import("@/features/maddox/server/game")
 const reset = await import("@/features/maddox/server/campaign-reset")
@@ -156,6 +157,7 @@ beforeEach(async () => {
     for (const collection of await db.collections()) await collection.deleteMany({})
     Object.assign(ai, { hold: null, failFor: new Set(), response: null, inputs: [] })
     reference.calls = 0
+    reference.attacks = []
     recordAudit.mockClear()
 })
 
@@ -182,6 +184,29 @@ describe("cópia da ficha no início", () => {
         const replaced = await MaddoxCampaignSnapshotModel.findOne({ campaignId: id, kind: "start" }).lean()
         expect(replaced!.sheets[0]!.sheet).toMatchObject({ hpMax: 20, hpCurrent: 20 })
         expect(new Date(replaced!.takenAt).getTime()).toBeGreaterThan(new Date(copy!.takenAt).getTime())
+    })
+
+    it("DND-51: entrevista → iniciar → reiniciar devolve atributo de conjuração, magias (classe, espécie, talento), ataques, talento e característica", async () => {
+        const { id, owner, seats } = await table(1)
+        const { sheetId } = seats[0]!
+        await CharacterSheet.updateOne({ _id: sheetId }, { $set: { spellcastingAttribute: "wisdom" } })
+        for (const name of ["Raio de Fogo", "Rajada de Veneno", "Orientação"]) await CharacterSpell.create({ sheetId, name: `<p>${name}</p>`, circle: 0, prepared: true })
+        await CharacterAttack.create({ sheetId, name: "<p>Rajada de Veneno</p>", attackBonus: "+5", damageType: "", notes: "auto:spell:x" })
+        await CharacterAttack.create({ sheetId, name: "<p>Adaga</p>", attackBonus: "+5", damageType: "", notes: "" })
+        await CharacterFeat.create({ sheetId, name: "Iniciado em Magia", description: "<p>Dois truques.</p>" })
+        await CharacterTrait.create({ sheetId, name: "Conjuração Serpentina", description: "<p>Você sabe Rajada de Veneno.</p>" })
+        await settle(id, game.startCampaign(id, owner))
+        // A história mexeu em tudo.
+        await CharacterSheet.updateOne({ _id: sheetId }, { $set: { spellcastingAttribute: null } })
+        await Promise.all([CharacterSpell.deleteMany({ sheetId }), CharacterAttack.deleteMany({ sheetId }), CharacterFeat.deleteMany({ sheetId }), CharacterTrait.deleteMany({ sheetId })])
+        await reset.resetCampaign(id, owner)
+        await waitForCampaignIdle(id)
+        await reset.waitForCampaignResets()
+        expect((await CharacterSheet.findById(sheetId).lean())!.spellcastingAttribute).toBe("wisdom")
+        expect((await CharacterSpell.find({ sheetId }).lean()).map((spell) => spell.name).sort()).toEqual(["<p>Orientação</p>", "<p>Raio de Fogo</p>", "<p>Rajada de Veneno</p>"])
+        expect((await CharacterAttack.find({ sheetId }).lean()).map((attack) => attack.name).sort()).toEqual(["<p>Adaga</p>", "<p>Rajada de Veneno</p>"])
+        expect((await CharacterFeat.find({ sheetId }).lean()).map((feat) => feat.name)).toEqual(["Iniciado em Magia"])
+        expect((await CharacterTrait.find({ sheetId }).lean()).map((trait) => trait.name)).toEqual(["Conjuração Serpentina"])
     })
 
     it("quem conclui a entrevista com a campanha em andamento entra na cópia", async () => {
@@ -275,8 +300,9 @@ describe("ajuste pelo Maddox (sem cópia e sem retrato)", () => {
             {
                 $set: {
                     messages: [
-                        { id: "a", role: "maddox", content: "Da espécie você já tem [Rajada de Veneno](#mention:Magia:1), e o [Iniciado em Magia](#mention:Talento:2) pede dois truques.", proposal: false },
+                        { id: "a", role: "maddox", content: "Opções de truque: Orientação, Mensagem, Bola de Fogo (de mago, se trocar de lista).", proposal: false },
                         { id: "b", role: "user", content: "orientação e mensagem de truques", proposal: false },
+                        { id: "c", role: "maddox", content: "Síntese: da espécie, [Rajada de Veneno](#mention:Magia:1); do [Iniciado em Magia](#mention:Talento:2), Orientação e Mensagem. Da espécie também a Conjuração Serpentina.", proposal: true },
                     ],
                 },
             },
@@ -287,6 +313,13 @@ describe("ajuste pelo Maddox (sem cópia e sem retrato)", () => {
         const historia = await CharacterSpell.create({ sheetId, name: "<p>Bola de Fogo</p>", circle: 3, prepared: true })
         const truque = await CharacterAttack.create({ sheetId, name: "<p>Rajada de Veneno</p>", attackBonus: "+5", damageType: "", notes: "auto:spell:abc" })
         const talento = await CharacterFeat.create({ sheetId, name: "Iniciado em Magia", description: "<p>Dois truques.</p>" })
+        // A arma da entrevista (ataque comum, na referência) e um ataque ganho na história.
+        reference.attacks = [{ name: "<p>Adaga</p>", attackBonus: "+5", damageType: "", notes: "" }]
+        const serpentina = await CharacterTrait.create({ sheetId, name: "Conjuração Serpentina", description: "<p>Você sabe Rajada de Veneno.</p>" })
+        const maldicao = await CharacterTrait.create({ sheetId, name: "Maldição do pântano", description: "<p>Ganha na história.</p>" })
+        const adaga = await CharacterAttack.create({ sheetId, name: "<p>Adaga</p>", attackBonus: "+5", damageType: "", notes: "" })
+        const machado = await CharacterAttack.create({ sheetId, name: "<p>Machado do ogro</p>", attackBonus: "+3", damageType: "", notes: "" })
+        // Bola de Fogo foi só uma opção citada pelo Maddox no meio da conversa: aprendida na história, ela sai.
         ai.response = () => ({
             changes: [
                 { type: "remove", collection: "spells", id: String(rajada._id), reason: "Magia não consta na referência" },
@@ -294,6 +327,10 @@ describe("ajuste pelo Maddox (sem cópia e sem retrato)", () => {
                 { type: "remove", collection: "spells", id: String(historia._id), reason: "aprendida na história" },
                 { type: "remove", collection: "attacks", id: String(truque._id), reason: "Ataque não consta na referência" },
                 { type: "remove", collection: "feats", id: String(talento._id), reason: "Talento não consta na referência" },
+                { type: "remove", collection: "attacks", id: String(adaga._id), reason: "volta à referência" },
+                { type: "remove", collection: "traits", id: String(serpentina._id), reason: "não consta na referência" },
+                { type: "remove", collection: "traits", id: String(maldicao._id), reason: "ganha na história" },
+                { type: "remove", collection: "attacks", id: String(machado._id), reason: "ganho na história" },
                 { type: "field", field: "spellcastingAttribute", reason: "volta ao da referência" },
             ],
         })
@@ -303,6 +340,10 @@ describe("ajuste pelo Maddox (sem cópia e sem retrato)", () => {
         expect((await CharacterSpell.find({ sheetId }).lean()).map((spell) => spell.name).sort()).toEqual(["<p>Orientação</p>", "<p>Rajada de Veneno</p>"])
         expect(await CharacterAttack.exists({ _id: truque._id })).toBeTruthy()
         expect(await CharacterFeat.exists({ _id: talento._id })).toBeTruthy()
+        expect(await CharacterAttack.exists({ _id: adaga._id })).toBeTruthy()
+        expect(await CharacterAttack.exists({ _id: machado._id })).toBeNull()
+        expect(await CharacterTrait.exists({ _id: serpentina._id })).toBeTruthy()
+        expect(await CharacterTrait.exists({ _id: maldicao._id })).toBeNull()
         expect((await CharacterSheet.findById(sheetId).lean())!.spellcastingAttribute).toBe("wisdom")
     })
 
