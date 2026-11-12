@@ -47,6 +47,8 @@ import { useRequestMaddoxNpcPortrait, useRequestMaddoxSceneImage } from "../../h
 import { TurnPanel } from "./TurnPanel"
 import { TurnsMenu } from "./TurnsMenu"
 import { rewindBannerText } from "../../rewind-plan"
+import { restBannerText } from "../../rest-view"
+import { useMaddoxRest } from "../../hooks/useMaddoxRest"
 import { CampaignChatHeader } from "../CampaignChatHeader"
 import { JournalSearchDialog } from "../journal/JournalSearchDialog"
 import { JournalLinkButton } from "../journal/JournalLinkButton"
@@ -138,6 +140,7 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
     const sceneImage = useRequestMaddoxSceneImage(state.campaignId)
     const reminder = useInjectMaddoxReminder(state.campaignId)
     const portrait = useRequestMaddoxNpcPortrait(state.campaignId)
+    const rest = useMaddoxRest(state.campaignId)
     const replays = useMemo(() => new Map(stream.rolled.map((item) => [item.messageId, item.roll])), [stream.rolled])
     const [older, setOlder] = useState<MaddoxGameMessageDto[]>([])
     const [olderHasMore, setOlderHasMore] = useState<boolean | null>(null)
@@ -249,7 +252,9 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
                         {masterTurn ? <Dices className="h-3.5 w-3.5 shrink-0" style={{ color }} aria-hidden /> : <MessageCircle className="h-3.5 w-3.5 shrink-0" style={{ color }} aria-hidden />}
                         {masterTurn
                             ? masterBannerText(state)
-                            : opexBannerText(state)
+                            : restBannerText(state.turn.restWaiting)
+                              ? restBannerText(state.turn.restWaiting)
+                              : opexBannerText(state)
                               ? opexBannerText(state)
                               : state.turn.combatActor
                               ? combatBannerText(state)
@@ -287,6 +292,18 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
                         onLoadMore={() => void loadMore()}
                         replays={replays}
                         onRollCheck={async (checkId) => (await rollCheck.mutateAsync(checkId)).roll}
+                        rest={{
+                            isOwner: state.me.isOwner,
+                            busy: rest.busy,
+                            onRollHitDie: async (restId, characterId) => (await rest.roll.mutateAsync({ restId, characterId })).roll,
+                            onDeclineHitDice: (restId, characterId) => rest.decline.mutate({ restId, characterId }),
+                            onExchange: async (restId, characterId, text) => {
+                                await rest.exchange.mutateAsync({ restId, characterId, text })
+                            },
+                            onFinishExchange: (restId, characterId, nothing) => rest.finish.mutate({ restId, characterId, nothing }),
+                            onRetryPrep: (restId, characterId) => rest.retry.mutate({ restId, characterId }),
+                            onSkipPrep: (restId, characterId) => rest.skip.mutate({ restId, characterId }),
+                        }}
                         combat={{
                             isOwner: state.me.isOwner,
                             reacting: combatReact.isPending,

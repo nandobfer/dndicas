@@ -2,7 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
-import { AlertCircle, ArrowDown, BookOpen, EyeOff, HelpCircle, Loader2, MinusCircle } from "lucide-react"
+import { AlertCircle, ArrowDown, BookOpen, EyeOff, HelpCircle, Loader2, MinusCircle, Moon } from "lucide-react"
 import { Button } from "@/components/ui/opex/button"
 import { Markdown } from "@/components/ui/opex/markdown"
 import { MADDOX_AVATAR_CONTEXT, messageAvatarContext } from "../../constants"
@@ -22,6 +22,7 @@ import { ReminderLine } from "./ReminderLine"
 import { RewindNoticeLine } from "./RewindNoticeLine"
 import { HitPointsLine } from "./HitPointsLine"
 import { SheetChangeLine } from "./SheetChangeLine"
+import { RestCard, type RestHandlers } from "./rest/RestCard"
 
 const NEAR_BOTTOM_PX = 80
 const bubble = { initial: { opacity: 0, y: 8 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.2, ease: "easeOut" as const } }
@@ -52,6 +53,8 @@ interface Props {
     highlightId?: string | null
     /** Sugestões de ação do Maddox (DND-30), abaixo da narração indicada; nunca no diário (só leitura). */
     actionOptions?: ActionOptionsHandlers | null
+    /** Descanso (DND-58): dados de vida, trocas e a preparação com falha; nunca no diário (só leitura). */
+    rest?: RestHandlers | null
 }
 
 export interface ActionOptionsHandlers {
@@ -97,7 +100,8 @@ function stepReplaysOf(replays: ReadonlyMap<string, DiceRollResponse>, messageId
 
 const NO_COMBAT: CombatHandlers = { isOwner: false, reacting: false, onRollAction: noRoll, onRollCombat: noRoll, onCancelAction: () => undefined, onDecideReaction: () => undefined }
 
-export function GameMessageList({ messages, myMemberId, maddoxAvatarUrl, color, narrating, live = [], opexActing: opexActingInput = null, hasMore, loadingMore, onLoadMore, replays = NO_REPLAYS, onRollCheck = noRoll, combat: handlers = NO_COMBAT, readOnly = false, highlightId = null, actionOptions: optionsInput = null }: Props) {
+export function GameMessageList({ messages, myMemberId, maddoxAvatarUrl, color, narrating, live = [], opexActing: opexActingInput = null, hasMore, loadingMore, onLoadMore, replays = NO_REPLAYS, onRollCheck = noRoll, combat: handlers = NO_COMBAT, readOnly = false, highlightId = null, actionOptions: optionsInput = null, rest: restInput = null }: Props) {
+    const restHandlers = readOnly ? null : restInput
     const combat = readOnly ? NO_COMBAT : handlers
     const actionOptions = readOnly ? null : optionsInput
     const opexActing = readOnly ? null : opexActingInput
@@ -199,6 +203,8 @@ export function GameMessageList({ messages, myMemberId, maddoxAvatarUrl, color, 
                                     <HitPointsLine message={message} />
                                 ) : message.kind === "sheet-change" ? (
                                     <SheetChangeLine message={message} />
+                                ) : message.kind === "rest" && message.rest ? (
+                                    <RestCard message={message} color={color} handlers={restHandlers} replays={replays} />
                                 ) : message.kind === "check" && message.check ? (
                                     <GameCheckCard message={message} mine={actsAs(message)} color={color} replay={replays.get(message.id) ?? null} onRoll={onRollCheck} />
                                 ) : (
@@ -340,8 +346,9 @@ function GameMessage({ message, mine, replyTo, maddoxAvatarUrl, color }: { messa
         )
     }
     const question = message.kind === "question"
+    const restRequest = message.kind === "rest-request"
     return (
-        <motion.div {...bubble} className={`flex items-start gap-2.5 pb-3 ${mine ? "flex-row-reverse" : ""}`} data-testid={question ? "game-question" : "game-declaration"}>
+        <motion.div {...bubble} className={`flex items-start gap-2.5 pb-3 ${mine ? "flex-row-reverse" : ""}`} data-testid={question ? "game-question" : restRequest ? "game-rest-request" : "game-declaration"}>
             <MemberAvatar name={name} imageUrl={message.portraitUrl} color={color} context={messageAvatarContext({ opex: message.opex, mine })} className="mt-0.5 h-7 w-7 shrink-0 self-start" />
             <div className={`min-w-0 max-w-[85%] space-y-1 break-words rounded-2xl border px-3.5 py-2 text-sm text-foreground ${mine ? "rounded-tr-sm border-primary/30 bg-primary/15" : "rounded-tl-sm border-white/10 bg-white/[0.05]"}`}>
                 <p className="flex items-center gap-1 text-xs font-semibold text-white/80">
@@ -350,6 +357,11 @@ function GameMessage({ message, mine, replyTo, maddoxAvatarUrl, color }: { messa
                     {question && (
                         <span className="inline-flex items-center gap-0.5 font-normal text-white/60">
                             <HelpCircle className="h-3 w-3" aria-hidden /> pergunta ao mestre
+                        </span>
+                    )}
+                    {restRequest && (
+                        <span className="inline-flex items-center gap-0.5 font-normal text-white/60">
+                            <Moon className="h-3 w-3" aria-hidden /> troca depois do descanso
                         </span>
                     )}
                 </p>

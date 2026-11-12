@@ -21,6 +21,7 @@ export const SEAT_COLORS: Record<MaddoxSeatStatus, string> = {
     preparing: rarityColors.common,
     watching: rarityColors.rare,
     rolling: rarityColors.mythic,
+    resting: rarityColors.divine,
 }
 
 interface Props {
