@@ -214,7 +214,7 @@ export const MADDOX_MASTER_TOOLS: readonly MaddoxMasterTool[] = [
     define({
         name: "update_campaign_state",
         description:
-            "Atualiza o estado atual da história (checkpoint): cena, local, situação imediata e a decisão aguardada dos jogadores. Envie só os campos que mudaram; use ao fim de cada narração em que a situação mudou. Os jogadores leem este estado no Diário da campanha: nunca grave segredos do mestre aqui (use save_npc ou save_memory com visibility master).",
+            "Atualiza o estado atual da história (checkpoint): cena, local, situação imediata e a decisão aguardada dos jogadores. Envie só os campos que mudaram; use antes de escrever cada narração em que a situação mudou. Os jogadores leem este estado no Diário da campanha: nunca grave segredos do mestre aqui (use save_npc ou save_memory com visibility master).",
         readOnly: false,
         input: z.object({
             scene: optionalText.describe("Cena atual, em uma ou duas frases"),
@@ -428,8 +428,8 @@ export const MADDOX_MASTER_TOOLS: readonly MaddoxMasterTool[] = [
         name: "request_check",
         description: [
             "Pede um teste de perícia, atributo ou resistência para UM personagem jogador. Use quando o resultado de uma tentativa for incerto e relevante.",
-            "O jogador rola o d20 com os modificadores da ficha dele; o resultado chega na próxima mensagem. Depois de pedir,",
-            "narre até o momento da tentativa e PARE: não decida o resultado nem pergunte o que os jogadores fazem. Um teste por personagem a cada narração.",
+            "O jogador rola o d20 com os modificadores da ficha dele; o resultado chega na próxima mensagem. Peça antes de escrever;",
+            "depois, narre até o momento da tentativa e PARE: não decida o resultado nem pergunte o que os jogadores fazem. Um teste por personagem a cada narração.",
         ].join(" "),
         readOnly: false,
         input: z.object({
@@ -968,7 +968,7 @@ export const MADDOX_ACTION_OPTIONS_TOOLS: readonly MaddoxMasterTool[] = [
         name: MADDOX_ACTION_OPTIONS_TOOL_NAME,
         description: [
             "Sugere ações para os jogadores declararem no próximo turno, mostradas como atalhos abaixo desta narração (cada jogador vê só as do próprio personagem).",
-            `Chame no fim da narração, quando ela terminar num ponto de decisão: 2 a ${MADDOX_ACTION_OPTIONS_MAX} ações curtas (até uns ${MADDOX_ACTION_OPTION_GUIDE} caracteres), plausíveis, variadas e coerentes com a cena, escritas em primeira pessoa como o jogador declararia ("Examino a porta em busca de armadilhas").`,
+            `Chame antes de escrever a narração, quando ela for terminar num ponto de decisão: 2 a ${MADDOX_ACTION_OPTIONS_MAX} ações curtas (até uns ${MADDOX_ACTION_OPTION_GUIDE} caracteres), plausíveis, variadas e coerentes com a cena, escritas em primeira pessoa como o jogador declararia ("Examino a porta em busca de armadilhas").`,
             "Uma entrada por personagem (nome exato). Não cite as sugestões na narração. Chamar de novo substitui as sugestões do personagem.",
         ].join(" "),
         readOnly: false,

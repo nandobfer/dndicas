@@ -32,6 +32,18 @@ describe("stream da mesa (cliente)", () => {
         expect(visibleLiveGenerations(state, [{ id: hex(1) }, { id: hex(2) }])).toHaveLength(0)
     })
 
+    it("`live-text` troca o texto ao vivo inteiro e o `settled` herda o texto corrigido (DND-52)", () => {
+        const lines: MaddoxGameStreamLine[] = [
+            { type: "live-start", live: live() },
+            { type: "delta", liveId: "l1", text: "A névoa sobe.\n\nA névoa sobe devagar.\n\n" },
+            { type: "live-text", liveId: "l1", text: "A névoa sobe devagar.\n\n" },
+            { type: "delta", liveId: "l1", text: "O que fazem?" },
+            { type: "live-end", liveId: "l1", messageId: hex(2), error: null },
+        ]
+        const state = lines.reduce(reduceGameStream, MADDOX_GAME_STREAM_INITIAL)
+        expect(state.settled).toEqual([expect.objectContaining({ liveId: "l1", text: "A névoa sobe devagar.\n\nO que fazem?" })])
+    })
+
     it("fim com erro não fica na tela; o snapshot de uma reconexão substitui o que estava ao vivo", () => {
         let state = reduceGameStream(MADDOX_GAME_STREAM_INITIAL, { type: "live-start", live: live() })
         state = reduceGameStream(state, { type: "live-end", liveId: "l1", messageId: null, error: "falhou" })
