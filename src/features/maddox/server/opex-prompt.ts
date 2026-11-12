@@ -358,3 +358,74 @@ export function opexNpcCombatSchema(options: readonly OpexNpcCombatOption[]) {
         .transform((value) => ({ ...value, acao: options.find((option) => sameName(option.name, value.acao))!.name }))
 }
 export type OpexNpcCombatDecision = z.infer<ReturnType<typeof opexNpcCombatSchema>>
+
+// ── Subida de nível (DND-56) ────────────────────────────────────────────────
+
+/** Etapa da escolha da subclasse (antes das demais: ela muda traços e, em subclasses que conjuram, as magias). */
+export function opexLevelUpSubclassTask(task: { characterName: string; toLevel: number; reason: string; options: readonly { id: string; name: string; traits: string[] }[] }): string {
+    return [
+        `## Tarefa: escolher a subclasse de ${task.characterName} (nível ${task.toLevel})`,
+        task.reason ? `O Maddox declarou a subida de nível: ${task.reason}` : "O personagem subiu de nível.",
+        "Escolha a subclasse que combina com a personalidade, as motivações e a história do personagem. Opções (id: nome — traços até este nível):",
+        task.options.map((option) => `- ${option.id}: ${option.name}${option.traits.length ? ` — ${option.traits.join(", ")}` : ""}`).join("\n"),
+        'Responda só com: {"subclasse": "id da opção", "motivo": "uma frase, em primeira pessoa"}',
+    ].join("\n\n")
+}
+
+export const opexLevelUpSubclassSchema = (ids: readonly string[]) => z.object({ subclasse: z.enum(ids as [string, ...string[]]), motivo: z.string().optional() })
+
+interface OpexLevelUpTaskInput {
+    characterName: string
+    reason: string
+    fromLevel: number
+    toLevel: number
+    hitDie: string
+    hpAverage: number
+    traits: string[]
+    feat: { kind: "general" | "epic" | "fighting-style"; cap: number; options: { id: string; name: string; rule: string }[] } | null
+    spells: { cantrips: number; spells: number; maxCircle: number; cantripOptions: { id: string; name: string }[]; spellOptions: { id: string; name: string; circle: number }[]; known: { id: string; name: string; circle: number }[]; swap: boolean } | null
+    resources: string[]
+    scores: string
+    previousError?: string | null
+}
+
+/** Tarefa de decisão da subida de nível: as opções reais do wizard (o servidor valida e aplica; quem rola o PV é o servidor). */
+export function opexLevelUpTask(task: OpexLevelUpTaskInput): string {
+    const featTitle = task.feat?.kind === "fighting-style" ? "Estilo de Luta" : task.feat?.kind === "epic" ? "Dádiva Épica" : "Talento ou melhoria de atributo"
+    const featLine = (option: { id: string; name: string; rule: string }) => `- ${option.id}: ${option.name}${option.rule ? ` (${option.rule})` : ""}`
+    return [
+        `## Tarefa: subir ${task.characterName} do nível ${task.fromLevel} para o ${task.toLevel}`,
+        task.reason ? `O Maddox declarou a subida de nível: ${task.reason}` : "O personagem subiu de nível.",
+        "Decida como o seu personagem decidiria, pelas memórias, pela personalidade e pelas motivações dele. Use só as opções listadas (ids exatos).",
+        `### Pontos de vida\n"media" ganha ${task.hpAverage} PV garantidos; "rolagem" rola 1 ${task.hitDie} + Constituição no servidor.`,
+        task.traits.length ? `### Traços ganhos neste nível\n${task.traits.map((trait) => `- ${trait}`).join("\n")}` : null,
+        task.resources.length ? `### Recursos que mudam\n${task.resources.map((line) => `- ${line}`).join("\n")}` : null,
+        task.feat
+            ? `### ${featTitle} (obrigatório)\nAtributos atuais: ${task.scores}. Teto de atributo: ${task.feat.cap}. Na melhoria de atributo, distribua +2 em um atributo ou +1 em dois; num talento com "+1 em", escolha um dos atributos listados.\n${task.feat.options.map(featLine).join("\n")}`
+            : null,
+        task.spells
+            ? [
+                  `### Magias (até o ${task.spells.maxCircle}º círculo)`,
+                  task.spells.cantrips ? `Escolha exatamente ${task.spells.cantrips} truque(s) novo(s):\n${task.spells.cantripOptions.map((item) => `- ${item.id}: ${item.name}`).join("\n")}` : null,
+                  task.spells.spells ? `Escolha exatamente ${task.spells.spells} magia(s) nova(s):\n${task.spells.spellOptions.map((item) => `- ${item.id}: ${item.name} (${item.circle}º)`).join("\n")}` : null,
+                  task.spells.swap && task.spells.known.length ? `Opcional: troque UMA magia conhecida por outra da lista acima.\nConhecidas:\n${task.spells.known.map((item) => `- ${item.id}: ${item.name} (${item.circle}º)`).join("\n")}` : null,
+              ]
+                  .filter(Boolean)
+                  .join("\n")
+            : null,
+        task.previousError ? `### A escolha anterior foi recusada\n${task.previousError} Corrija e responda de novo.` : null,
+        `Responda só com: {"pv": "media" | "rolagem"${task.feat ? `, "talento": {"id": "id", "atributos": { ${ABILITY_LABEL_LIST.map((label) => `"${label}": número`).join(", ")} } (só os que aumentam)}` : ""}${task.spells?.cantrips ? ', "truques": ["id", …]' : ""}${task.spells?.spells ? ', "magias": ["id", …]' : ""}${task.spells?.swap ? ', "troca": {"sai": "id da conhecida", "entra": "id da lista"} ou null' : ""}, "motivo": "uma frase, em primeira pessoa"}`,
+    ]
+        .filter(Boolean)
+        .join("\n\n")
+}
+
+export const opexLevelUpSchema = z.object({
+    pv: z.enum(["media", "rolagem"]),
+    talento: z.object({ id: z.string().trim().min(1), atributos: z.record(z.string(), z.number().int()).optional().default({}) }).nullish(),
+    truques: z.array(z.string().trim().min(1)).optional().default([]),
+    magias: z.array(z.string().trim().min(1)).optional().default([]),
+    troca: z.object({ sai: z.string().trim().min(1), entra: z.string().trim().min(1) }).nullish(),
+    motivo: z.string().optional(),
+})
+export type OpexLevelUpDecision = z.infer<typeof opexLevelUpSchema>

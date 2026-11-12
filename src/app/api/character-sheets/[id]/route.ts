@@ -28,6 +28,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
             return NextResponse.json({ error: "Dados inválidos", details: parsed.error.flatten() }, { status: 400 })
         }
 
+        // DND-56: em ficha de campanha Maddox com nível, o nível e a XP (modo Experiência) não mudam por aqui.
+        const { campaignPatchRefusal } = await import("@/features/character-sheets/level-up/level-up-service")
+        const refusal = await campaignPatchRefusal(id, parsed.data)
+        if (refusal) return NextResponse.json({ error: refusal }, { status: 409 })
+
         const originId = req.headers.get(PUSHER_ORIGIN_HEADER) ?? undefined
         const sheet = await patchSheet(id, userId, parsed.data as PatchSheetBody, originId)
         if (!sheet) return NextResponse.json({ error: "Ficha não encontrada ou não autorizado" }, { status: 404 })

@@ -458,6 +458,8 @@ async function driveOnce(id: string): Promise<void> {
     const opex = new Map(members.map((member) => [String(member._id), member]))
     await autoRolls(campaign, opex)
     await autoReactions(campaign, opex)
+    // Subida de nível (DND-56): o agente decide em paralelo, sem segurar a mesa.
+    await (await import("./level-up-opex")).autoLevelUps(campaign, opex)
     const fresh = await MaddoxCampaignModel.findById(campaignId).lean<CampaignDoc>()
     if (!fresh || fresh.status !== "active" || fresh.turn?.phase !== "players") return
     const combatActor = fresh.turn.combatActor
