@@ -630,7 +630,7 @@ Capacidades implementadas:
 - Há sincronização de menções na ficha.
 - Há integração realtime da ficha.
 - Existem utilitários de cálculo, preenchimento automático de ataque, slug e cargas de recurso.
-- Existe botão/fluxo de descanso longo.
+- Exaustão (0–6) no card de dados de vida. O descanso é conduzido pelo Maddox na mesa (DND-58): a ficha não tem botão de descanso.
 
 Estados testáveis:
 
@@ -640,7 +640,7 @@ Estados testáveis:
 - Skeleton inicial.
 - Not-found.
 - Desktop versus mobile.
-- Descanso longo.
+- Exaustão.
 - Adição/edição/remoção de itens, magias, ataques, talentos e traits da ficha.
 
 ### Visão administrativa de fichas
@@ -836,7 +836,7 @@ Estados testáveis:
 - Regras de permissão por papel e por ownership.
 - APIs CRUD de usuários e auditoria.
 - APIs e hooks de fichas de personagem.
-- Autosave, troca de slug e descanso longo em fichas.
+- Autosave, troca de slug e exaustão em fichas.
 - Editor rico com menções e upload.
 
 ### Alto valor
