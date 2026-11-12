@@ -26,6 +26,7 @@ import {
     type MaddoxTurnPhase,
 } from "../constants"
 import {
+    INCLUDE_DISCARDED,
     MaddoxCampaignMemberModel,
     MaddoxCampaignMessageModel,
     MaddoxCampaignModel,
@@ -629,7 +630,9 @@ export async function recordTurnAction(campaign: CampaignDoc, target: MemberDoc,
         { $addToSet: { "turn.declaredMemberIds": target._id } },
     )
     if (counted.matchedCount === 0) {
-        await MaddoxCampaignMessageModel.deleteOne({ _id: message._id })
+        // A volta a um turno pode ter marcado a mensagem como descartada no meio (DND-44): a declaração recusada não pode
+        // ficar no banco, nem como descarte. Por isso a exclusão ignora o filtro de descarte.
+        await MaddoxCampaignMessageModel.deleteOne({ _id: message._id }).setOptions(INCLUDE_DISCARDED)
         throw new DomainError(409, "O turno dos jogadores já foi encerrado.", "TURN_CLOSED")
     }
 }
