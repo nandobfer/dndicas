@@ -2016,12 +2016,14 @@ e testes da mesa) e `memberAvatarContext({ opex, role, playerName })` ("Jogador 
 **Nunca dentro de link ou de outro botão.** Por ser um botão, o avatar não fica aninhado em navegação: no painel "NPCs conhecidos"
 ele é irmão do link do diário; na busca do Diário fica numa camada `absolute` sobre a linha (o link ganha `pl-[3.125rem]`); no card
 da lista de campanhas o link "Abrir a campanha …" é esticado (`absolute inset-0`, anel de foco no card por `has-[…:focus-visible]`),
-o conteúdo é `pointer-events-none` e os avatares ficam `pointer-events-auto` numa camada acima. Ao pôr um avatar novo dentro de algo
-clicável, use o mesmo padrão. Fora do Maddox, `UserMini` já abre a foto pelo `GlassImage`; nenhuma outra tela do módulo usa avatar
+o conteúdo é `pointer-events-none` e os avatares ficam `pointer-events-auto` numa camada acima. No perfil do personagem (`CharacterProfileDialog`) o avatar fica
+ao lado do `GlassModalTitle`, fora dele, para o nome do diálogo ser só o do personagem. Ao pôr um avatar novo dentro de algo
+clicável ou de um título, use o mesmo padrão. Fora do Maddox, `UserMini` já abre a foto pelo `GlassImage`; nenhuma outra tela do módulo usa avatar
 de fora.
 
 Testes: `tests/frontend/maddox/portrait-hover.test.ts` (a decisão do hover, inclusive entrar no popover antes de sair do avatar) e
-`maddox-member-avatar.test.tsx` (hover por papel, atraso, tolerância, rolagem, toque, clique, as quatro formas de fechar, teclado,
+`maddox-member-avatar.test.tsx` (textos literais de `messageAvatarContext`/`memberAvatarContext`/`npcAvatarContext`, contexto ao passar
+o mouse no `TurnPanel` e no chat da mesa, nome do diálogo do perfil, hover por papel, atraso, tolerância, rolagem, toque, clique, as quatro formas de fechar, teclado,
 sem retrato e imagem quebrada, propagação bloqueada, `className`, painel de NPCs e busca do Diário fora do link); o card da lista em
 `maddox-campaigns.test.tsx`.
 

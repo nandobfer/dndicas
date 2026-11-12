@@ -33,14 +33,15 @@ export function CharacterProfileDialog({ character, playerName, color, own, onOp
             <GlassModalContent size="lg">
                 {character && (
                     <div className="space-y-5">
-                        <GlassModalHeader>
-                            <GlassModalTitle className="flex items-center gap-3">
-                                <MemberAvatar name={character.name} imageUrl={character.portraitUrl} color={color} context={own ? MADDOX_AVATAR_CONTEXT.mine : `Personagem de ${playerName}`} className="h-12 w-12" />
-                                <span className="truncate">{character.name}</span>
-                            </GlassModalTitle>
-                            <GlassModalDescription className="flex items-center gap-1">
-                                <UserRound className="h-3 w-3" aria-hidden /> Personagem de {playerName}
-                            </GlassModalDescription>
+                        {/* O avatar é um botão (retrato grande, DND-55): fica ao lado do título, fora dele, para não entrar no nome do diálogo. */}
+                        <GlassModalHeader className="flex-row items-center gap-3 space-y-0">
+                            <MemberAvatar name={character.name} imageUrl={character.portraitUrl} color={color} context={own ? MADDOX_AVATAR_CONTEXT.mine : `Personagem de ${playerName}`} className="h-12 w-12" />
+                            <div className="min-w-0 flex-1 space-y-1.5">
+                                <GlassModalTitle className="truncate">{character.name}</GlassModalTitle>
+                                <GlassModalDescription className="flex items-center gap-1">
+                                    <UserRound className="h-3 w-3" aria-hidden /> Personagem de {playerName}
+                                </GlassModalDescription>
+                            </div>
                         </GlassModalHeader>
                         <div className="max-h-[60vh] space-y-4 overflow-y-auto pr-1">
                             <CharacterProfileSections profile={character.profile} color={color} />

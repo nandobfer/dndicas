@@ -1,9 +1,14 @@
 /** @vitest-environment happy-dom */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { act, fireEvent, render, screen } from "@testing-library/react"
+import { act, fireEvent, render, screen, within } from "@testing-library/react"
 import { MemberAvatar } from "@/features/maddox/components/campaigns/campaign-visuals"
 import { MADDOX_PORTRAIT_HOVER_CLOSE_MS, MADDOX_PORTRAIT_HOVER_OPEN_MS } from "@/features/maddox/portrait-hover"
-import { MADDOX_AVATAR_CONTEXT, npcAvatarContext } from "@/features/maddox/constants"
+import { MADDOX_AVATAR_CONTEXT, memberAvatarContext, messageAvatarContext, npcAvatarContext } from "@/features/maddox/constants"
+import { TurnPanel } from "@/features/maddox/components/game/TurnPanel"
+import { GameMessageList } from "@/features/maddox/components/game/GameMessageList"
+import { CharacterProfileDialog } from "@/features/maddox/components/campaigns/CharacterProfileDialog"
+import type { MaddoxGameMessageDto, MaddoxGameParticipantDto, MaddoxGameStateDto } from "@/features/maddox/game-types"
+import type { MaddoxCampaignCharacterDto } from "@/features/maddox/campaign-types"
 import { NpcPanel } from "@/features/maddox/components/game/NpcPanel"
 import { JournalSearchResults } from "@/features/maddox/components/journal/JournalSearch"
 import type { MaddoxJournalSearchDto } from "@/features/maddox/journal-types"
@@ -217,5 +222,78 @@ describe("avatares fora dos links (DND-55)", () => {
         expect(onNavigate).not.toHaveBeenCalled()
         expect(screen.getByTestId("member-portrait-viewer")).toHaveTextContent("Sem retrato")
         expect(screen.getByTestId("journal-search-hit")).toHaveAttribute("href", expect.stringContaining("npc"))
+    })
+})
+
+describe("linha de contexto dos avatares (DND-55)", () => {
+    it("helpers: textos literais por papel", () => {
+        expect(messageAvatarContext({ opex: true, mine: true })).toBe("Personagem Opex")
+        expect(messageAvatarContext({ opex: false, mine: true })).toBe("Seu personagem")
+        expect(messageAvatarContext({ mine: false })).toBe("Personagem")
+        expect(memberAvatarContext({ opex: true, role: "owner", playerName: "Marina" })).toBe("Personagem Opex")
+        expect(memberAvatarContext({ role: "owner", playerName: "Marina" })).toBe("Dono · Marina")
+        expect(memberAvatarContext({ role: "player", playerName: "Ana" })).toBe("Jogador · Ana")
+        expect(memberAvatarContext({ role: "player", playerName: null })).toBe("Jogador")
+        expect(memberAvatarContext({})).toBe("Personagem")
+        expect(npcAvatarContext("active")).toBe("NPC")
+        expect(npcAvatarContext("dead")).toBe("NPC · Morto")
+        expect(npcAvatarContext("unknown")).toBe("NPC · Paradeiro desconhecido")
+        expect(npcAvatarContext("active", true)).toBe("NPC Opex")
+        expect(npcAvatarContext("inactive", true)).toBe("NPC Opex · Inativo")
+    })
+
+    describe("nas telas, ao passar o mouse", () => {
+        beforeEach(() => vi.useFakeTimers())
+        afterEach(() => vi.useRealTimers())
+        const contextOf = (name: string) => {
+            hoverOpen(name)
+            const text = screen.getByTestId("member-portrait-popover").querySelector('[data-testid="member-portrait-context"]')?.textContent ?? null
+            fireEvent.pointerLeave(avatar(name), mouse)
+            wait(MADDOX_PORTRAIT_HOVER_CLOSE_MS + 10)
+            return text
+        }
+
+        it("Na mesa (TurnPanel): dono com o nome de quem joga, jogador e Personagem Opex", () => {
+            const seat = (over: Partial<MaddoxGameParticipantDto>): MaddoxGameParticipantDto => ({ memberId: "m1", userId: "u1", name: "Marina Dona", characterName: "Kael", portraitUrl: null, role: "owner", ready: true, eligible: true, declared: false, ...over })
+            const state = {
+                campaignId: "c1",
+                status: "active",
+                turn: { number: 2, phase: "players", startedAt: null, generating: false, failed: false, awaitingChecks: false, pendingChecks: [], opexActor: null },
+                participants: [seat({}), seat({ memberId: "m2", userId: "u2", name: "Ana", characterName: "Lyra", role: "player" }), seat({ memberId: "m9", userId: "opex:m9", name: "Personagem Opex", characterName: "Tork", role: "player", opex: true })],
+                me: { memberId: "m1", isOwner: false, ready: true, eligible: true, declared: false, sheet: null },
+            } as unknown as MaddoxGameStateDto
+            render(<TurnPanel state={state} presence={{ available: false, online: new Set() }} color="#3b82f6" skipping={false} onSkip={vi.fn()} />)
+            expect(contextOf("Kael")).toBe("Dono · Marina Dona")
+            expect(contextOf("Lyra")).toBe("Jogador · Ana")
+            expect(contextOf("Tork")).toBe("Personagem Opex")
+        })
+
+        it("chat da mesa (GameMessageList): Maddox, minha fala, a de outro jogador e a do Opex", () => {
+            const message = (id: string, over: Partial<MaddoxGameMessageDto>) =>
+                ({ id, turnNumber: 1, phase: "players", kind: "declaration", memberId: "m2", characterName: "Lyra", portraitUrl: null, content: `fala ${id}`, replyToId: null, createdAt: "2026-11-01T00:00:00.000Z", ...over }) as MaddoxGameMessageDto
+            const messages = [
+                message("0000000000000000000000a1", { kind: "narration", memberId: null, characterName: null, phase: "master", content: "Narração." }),
+                message("0000000000000000000000a2", { memberId: "m1", characterName: "Kael" }),
+                message("0000000000000000000000a3", {}),
+                message("0000000000000000000000a4", { memberId: "m9", characterName: "Tork", opex: true }),
+            ]
+            render(<GameMessageList messages={messages} myMemberId="m1" maddoxAvatarUrl={null} color="#3b82f6" narrating={false} hasMore={false} loadingMore={false} onLoadMore={vi.fn()} />)
+            expect(contextOf("Maddox")).toBe("Mestre da mesa")
+            expect(contextOf("Kael")).toBe("Seu personagem")
+            expect(contextOf("Lyra")).toBe("Personagem")
+            expect(contextOf("Tork")).toBe("Personagem Opex")
+        })
+    })
+})
+
+describe("perfil do personagem (DND-55)", () => {
+    it("o avatar fica fora do título: o nome do diálogo é só o do personagem, e o avatar abre o retrato", async () => {
+        const character: MaddoxCampaignCharacterDto = { id: "ch1", name: "Lyra", portraitUrl: null, portraitStatus: null, interviewStatus: "done", profile: {}, sheetSlug: null }
+        render(<CharacterProfileDialog character={character} playerName="Ana" color="#3b82f6" own={false} onOpenChange={vi.fn()} />)
+        const dialog = await screen.findByRole("dialog", { name: "Lyra" })
+        const button = within(dialog).getByRole("button", { name: "Ver retrato de Lyra" })
+        expect(button.closest("h2")).toBeNull()
+        fireEvent.click(button)
+        expect(await screen.findByTestId("member-portrait-viewer")).toHaveTextContent("Personagem de Ana")
     })
 })
