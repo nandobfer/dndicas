@@ -1,27 +1,13 @@
 import { LevelUpError, loadLevelUpContext } from "./level-up-context"
-import type { LevelUpChoices, LevelUpGains, LevelUpOptions } from "./level-up-types"
+import type { LevelUpChoices, LevelUpGains, SheetLevelUpState } from "./level-up-types"
+
+export type { SheetLevelUpCampaignInfo, SheetLevelUpState } from "./level-up-types"
 
 /**
  * Subida de nível pela ficha (DND-56) — SOMENTE servidor. Junta o motor da ficha (`level-up-options`/`level-up-apply`)
  * com a trava das Campanhas Maddox: ficha de campanha com nível só sobe pelo degrau aberto pelo Maddox (marco ou XP);
  * fora de campanha, a subida segue livre. Só o dono da ficha (no Opex, o dono da campanha) sobe de nível.
  */
-
-export interface SheetLevelUpCampaignInfo {
-    campaignId: string
-    stepId: string | null
-    mode: "marco" | "experiencia"
-    status: string | null
-    /** Motivo de não poder subir agora (pt-BR); `null` = pode. */
-    blocked: string | null
-}
-
-export interface SheetLevelUpState {
-    options: LevelUpOptions | null
-    campaign: SheetLevelUpCampaignInfo | null
-    /** Motivo de não haver opções (nível 20, ficha sem classe…). */
-    unavailable: string | null
-}
 
 async function gateOf(sheetId: string) {
     const [{ default: dbConnect }, { campaignLevelUpGate }] = await Promise.all([import("@/core/database/db"), import("@/features/maddox/server/level-ups")])
@@ -38,9 +24,15 @@ function blockedReason(gate: NonNullable<Awaited<ReturnType<typeof gateOf>>>): s
     return null
 }
 
-async function assertOwner(sheetId: string, userId: string) {
+/** Quem sobe a ficha: o dono (rotas da ficha) ou um acesso já conferido pela rota (Owlbear). */
+export interface SheetLevelUpActor {
+    userId: string
+    checkOwner: boolean
+}
+
+async function assertOwner(sheetId: string, actor: SheetLevelUpActor) {
     const ctx = await loadLevelUpContext(sheetId)
-    if (ctx.sheet.userId !== userId) throw new LevelUpError("Ficha não encontrada ou não autorizado.", 404)
+    if (actor.checkOwner && ctx.sheet.userId !== actor.userId) throw new LevelUpError("Ficha não encontrada ou não autorizado.", 404)
     return ctx
 }
 
@@ -50,11 +42,13 @@ async function swapResolver(campaignId: string | null) {
     return spellSwapResolver(campaign?.rigor ?? "fiel-dnd")
 }
 
-export async function getSheetLevelUp(sheetId: string, userId: string, subclassId: string | null): Promise<SheetLevelUpState> {
-    const ctx = await assertOwner(sheetId, userId)
+export async function getSheetLevelUp(sheetId: string, actor: SheetLevelUpActor, subclassId: string | null, statusOnly = false): Promise<SheetLevelUpState> {
+    const ctx = await assertOwner(sheetId, actor)
     const gate = await gateOf(sheetId)
-    const campaign = gate ? { campaignId: String(gate.campaignId), stepId: gate.step ? String(gate.step._id) : null, mode: gate.mode, status: gate.step?.status ?? null, blocked: blockedReason(gate) } : null
+    const campaign = gate ? { campaignId: String(gate.campaignId), stepId: gate.step ? String(gate.step._id) : null, toLevel: gate.step?.toLevel ?? null, mode: gate.mode, status: gate.step?.status ?? null, blocked: blockedReason(gate) } : null
     if (campaign?.blocked) return { options: null, campaign, unavailable: campaign.blocked }
+    // Só a situação (botão, aviso e campo XP da ficha): as opções e a decisão da troca de magia ficam para o wizard aberto.
+    if (statusOnly) return { options: null, campaign, unavailable: null }
     const { buildLevelUpOptions } = await import("./level-up-options")
     try {
         const options = await buildLevelUpOptions(sheetId, { subclassId, resolveSpellSwap: await swapResolver(campaign?.campaignId ?? null) }, ctx)
@@ -65,8 +59,9 @@ export async function getSheetLevelUp(sheetId: string, userId: string, subclassI
     }
 }
 
-export async function applySheetLevelUp(sheetId: string, userId: string, choices: LevelUpChoices): Promise<{ gains: LevelUpGains }> {
-    await assertOwner(sheetId, userId)
+export async function applySheetLevelUp(sheetId: string, actor: SheetLevelUpActor, choices: LevelUpChoices): Promise<{ gains: LevelUpGains }> {
+    await assertOwner(sheetId, actor)
+    const userId = actor.userId
     const gate = await gateOf(sheetId)
     if (gate) {
         const blocked = blockedReason(gate)

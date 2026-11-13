@@ -103,3 +103,21 @@ export interface LevelUpGains {
     spells: string[]
     swap: { from: string; to: string } | null
 }
+
+export interface SheetLevelUpCampaignInfo {
+    campaignId: string
+    stepId: string | null
+    /** Nível da subida pendente. */
+    toLevel: number | null
+    mode: "marco" | "experiencia"
+    status: string | null
+    /** Motivo de não poder subir agora (pt-BR); `null` = pode. */
+    blocked: string | null
+}
+
+export interface SheetLevelUpState {
+    options: LevelUpOptions | null
+    campaign: SheetLevelUpCampaignInfo | null
+    /** Motivo de não haver opções (nível 20, ficha sem classe…). */
+    unavailable: string | null
+}

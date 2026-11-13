@@ -57,7 +57,8 @@ export async function applyLevelUp(sheetId: string, choices: LevelUpChoices, act
     let die: number | null = null
     let hpGain = opts.hpAverage
     if (choices.hp.method === "roll") {
-        die = choices.hp.die ?? (options.rollDie ? options.rollDie(opts.hitDieSides) : null)
+        // O dado do jogador vem da rolagem da tela; o do Personagem Opex é rolado aqui, no servidor.
+        die = choices.hp.die ?? (actor.by === "opex" ? (options.rollDie ?? defaultRoll)(opts.hitDieSides) : null)
         if (die === null || !Number.isInteger(die) || die < 1 || die > opts.hitDieSides) throw new LevelUpError(`O dado de vida rolado precisa ficar entre 1 e ${opts.hitDieSides}.`)
         hpGain = rolledHpGain(die, opts.constitutionModifier)
     }
@@ -110,8 +111,8 @@ export async function applyLevelUp(sheetId: string, choices: LevelUpChoices, act
     const hpMax = Math.max(1, Number(ctx.sheet.hpMax ?? 0) + hpGain + hpExtra)
     const set: Record<string, unknown> = {
         level: target,
+        // Como o wizard da ficha sempre fez: o PV máximo sobe e o atual fica como está.
         hpMax,
-        hpCurrent: Math.max(0, Number(ctx.sheet.hpCurrent ?? ctx.sheet.hpMax ?? 0) + hpGain + hpExtra),
         classFeatures: fields.classFeatures,
         speciesTraits: fields.speciesTraits,
         featuresNotes: fields.featuresNotes,

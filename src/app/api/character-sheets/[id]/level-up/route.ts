@@ -18,7 +18,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         const { id } = await params
         const subclass = req.nextUrl.searchParams.get("subclasse")
         const { getSheetLevelUp } = await import("@/features/character-sheets/level-up/level-up-service")
-        return NextResponse.json(await getSheetLevelUp(id, userId, subclass))
+        return NextResponse.json(await getSheetLevelUp(id, { userId, checkOwner: true }, subclass, req.nextUrl.searchParams.get("situacao") === "1"))
     } catch (error) {
         return errorResponse(error, "GET")
     }
@@ -32,7 +32,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         const parsed = levelUpChoicesSchema.safeParse(await req.json().catch(() => null))
         if (!parsed.success) return NextResponse.json({ error: "Dados inválidos", details: parsed.error.flatten() }, { status: 400 })
         const { applySheetLevelUp } = await import("@/features/character-sheets/level-up/level-up-service")
-        return NextResponse.json(await applySheetLevelUp(id, userId, parsed.data))
+        return NextResponse.json(await applySheetLevelUp(id, { userId, checkOwner: true }, parsed.data))
     } catch (error) {
         return errorResponse(error, "POST")
     }
