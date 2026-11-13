@@ -10,6 +10,9 @@ import type { MaddoxGameMessageDto, MaddoxLevelUpStepDto } from "@/features/madd
  * que abre sozinho na mesa; o campo "Progressão de nível" da criação (só leitura no Editar).
  */
 
+const apiPost = vi.hoisted(() => vi.fn())
+vi.mock("@/lib/api", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/api")>()), api: { post: apiPost } }))
+
 vi.mock("@/features/character-sheets/components/level-up/level-up-wizard", () => ({
     LevelUpWizard: ({ open, sheetId, characterName }: { open: boolean; sheetId: string; characterName?: string }) => (open ? <div data-testid="level-up-modal" data-sheet-id={sheetId}>{characterName}</div> : null),
 }))
@@ -18,7 +21,7 @@ const { LevelUpCard, ExperienceCard, ChapterLine } = await import("@/features/ma
 const { useGameLevelUps } = await import("@/features/maddox/components/game/GameLevelUps")
 const { ProgressionModeField } = await import("@/features/maddox/components/campaigns/ProgressionModeField")
 
-const step = (overrides: Partial<MaddoxLevelUpStepDto> = {}): MaddoxLevelUpStepDto => ({ id: "s1", characterId: "c1", characterName: "Nala", kind: "human", fromLevel: 1, toLevel: 2, status: "pending", gains: null, error: null, mine: true, canComplete: true, sheetId: "sheet-1", ...overrides })
+const step = (overrides: Partial<MaddoxLevelUpStepDto> = {}): MaddoxLevelUpStepDto => ({ id: "s1", characterId: "c1", characterName: "Nala", kind: "human", fromLevel: 1, toLevel: 2, status: "pending", gains: null, error: null, mine: true, canComplete: true, canRetry: false, sheetId: "sheet-1", ...overrides })
 
 const message = (extra: Partial<MaddoxGameMessageDto>): MaddoxGameMessageDto => ({ id: "m1", turnNumber: 5, phase: "master", kind: "level-up", memberId: null, characterName: null, portraitUrl: null, content: "", replyToId: null, skippedByName: null, error: null, check: null, combat: null, createdAt: new Date(0).toISOString(), ...extra })
 
@@ -57,6 +60,23 @@ describe("card Subida de nível", () => {
         expect(within(vaelyra!).queryByRole("button")).not.toBeInTheDocument()
     })
 
+    it("Opex que falhou: o dono vê o motivo amigável, \"Subir de nível\" e \"Tentar de novo\"; os demais, nenhum botão", () => {
+        const onRetry = vi.fn()
+        const failed = step({ id: "s3", characterName: "Uther", kind: "opex", status: "failed", mine: false, error: "O Personagem Opex não conseguiu decidir a subida de nível. Tente de novo ou conclua no wizard da ficha." })
+        const { rerender } = render(<LevelUpCard onComplete={vi.fn()} onRetry={onRetry} message={message({ levelUp: { toLevel: 2, reason: "", source: "marco", entries: [{ ...failed, canComplete: true, canRetry: true }] } })} />)
+        const entry = screen.getByTestId("level-up-entry")
+        expect(within(entry).getByTestId("level-up-status")).toHaveTextContent("Pendente (dono)")
+        expect(entry).toHaveTextContent("Tente de novo ou conclua no wizard da ficha.")
+        fireEvent.click(within(entry).getByRole("button", { name: "Tentar de novo" }))
+        expect(onRetry).toHaveBeenCalledWith(expect.objectContaining({ id: "s3" }))
+
+        rerender(<LevelUpCard onComplete={vi.fn()} onRetry={onRetry} retryingId="s3" message={message({ levelUp: { toLevel: 2, reason: "", source: "marco", entries: [{ ...failed, canComplete: true, canRetry: true }] } })} />)
+        expect(within(screen.getByTestId("level-up-entry")).getByRole("button", { name: "Tentar de novo" })).toBeDisabled()
+
+        rerender(<LevelUpCard onComplete={vi.fn()} onRetry={onRetry} message={message({ levelUp: { toLevel: 2, reason: "", source: "marco", entries: [{ ...failed, canComplete: false, canRetry: false }] } })} />)
+        expect(within(screen.getByTestId("level-up-entry")).queryByRole("button")).not.toBeInTheDocument()
+    })
+
     it("cards de XP e de capítulo", () => {
         render(
             <>
@@ -71,9 +91,14 @@ describe("card Subida de nível", () => {
 })
 
 function Harness({ steps }: { steps: MaddoxLevelUpStepDto[] }) {
-    const levelUps = useGameLevelUps(steps)
+    const levelUps = useGameLevelUps("camp-1", steps)
     return (
         <>
+            {steps.map((item) => (
+                <button key={item.id} type="button" onClick={() => levelUps.retry(item)}>
+                    retry-{item.id}
+                </button>
+            ))}
             {levelUps.banner}
             {levelUps.dialog}
         </>
@@ -99,6 +124,13 @@ describe("aviso e wizard na mesa", () => {
         expect(screen.getByTestId("level-up-banner")).toHaveTextContent("A subida de Uther para o nível 2 falhou.")
         fireEvent.click(screen.getByRole("button", { name: "Subir de nível" }))
         expect(screen.getByTestId("level-up-modal")).toHaveAttribute("data-sheet-id", "sheet-uther")
+    })
+
+    it("\"Tentar de novo\" chama a rota do degrau sem prefixo /api", async () => {
+        apiPost.mockResolvedValue({ data: { success: true, data: { campaignId: "camp-1" } } })
+        render(wrap(<Harness steps={[step({ id: "s9", kind: "opex", status: "failed", mine: false })]} />))
+        fireEvent.click(screen.getByRole("button", { name: "retry-s9" }))
+        await vi.waitFor(() => expect(apiPost).toHaveBeenCalledWith("/maddox/campaigns/camp-1/game/level-ups/s9/retry", {}))
     })
 })
 

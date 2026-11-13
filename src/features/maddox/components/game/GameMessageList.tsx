@@ -56,6 +56,9 @@ interface Props {
     actionOptions?: ActionOptionsHandlers | null
     /** DND-56: abre o wizard "Subir de nível" pelo card (o próprio personagem; o dono, o Opex com falha). */
     onLevelUp?: ((step: MaddoxLevelUpStepDto) => void) | null
+    /** "Tentar de novo" do dono na subida do Personagem Opex que falhou (DND-56). */
+    onRetryLevelUp?: ((step: MaddoxLevelUpStepDto) => void) | null
+    retryingLevelUpId?: string | null
     /** Descanso (DND-58): dados de vida, trocas e a preparação com falha; nunca no diário (só leitura). */
     rest?: RestHandlers | null
 }
@@ -103,7 +106,7 @@ function stepReplaysOf(replays: ReadonlyMap<string, DiceRollResponse>, messageId
 
 const NO_COMBAT: CombatHandlers = { isOwner: false, reacting: false, onRollAction: noRoll, onRollCombat: noRoll, onCancelAction: () => undefined, onDecideReaction: () => undefined }
 
-export function GameMessageList({ messages, myMemberId, maddoxAvatarUrl, color, narrating, live = [], opexActing: opexActingInput = null, hasMore, loadingMore, onLoadMore, replays = NO_REPLAYS, onRollCheck = noRoll, combat: handlers = NO_COMBAT, readOnly = false, highlightId = null, actionOptions: optionsInput = null, onLevelUp = null, rest: restInput = null }: Props) {
+export function GameMessageList({ messages, myMemberId, maddoxAvatarUrl, color, narrating, live = [], opexActing: opexActingInput = null, hasMore, loadingMore, onLoadMore, replays = NO_REPLAYS, onRollCheck = noRoll, combat: handlers = NO_COMBAT, readOnly = false, highlightId = null, actionOptions: optionsInput = null, onLevelUp = null, onRetryLevelUp = null, retryingLevelUpId = null, rest: restInput = null }: Props) {
     const restHandlers = readOnly ? null : restInput
     const combat = readOnly ? NO_COMBAT : handlers
     const actionOptions = readOnly ? null : optionsInput
@@ -207,7 +210,7 @@ export function GameMessageList({ messages, myMemberId, maddoxAvatarUrl, color, 
                                 ) : message.kind === "sheet-change" ? (
                                     <SheetChangeLine message={message} />
                                 ) : message.kind === "level-up" ? (
-                                    <LevelUpCard message={message} onComplete={readOnly ? undefined : (onLevelUp ?? undefined)} />
+                                    <LevelUpCard message={message} onComplete={readOnly ? undefined : (onLevelUp ?? undefined)} onRetry={readOnly ? undefined : (onRetryLevelUp ?? undefined)} retryingId={retryingLevelUpId} />
                                 ) : message.kind === "experience" ? (
                                     <ExperienceCard message={message} />
                                 ) : message.kind === "chapter" ? (

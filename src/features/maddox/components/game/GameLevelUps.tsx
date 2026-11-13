@@ -7,14 +7,19 @@ import { LevelUpWizard } from "@/features/character-sheets/components/level-up/l
 import { MADDOX_LEVEL_UP_TEXT } from "../../constants"
 import type { MaddoxLevelUpStepDto } from "../../game-types"
 import { refreshGame } from "../../hooks/useMaddoxGame"
+import { useRetryOpexLevelUp } from "../../hooks/useMaddoxLevelUps"
 
 /**
  * Subida de nível na mesa (DND-56): o wizard abre sozinho para o jogador (uma vez por subida) e o aviso "Subir de nível"
  * fica no cabeçalho até ele concluir. Não bloqueia turno nenhum. O dono vê também as subidas de Personagens Opex que
- * falharam, para concluir no wizard da ficha do Opex.
+ * falharam, para concluir no wizard da ficha do Opex ou pedir ao Opex que decida de novo ("Tentar de novo").
  */
-export function useGameLevelUps(steps: readonly MaddoxLevelUpStepDto[] | undefined): { banner: ReactNode; dialog: ReactNode; open: (step: MaddoxLevelUpStepDto) => void } {
+export function useGameLevelUps(
+    campaignId: string,
+    steps: readonly MaddoxLevelUpStepDto[] | undefined,
+): { banner: ReactNode; dialog: ReactNode; open: (step: MaddoxLevelUpStepDto) => void; retry: (step: MaddoxLevelUpStepDto) => void; retryingId: string | null } {
     const queryClient = useQueryClient()
+    const retryMutation = useRetryOpexLevelUp(campaignId)
     const [opened, setOpened] = useState<MaddoxLevelUpStepDto | null>(null)
     const list = steps ?? []
     const mine = list.find((step) => step.mine && step.kind === "human") ?? null
@@ -40,5 +45,6 @@ export function useGameLevelUps(steps: readonly MaddoxLevelUpStepDto[] | undefin
             onDone={() => refreshGame(queryClient)}
         />
     ) : null
-    return { banner, dialog, open: setOpened }
+    const retryingId = retryMutation.isPending ? (retryMutation.variables ?? null) : null
+    return { banner, dialog, open: setOpened, retry: (step) => retryMutation.mutate(step.id), retryingId }
 }

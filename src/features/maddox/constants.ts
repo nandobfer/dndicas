@@ -1206,6 +1206,18 @@ export const MADDOX_SPELL_SWAP_TIMEOUT_MS = 30_000
 /** Texto genérico para quem não é dono quando a subida do Opex falha (o dono vê o motivo). */
 export const MADDOX_LEVEL_UP_FAILED_MESSAGE = "A subida de nível deste Personagem Opex não foi concluída. Aguardando o dono da campanha."
 
+/**
+ * Motivos da falha da subida do Personagem Opex, para o card (em linguagem de mesa). O erro técnico fica só no log e em
+ * `levelUps.errorDetail` (regra: motivo técnico nunca vai à tela compartilhada).
+ */
+export const MADDOX_LEVEL_UP_OPEX_FAILURE = {
+    generic: "O Personagem Opex não conseguiu decidir a subida de nível. Tente de novo ou conclua no wizard da ficha.",
+    interrupted: "A decisão da subida de nível foi interrompida (o servidor reiniciou). Tente de novo ou conclua no wizard da ficha.",
+    noSheet: "O Personagem Opex não tem ficha concluída. Conclua a subida no wizard da ficha.",
+    levelMismatch: (current: number, target: number) => `A ficha está no nível ${current}, e esta subida é para o nível ${target}. Conclua no wizard da ficha.`,
+    invalidChoice: (reason: string | null) => `A escolha do Personagem Opex não passou na validação das regras${reason ? ` (${reason})` : ""}. Tente de novo ou conclua no wizard da ficha.`,
+} as const
+
 export const MADDOX_PROGRESSION_TOOL_NAMES = {
     evaluate: "evaluate_level_milestone",
     declare: "declare_level_up",
@@ -1228,6 +1240,7 @@ export const MADDOX_LEVEL_UP_TEXT = {
     waitingCombat: "Depois do combate",
     failed: "Pendente (dono)",
     done: "Concluído",
+    retry: "Tentar de novo",
     experienceTitle: "Experiência",
     chapterTitle: "Capítulo encerrado",
 } as const

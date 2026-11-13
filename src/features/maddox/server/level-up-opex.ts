@@ -1,11 +1,14 @@
 import { Types } from "mongoose"
+import { AcaoAuditoria, recordAudit } from "@/lib/db"
+import { DomainError } from "@/lib/api/route"
 import { loggerFor } from "@/lib/logger"
 import { MADDOX_ABILITY_LABELS } from "../check-modifier"
-import { MADDOX_LEVEL_UP_CONSUMPTION_ORIGIN } from "../constants"
+import { MADDOX_CAMPAIGN_AUDIT_ENTITY, MADDOX_LEVEL_UP_CONSUMPTION_ORIGIN, MADDOX_LEVEL_UP_OPEX_FAILURE } from "../constants"
 import { ABILITY_BY_LABEL } from "../interview-scores"
 import { MaddoxCampaignMemberModel, MaddoxCampaignModel, MaddoxCharacterModel, type IMaddoxCampaign, type IMaddoxCampaignMember, type IMaddoxCharacter, type IMaddoxLevelUp } from "../models"
 import type { LevelUpChoices, LevelUpFeatAttributeRule, LevelUpOptions } from "@/features/character-sheets/level-up/level-up-types"
 import type { AttributeType } from "@/features/character-sheets/types/character-sheet.types"
+import type { MaddoxGameStateDto } from "../game-types"
 import { completeLevelUpStep, currentSteps, hasLevels } from "./level-ups"
 import { isOpexRunning, runOpexOnce } from "./opex-runtime"
 
@@ -22,6 +25,18 @@ type CampaignDoc = IMaddoxCampaign
 type MemberDoc = IMaddoxCampaignMember
 
 const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error))
+
+/** Falha com motivo já em linguagem de mesa (pt-BR), que o dono pode ler no card. */
+class OpexLevelUpFailure extends Error {}
+
+/**
+ * Motivo que vai ao card: só o texto amigável (falha conhecida ou erro de domínio, que já é pt-BR para o usuário). O erro
+ * técnico (exceção do runtime, do provedor, do bundle) fica só no log e em `errorDetail`, nunca na tela compartilhada.
+ */
+export function friendlyLevelUpFailure(error: unknown): string {
+    if (error instanceof OpexLevelUpFailure || error instanceof DomainError) return error.message
+    return MADDOX_LEVEL_UP_OPEX_FAILURE.generic
+}
 
 export const opexLevelUpKey = (stepId: Types.ObjectId | string) => `levelup:${String(stepId)}`
 
@@ -40,7 +55,7 @@ export async function autoLevelUps(campaign: CampaignDoc, opex: ReadonlyMap<stri
 }
 
 /** Decisão que não roda mais neste processo depois de começar. */
-const INTERRUPTED_TEXT = "A decisão da subida de nível foi interrompida (o servidor reiniciou)."
+const INTERRUPTED_TEXT = MADDOX_LEVEL_UP_OPEX_FAILURE.interrupted
 
 /**
  * `deciding` sem execução em andamento neste processo (app de instância única: o processo caiu no meio da decisão)
@@ -50,7 +65,7 @@ async function recoverInterrupted(campaignId: Types.ObjectId, step: IMaddoxLevel
     if (isOpexRunning(opexLevelUpKey(step._id))) return
     const filter = { _id: campaignId, levelUps: { $elemMatch: { _id: step._id, status: "deciding" } } }
     if (!opexAtTable) {
-        await markFailed(campaignId, step._id, INTERRUPTED_TEXT)
+        await markFailed(campaignId, step._id, INTERRUPTED_TEXT, "deciding sem execução e o Personagem Opex fora da mesa")
         return
     }
     const reset = await MaddoxCampaignModel.updateOne(filter, { $set: { "levelUps.$.status": "pending", "levelUps.$.decidingAt": null } })
@@ -108,14 +123,14 @@ export function choicesOfDecision(decision: import("./opex-prompt").OpexLevelUpD
     }
 }
 
-async function markFailed(campaignId: Types.ObjectId, stepId: Types.ObjectId, error: string) {
-    await MaddoxCampaignModel.updateOne({ _id: campaignId, levelUps: { $elemMatch: { _id: stepId, status: "deciding" } } }, { $set: { "levelUps.$.status": "failed", "levelUps.$.error": error.slice(0, 1_000) } })
+async function markFailed(campaignId: Types.ObjectId, stepId: Types.ObjectId, error: string, detail: string | null) {
+    await MaddoxCampaignModel.updateOne({ _id: campaignId, levelUps: { $elemMatch: { _id: stepId, status: "deciding" } } }, { $set: { "levelUps.$.status": "failed", "levelUps.$.error": error.slice(0, 1_000), "levelUps.$.errorDetail": detail?.slice(0, 2_000) ?? null } })
     const { publishGameChanged } = await import("./game")
     await publishGameChanged(campaignId)
 }
 
 export async function runOpexLevelUp(campaignId: Types.ObjectId, stepId: Types.ObjectId): Promise<void> {
-    const claimed = await MaddoxCampaignModel.updateOne({ _id: campaignId, levelUps: { $elemMatch: { _id: stepId, status: "pending", kind: "opex" } } }, { $set: { "levelUps.$.status": "deciding", "levelUps.$.error": null, "levelUps.$.decidingAt": new Date() } })
+    const claimed = await MaddoxCampaignModel.updateOne({ _id: campaignId, levelUps: { $elemMatch: { _id: stepId, status: "pending", kind: "opex" } } }, { $set: { "levelUps.$.status": "deciding", "levelUps.$.error": null, "levelUps.$.errorDetail": null, "levelUps.$.decidingAt": new Date() } })
     if (!claimed.modifiedCount) return
     try {
         const campaign = await MaddoxCampaignModel.findById(campaignId).lean<CampaignDoc>()
@@ -123,7 +138,7 @@ export async function runOpexLevelUp(campaignId: Types.ObjectId, stepId: Types.O
         if (!campaign || !step) return
         const member = await MaddoxCampaignMemberModel.findOne({ _id: step.memberId, campaignId, kind: "opex", status: "joined" }).lean<MemberDoc>()
         const character = await MaddoxCharacterModel.findById(step.characterId).lean<IMaddoxCharacter>()
-        if (!member || !character?.sheetId) throw new Error("o personagem não tem ficha")
+        if (!member || !character?.sheetId) throw new OpexLevelUpFailure(MADDOX_LEVEL_UP_OPEX_FAILURE.noSheet)
         const reason = await reasonOf(campaign, step)
         const [{ loadOpexModel, opexPromptContext, decideOpex }, prompts, { buildLevelUpOptions }, { applyLevelUp, }, { LevelUpError }, { spellSwapResolver }] = await Promise.all([
             import("./opex-player"),
@@ -139,7 +154,7 @@ export async function runOpexLevelUp(campaignId: Types.ObjectId, stepId: Types.O
         const resolveSpellSwap = spellSwapResolver(campaign.rigor)
         const base = { model, instructions, origin: MADDOX_LEVEL_UP_CONSUMPTION_ORIGIN, subject: String(campaignId), title: `Personagem Opex · subida de nível · ${campaign.name}` }
         let options = await buildLevelUpOptions(sheetId, { resolveSpellSwap })
-        if (options.targetLevel !== step.toLevel) throw new Error(`a ficha está no nível ${options.currentLevel}, e o degrau é para o nível ${step.toLevel}`)
+        if (options.targetLevel !== step.toLevel) throw new OpexLevelUpFailure(MADDOX_LEVEL_UP_OPEX_FAILURE.levelMismatch(options.currentLevel, step.toLevel))
         let subclassId: string | null = null
         if (options.subclass.required) {
             const ids = options.subclass.options.map((option) => option.id)
@@ -164,10 +179,10 @@ export async function runOpexLevelUp(campaignId: Types.ObjectId, stepId: Types.O
                 previousError = error.message
             }
         }
-        throw new Error(`a escolha não passou na validação (${previousError})`)
+        throw new OpexLevelUpFailure(MADDOX_LEVEL_UP_OPEX_FAILURE.invalidChoice(previousError))
     } catch (error) {
         log.warn({ campaignId: String(campaignId), stepId: String(stepId), err: errorText(error) }, "[maddox] subida de nível do Personagem Opex falhou: fica para o dono")
-        await markFailed(campaignId, stepId, `O Personagem Opex não conseguiu decidir a subida de nível (${errorText(error)}).`).catch(() => undefined)
+        await markFailed(campaignId, stepId, friendlyLevelUpFailure(error), errorText(error)).catch(() => undefined)
     }
 }
 
@@ -178,4 +193,31 @@ async function reasonOf(campaign: CampaignDoc, step: IMaddoxLevelUp): Promise<st
     const { MaddoxCampaignMessageModel } = await import("../models")
     const message = await MaddoxCampaignMessageModel.findById(step.messageId).select("levelUp").lean<{ levelUp?: { reason?: string } | null }>()
     return message?.levelUp?.reason ?? ""
+}
+
+/**
+ * "Tentar de novo" do dono (DND-56): o degrau do Personagem Opex que falhou volta a `pending` e o agente decide de novo
+ * (fora da fila da campanha). Só o dono, só o degrau atual do personagem, só com o Opex ainda na mesa.
+ */
+export async function retryOpexLevelUp(campaignId: string, stepId: string, userId: string): Promise<MaddoxGameStateDto> {
+    const [{ assertActive, getGameState, publishGameChanged }, { loadMembership }] = await Promise.all([import("./game"), import("./campaigns")])
+    const campaign = (await loadMembership(campaignId, userId)).campaign as CampaignDoc
+    assertActive(campaign)
+    if (campaign.ownerId !== userId) throw new DomainError(403, "Só o dono da campanha pode fazer isso.", "FORBIDDEN")
+    const step = Types.ObjectId.isValid(stepId) ? campaign.levelUps?.find((item) => String(item._id) === stepId) : undefined
+    if (!step || step.kind !== "opex") throw new DomainError(404, "Subida de nível não encontrada.", "LEVEL_UP_NOT_FOUND")
+    if (step.status !== "failed") throw new DomainError(409, "Esta subida de nível não está com falha.", "LEVEL_UP_NOT_FAILED")
+    if (!currentSteps(campaign).some((item) => String(item._id) === stepId)) throw new DomainError(409, "Conclua antes a subida anterior deste personagem.", "LEVEL_UP_NOT_CURRENT")
+    const member = await MaddoxCampaignMemberModel.findOne({ _id: step.memberId, campaignId: campaign._id, kind: "opex", status: "joined" }).select("_id").lean()
+    if (!member) throw new DomainError(409, "Este Personagem Opex não está mais na mesa. Conclua a subida no wizard da ficha.", "OPEX_NOT_AT_TABLE")
+    const reset = await MaddoxCampaignModel.updateOne(
+        { _id: campaign._id, levelUps: { $elemMatch: { _id: step._id, status: "failed", kind: "opex" } } },
+        { $set: { "levelUps.$.status": "pending", "levelUps.$.error": null, "levelUps.$.errorDetail": null, "levelUps.$.decidingAt": null } },
+    )
+    if (!reset.modifiedCount) throw new DomainError(409, "Esta subida de nível não está com falha.", "LEVEL_UP_NOT_FAILED")
+    await recordAudit({ userId, entidade: MADDOX_CAMPAIGN_AUDIT_ENTITY, entidadeId: String(campaign._id), acao: AcaoAuditoria.ATUALIZAR, depois: { levelUp: stepId, character: step.characterName, toLevel: step.toLevel, opex: "retry" } })
+    log.info({ campaignId: String(campaign._id), stepId, character: step.characterName }, "[maddox] dono pediu nova decisão da subida de nível do Personagem Opex")
+    void runOpexOnce(opexLevelUpKey(step._id), () => runOpexLevelUp(campaign._id, step._id))
+    await publishGameChanged(campaign._id)
+    return getGameState(campaignId, userId)
 }

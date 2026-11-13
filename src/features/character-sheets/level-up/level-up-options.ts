@@ -2,8 +2,7 @@ import { featAttributeCap, featAttributeRule, featSlots, requiresFightingStyle, 
 import type { CatalogClass, CatalogFeat, CatalogSubclass } from "@/features/maddox/server/character-build"
 import type { AttributeType, CharacterResourceCharge } from "../types/character-sheet.types"
 import { getProficiencyBonus } from "../utils/dnd-calculations"
-import { appendMentionsToHtml } from "../utils/mention-sync"
-import { averageHpGain, buildBoundResourceCharge, hitDieSides, mapSpellSlotsForLevel, mentionParagraphHtml, parseMentionsFromHtml, type ParsedMention } from "../utils/sheet-rules"
+import { appendMentionParagraphs, averageHpGain, buildBoundResourceCharge, hitDieSides, mapSpellSlotsForLevel, mentionParagraphHtml, parseMentionsFromHtml, type ParsedMention } from "../utils/sheet-rules"
 import { ABILITY_KEYS, LevelUpError, loadCharges, loadFeats, loadLevelUpContext, loadTraitTexts, plainSlots, type LevelUpContext } from "./level-up-context"
 import type { LevelUpFeatSlotKind, LevelUpOptions, LevelUpResourceChange, LevelUpSpellStep, LevelUpSpellSwap, LevelUpTraitOption } from "./level-up-types"
 
@@ -152,8 +151,8 @@ export function nextSpellSlots(ctx: LevelUpContext, target: number, subclass: Ca
 export function nextMentionFields(ctx: LevelUpContext, target: number, subclass: CatalogSubclass | null, feat: ParsedMention | null) {
     const traits = gainedTraits(ctx, target, subclass)
     const toMention = (trait: LevelUpTraitOption): ParsedMention => ({ id: trait.id, entityType: "Habilidade", label: trait.label })
-    const classFeatures = appendMentionsToHtml(ctx.sheet.classFeatures ?? "", traits.filter((trait) => trait.source !== "raça").map(toMention))
-    const speciesTraits = appendMentionsToHtml(ctx.sheet.speciesTraits ?? "", traits.filter((trait) => trait.source === "raça").map(toMention))
+    const classFeatures = appendMentionParagraphs(ctx.sheet.classFeatures ?? "", traits.filter((trait) => trait.source !== "raça").map(toMention))
+    const speciesTraits = appendMentionParagraphs(ctx.sheet.speciesTraits ?? "", traits.filter((trait) => trait.source === "raça").map(toMention))
     const notes = ctx.sheet.featuresNotes ?? ""
     const featuresNotes = feat ? `${notes}${mentionParagraphHtml(feat)}` : notes
     return { traits, classFeatures, speciesTraits, featuresNotes }

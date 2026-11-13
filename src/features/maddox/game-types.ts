@@ -100,6 +100,8 @@ export interface MaddoxLevelUpStepDto {
     mine: boolean
     /** Quem vê pode concluir este degrau agora no wizard (o próprio personagem; o dono, o Opex com falha). */
     canComplete: boolean
+    /** O dono pode pedir ao Personagem Opex que decida de novo o degrau que falhou ("Tentar de novo"). */
+    canRetry: boolean
     sheetId: string | null
 }
 

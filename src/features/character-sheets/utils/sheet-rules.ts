@@ -292,6 +292,20 @@ export function mentionParagraphHtml(mention: ParsedMention): string {
     return `<p>${buildMentionHtml(mention)}</p>`
 }
 
+/**
+ * Acrescenta menções ao HTML de um campo, uma por parágrafo, sem repetir as que o campo já cita. Versão PURA (sem DOM)
+ * do `appendMentionsToHtml` do navegador, com a mesma saída: o servidor (motor da subida de nível) usa esta, nunca a de
+ * `mention-sync.ts`, que é `"use client"` e não pode ser chamada pelo servidor no bundle do Next.
+ */
+export function appendMentionParagraphs(html: string | null | undefined, mentionsToAdd: ParsedMention[]): string {
+    const value = String(html ?? "").trim()
+    const normalized = value === "<p></p>" ? "" : value
+    const existing = new Set(parseMentionsFromHtml(normalized).map(toMentionKey))
+    const mentions = dedupeMentions(mentionsToAdd).filter((mention) => !existing.has(toMentionKey(mention)))
+    if (mentions.length === 0) return normalized
+    return `${normalized}${mentions.map(mentionParagraphHtml).join("")}`
+}
+
 // ── Experiência (D&D 2024) ──────────────────────────────────────────────────────
 
 /** XP mínima de cada nível (índice 0 = nível 1), pela tabela do D&D 2024. */
