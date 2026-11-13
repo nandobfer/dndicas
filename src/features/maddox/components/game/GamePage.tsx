@@ -39,6 +39,7 @@ import { useMaddoxGameStream, type MaddoxGameStreamState } from "../../hooks/use
 import { GameComposer } from "./GameComposer"
 import { COMBAT_COLOR } from "./GameCombatCard"
 import { GameMessageList } from "./GameMessageList"
+import { useGameLevelUps } from "./GameLevelUps"
 import { MySheetButton } from "./MySheetButton"
 import { NpcPanel } from "./NpcPanel"
 import { InjectReminderButton } from "./InjectReminderButton"
@@ -130,6 +131,7 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
     const combatAdjust = useRequestCombatAdjustment(state.campaignId)
     const combatReact = useDecideReaction(state.campaignId)
     const [asking, setAsking] = useState(false)
+    const levelUps = useGameLevelUps(state.me.levelUps)
     const [combatInvalid, setCombatInvalid] = useState<string | null>(null)
     const tactical = state.combat?.tactical ?? null
     const skip = useSkipMaddoxPlayer(state.campaignId)
@@ -262,6 +264,7 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
                         </p>
                     )}
                     {tactical && state.combat && <InitiativeTracker combat={tactical} title={state.combat.title} color={color} compact />}
+                    {levelUps.banner}
                     {state.me.isOwner && state.turn.opexActor?.failed && <OpexFailureBanner actor={state.turn.opexActor} retrying={opexActions.retry.isPending} skipping={opexActions.skip.isPending} onRetry={() => opexActions.retry.mutate(state.turn.opexActor!.memberId)} onSkip={() => opexActions.skip.mutate(state.turn.opexActor!.memberId)} />}
                     </>
                 }
@@ -302,7 +305,9 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
                             },
                         }}
                         actionOptions={optionsView ? { view: optionsView, busy: send.isPending, onPick: (option) => onSend({ kind: "declaration", content: option }) } : null}
+                        onLevelUp={(step) => levelUps.open(step)}
                     />
+                    {levelUps.dialog}
                     {tactical && state.me.combat ? (
                         <>
                             {myCombatTurn ? (

@@ -12,7 +12,11 @@ import { HpDicePanel } from "@/features/dice-roller/components/hp-dice-panel"
 import type { DiceType } from "@/lib/config/colors"
 import { useApplySheetLevelUp, useSheetLevelUp } from "../../api/character-sheets-queries"
 import { ATTRIBUTE_LABELS, emptyLevelUpForm, levelUpChoicesOf, levelUpMissing, previewHpGain, toggleLimited, type LevelUpFormState } from "../../level-up/level-up-form"
-import type { LevelUpGains, LevelUpOptions } from "../../level-up/level-up-types"
+import type { LevelUpGains, LevelUpOptions, LevelUpTraitOption } from "../../level-up/level-up-types"
+import { useQueries } from "@tanstack/react-query"
+import { TraitPreview } from "@/features/rules/components/entity-preview-tooltip"
+import { fetchTraitById } from "@/features/traits/api/traits-api"
+import type { Trait } from "@/features/traits/types/traits.types"
 import type { AttributeType } from "../../types/character-sheet.types"
 
 /**
@@ -218,14 +222,7 @@ function LevelUpSections({ sheetId, options, form, rolling, onRolling, onChange 
                     <span className="text-xs text-white/45">Nível {options.targetLevel}</span>
                 </div>
                 {traits.length ? (
-                    <ul className="flex flex-wrap gap-2">
-                        {traits.map((trait) => (
-                            <li key={`${trait.source}-${trait.id}`} className="rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-sm text-white/85">
-                                <span className="mr-2 text-[10px] font-black uppercase tracking-[0.2em] text-white/45">{trait.source}</span>
-                                {trait.label}
-                            </li>
-                        ))}
-                    </ul>
+                    <TraitCards traits={traits} />
                 ) : (
                     <p className="text-sm text-white/55">Nenhum traço novo neste nível.</p>
                 )}
@@ -407,6 +404,24 @@ function SpellChecklist({ title, testId, items, selected, onToggle }: { title: s
                     </label>
                 ))}
             </div>
+        </div>
+    )
+}
+
+/** Prévia dos traços ganhos (o card do catálogo, como o wizard sempre mostrou); sem o traço no catálogo, só o nome. */
+function TraitCards({ traits }: { traits: LevelUpTraitOption[] }) {
+    const results = useQueries({ queries: traits.map((trait) => ({ queryKey: ["level-up-trait", trait.id], queryFn: () => fetchTraitById(trait.id), staleTime: 5 * 60_000, retry: false })) })
+    return (
+        <div className="grid gap-3 xl:grid-cols-2">
+            {traits.map((trait, index) => {
+                const loaded = results[index]?.data as Trait | undefined
+                return (
+                    <div key={`${trait.source}-${trait.id}`} className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+                        <div className="mb-3 text-[10px] font-black uppercase tracking-[0.28em] text-white/45">{trait.source}</div>
+                        {loaded ? <TraitPreview trait={loaded} showStatus={false} hideStatusChip hideActionIcons /> : <p className="text-sm font-semibold text-white/85">{trait.label}</p>}
+                    </div>
+                )
+            })}
         </div>
     )
 }

@@ -2,7 +2,7 @@
 
 import { Fragment, useMemo, useState, type ReactNode } from "react"
 import Link from "next/link"
-import { BookOpen, Image as ImageIcon, Loader2, MapPin, MessageCircle, Search, ScrollText, Target, UserRound, Users } from "lucide-react"
+import { BookMarked, BookOpen, Image as ImageIcon, Loader2, MapPin, MessageCircle, Search, ScrollText, Target, UserRound, Users } from "lucide-react"
 import { Input } from "@/components/ui/opex/input"
 import { rarityColors } from "@/lib/config/colors"
 import { cn } from "@/lib/utils"
@@ -82,7 +82,7 @@ export function JournalSearch({ campaignId, color, onNavigate, autoFocus, term: 
 }
 
 function total(result: MaddoxJournalSearchDto) {
-    return result.npcs.items.length + result.memories.items.length + result.messages.items.length + result.party.items.length + (result.images?.items.length ?? 0) + (result.state ? 1 : 0)
+    return result.npcs.items.length + result.memories.items.length + result.messages.items.length + result.party.items.length + (result.images?.items.length ?? 0) + (result.chapters?.items.length ?? 0) + (result.state ? 1 : 0)
 }
 
 export function JournalSearchResults({ campaignId, color, result, onNavigate }: { campaignId: string; color: string; result: MaddoxJournalSearchDto; onNavigate?: () => void }) {
@@ -174,6 +174,11 @@ export function JournalSearchResults({ campaignId, color, result, onNavigate }: 
                             avatar={<img src={image.url} alt="" className="h-9 w-14 shrink-0 rounded object-cover" loading="lazy" />}
                         />
                     )}
+                </Group>
+            )}
+            {result.chapters && (
+                <Group group={result.chapters} title="Capítulos" icon={BookMarked} color={color} testId="search-group-chapters">
+                    {(chapter) => <ResultLink key={chapter.id} href={journalHref(campaignId, { tab: "capitulos" })} onNavigate={onNavigate} title={chapter.title} badge={`Turno ${chapter.turnNumber}`} excerpt={chapter.excerpt} query={q} />}
                 </Group>
             )}
             <Group group={result.messages} title="Histórico da mesa" icon={MessageCircle} color={color} testId="search-group-messages">

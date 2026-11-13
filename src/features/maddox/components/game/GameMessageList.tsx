@@ -6,7 +6,7 @@ import { AlertCircle, ArrowDown, BookOpen, EyeOff, HelpCircle, Loader2, MinusCir
 import { Button } from "@/components/ui/opex/button"
 import { Markdown } from "@/components/ui/opex/markdown"
 import { MADDOX_AVATAR_CONTEXT, messageAvatarContext } from "../../constants"
-import type { MaddoxGameMessageDto, MaddoxLiveGenerationDto } from "../../game-types"
+import type { MaddoxGameMessageDto, MaddoxLevelUpStepDto, MaddoxLiveGenerationDto } from "../../game-types"
 import { opexActingLabel, type MaddoxActionOptionsView } from "../../game-view"
 import { GameActionOptions } from "./GameActionOptions"
 import { OpexNpcFailureLine } from "./OpexNpcFailureLine"
@@ -22,6 +22,7 @@ import { ReminderLine } from "./ReminderLine"
 import { RewindNoticeLine } from "./RewindNoticeLine"
 import { HitPointsLine } from "./HitPointsLine"
 import { SheetChangeLine } from "./SheetChangeLine"
+import { ChapterLine, ExperienceCard, LevelUpCard } from "./ProgressionCards"
 
 const NEAR_BOTTOM_PX = 80
 const bubble = { initial: { opacity: 0, y: 8 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.2, ease: "easeOut" as const } }
@@ -52,6 +53,8 @@ interface Props {
     highlightId?: string | null
     /** Sugestões de ação do Maddox (DND-30), abaixo da narração indicada; nunca no diário (só leitura). */
     actionOptions?: ActionOptionsHandlers | null
+    /** DND-56: abre o wizard "Subir de nível" pelo card (o próprio personagem; o dono, o Opex com falha). */
+    onLevelUp?: ((step: MaddoxLevelUpStepDto) => void) | null
 }
 
 export interface ActionOptionsHandlers {
@@ -97,7 +100,7 @@ function stepReplaysOf(replays: ReadonlyMap<string, DiceRollResponse>, messageId
 
 const NO_COMBAT: CombatHandlers = { isOwner: false, reacting: false, onRollAction: noRoll, onRollCombat: noRoll, onCancelAction: () => undefined, onDecideReaction: () => undefined }
 
-export function GameMessageList({ messages, myMemberId, maddoxAvatarUrl, color, narrating, live = [], opexActing: opexActingInput = null, hasMore, loadingMore, onLoadMore, replays = NO_REPLAYS, onRollCheck = noRoll, combat: handlers = NO_COMBAT, readOnly = false, highlightId = null, actionOptions: optionsInput = null }: Props) {
+export function GameMessageList({ messages, myMemberId, maddoxAvatarUrl, color, narrating, live = [], opexActing: opexActingInput = null, hasMore, loadingMore, onLoadMore, replays = NO_REPLAYS, onRollCheck = noRoll, combat: handlers = NO_COMBAT, readOnly = false, highlightId = null, actionOptions: optionsInput = null, onLevelUp = null }: Props) {
     const combat = readOnly ? NO_COMBAT : handlers
     const actionOptions = readOnly ? null : optionsInput
     const opexActing = readOnly ? null : opexActingInput
@@ -199,6 +202,12 @@ export function GameMessageList({ messages, myMemberId, maddoxAvatarUrl, color, 
                                     <HitPointsLine message={message} />
                                 ) : message.kind === "sheet-change" ? (
                                     <SheetChangeLine message={message} />
+                                ) : message.kind === "level-up" ? (
+                                    <LevelUpCard message={message} onComplete={readOnly ? undefined : (onLevelUp ?? undefined)} />
+                                ) : message.kind === "experience" ? (
+                                    <ExperienceCard message={message} />
+                                ) : message.kind === "chapter" ? (
+                                    <ChapterLine message={message} />
                                 ) : message.kind === "check" && message.check ? (
                                     <GameCheckCard message={message} mine={actsAs(message)} color={color} replay={replays.get(message.id) ?? null} onRoll={onRollCheck} />
                                 ) : (

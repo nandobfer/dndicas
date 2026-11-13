@@ -1,7 +1,7 @@
 import type { MaddoxCampaignMemoryKind } from "../../constants"
 
 /** Abas do Diário da campanha (`?aba=`). */
-export const MADDOX_JOURNAL_TABS = ["historico", "imagens", "npcs", "locais", "missoes", "anotacoes", "grupo"] as const
+export const MADDOX_JOURNAL_TABS = ["historico", "imagens", "npcs", "locais", "missoes", "anotacoes", "capitulos", "grupo"] as const
 export type MaddoxJournalTab = (typeof MADDOX_JOURNAL_TABS)[number]
 
 /** Tipos de memória da aba Anotações (locais e missões têm aba própria). */

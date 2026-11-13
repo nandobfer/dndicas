@@ -23,15 +23,18 @@ export function LevelUpBanner({ toLevel, text, onOpen, actionLabel = "Subir de n
 
 const SEEN_PREFIX = "dndicas:level-up-opened:"
 
-/** O wizard abre sozinho uma vez por subida pendente (nesta sessão do navegador); depois, só pelo aviso. */
-export function useAutoOpenLevelUp(stepId: string | null, open: () => void) {
+/**
+ * O wizard abre sozinho uma vez por subida pendente em cada lugar (`scope`: a ficha ou a mesa), nesta sessão do
+ * navegador; depois, só pelo aviso.
+ */
+export function useAutoOpenLevelUp(stepId: string | null, open: () => void, scope = "sheet") {
     const openRef = useRef(open)
     useEffect(() => {
         openRef.current = open
     })
     useEffect(() => {
         if (!stepId || typeof window === "undefined") return
-        const key = `${SEEN_PREFIX}${stepId}`
+        const key = `${SEEN_PREFIX}${scope}:${stepId}`
         try {
             if (window.sessionStorage.getItem(key)) return
             window.sessionStorage.setItem(key, "1")
@@ -39,5 +42,5 @@ export function useAutoOpenLevelUp(stepId: string | null, open: () => void) {
             // sessionStorage indisponível: abre mesmo assim
         }
         openRef.current()
-    }, [stepId])
+    }, [stepId, scope])
 }

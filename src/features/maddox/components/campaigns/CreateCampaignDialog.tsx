@@ -8,7 +8,7 @@ import { Field } from "@/components/ui/opex/field"
 import { Input } from "@/components/ui/opex/input"
 import { GlassModal, GlassModalContent, GlassModalDescription, GlassModalFooter, GlassModalHeader, GlassModalTitle } from "@/components/ui/glass-modal"
 import { apiErrorMessage } from "@/lib/api"
-import { MADDOX_CAMPAIGN_NAME_MAX, MADDOX_CHECK_RIGORS, MADDOX_COMBAT_DIFFICULTY_DEFAULT, MADDOX_DEFAULT_DENSITY, MADDOX_TACTICAL_COMBAT_RIGORS } from "../../constants"
+import { MADDOX_CAMPAIGN_NAME_MAX, MADDOX_CHECK_RIGORS, MADDOX_COMBAT_DIFFICULTY_DEFAULT, MADDOX_DEFAULT_DENSITY, MADDOX_PROGRESSION_DEFAULT, MADDOX_SHEET_RIGORS, MADDOX_TACTICAL_COMBAT_RIGORS } from "../../constants"
 import { createMaddoxCampaignSchema, type CreateMaddoxCampaignInput } from "../../campaign-schemas"
 import type { MaddoxCampaignDetailDto } from "../../campaign-types"
 import { useCreateMaddoxCampaign } from "../../hooks/useMaddoxCampaigns"
@@ -19,15 +19,21 @@ import { CombatDifficultyCard } from "./CombatDifficultyCard"
 import { CombatantHpField } from "./CombatantHpField"
 import { DensityCard } from "./DensityCard"
 import { RigorCard } from "./RigorCard"
+import { ProgressionModeField } from "./ProgressionModeField"
+import { StartingLevelField } from "./StartingLevelField"
 
-const DEFAULTS: CreateMaddoxCampaignInput = { name: "", rigor: "equilibrado", showCheckDc: false, sceneImages: true, hidePlayerActions: false, showEnemyHp: false, showAllyHp: false, density: MADDOX_DEFAULT_DENSITY, combatDifficulty: MADDOX_COMBAT_DIFFICULTY_DEFAULT }
+const DEFAULTS: CreateMaddoxCampaignInput = { name: "", rigor: "equilibrado", showCheckDc: false, sceneImages: true, hidePlayerActions: false, showEnemyHp: false, showAllyHp: false, density: MADDOX_DEFAULT_DENSITY, combatDifficulty: MADDOX_COMBAT_DIFFICULTY_DEFAULT, progression: MADDOX_PROGRESSION_DEFAULT }
 
 /** Criação da campanha: nome, grau de rigor, densidade das narrações e (graus táticos) dificuldade dos combates. Nasce no lobby, com o criador como dono. */
 export function CreateCampaignDialog({ open, onOpenChange, onCreated }: { open: boolean; onOpenChange: (open: boolean) => void; onCreated: (campaign: MaddoxCampaignDetailDto) => void }) {
     const form = useForm<CreateMaddoxCampaignInput>({ resolver: zodResolver(createMaddoxCampaignSchema), defaultValues: DEFAULTS })
     const create = useCreateMaddoxCampaign()
     // Dificuldade dos combates (DND-42): só nos graus com combate tático (Rigoroso e Fiel ao D&D).
-    const tactical = MADDOX_TACTICAL_COMBAT_RIGORS.includes(useWatch({ control: form.control, name: "rigor" }))
+    const rigor = useWatch({ control: form.control, name: "rigor" })
+    const tactical = MADDOX_TACTICAL_COMBAT_RIGORS.includes(rigor)
+    // DND-56: progressão de nível e nível inicial, só nos graus com ficha.
+    const progression = useWatch({ control: form.control, name: "progression" })
+    const startingLevel = useWatch({ control: form.control, name: "startingLevel" })
 
     const close = (next: boolean) => {
         if (create.isPending) return
@@ -39,7 +45,7 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated }: { open: 
     }
 
     const submit = form.handleSubmit((values) =>
-        create.mutate({ name: values.name, rigor: values.rigor, density: values.density ?? MADDOX_DEFAULT_DENSITY, ...(MADDOX_TACTICAL_COMBAT_RIGORS.includes(values.rigor) ? { combatDifficulty: values.combatDifficulty ?? MADDOX_COMBAT_DIFFICULTY_DEFAULT } : {}), ...(MADDOX_CHECK_RIGORS.includes(values.rigor) ? { showCheckDc: values.showCheckDc ?? false } : {}), ...(values.sceneImages === false ? { sceneImages: false } : {}), ...(values.hidePlayerActions ? { hidePlayerActions: true } : {}), ...(MADDOX_TACTICAL_COMBAT_RIGORS.includes(values.rigor) && values.showEnemyHp ? { showEnemyHp: true } : {}), ...(MADDOX_TACTICAL_COMBAT_RIGORS.includes(values.rigor) && values.showAllyHp ? { showAllyHp: true } : {}) }, {
+        create.mutate({ name: values.name, rigor: values.rigor, density: values.density ?? MADDOX_DEFAULT_DENSITY, ...(MADDOX_TACTICAL_COMBAT_RIGORS.includes(values.rigor) ? { combatDifficulty: values.combatDifficulty ?? MADDOX_COMBAT_DIFFICULTY_DEFAULT } : {}), ...(MADDOX_CHECK_RIGORS.includes(values.rigor) ? { showCheckDc: values.showCheckDc ?? false } : {}), ...(values.sceneImages === false ? { sceneImages: false } : {}), ...(values.hidePlayerActions ? { hidePlayerActions: true } : {}), ...(MADDOX_TACTICAL_COMBAT_RIGORS.includes(values.rigor) && values.showEnemyHp ? { showEnemyHp: true } : {}), ...(MADDOX_TACTICAL_COMBAT_RIGORS.includes(values.rigor) && values.showAllyHp ? { showAllyHp: true } : {}), ...(MADDOX_SHEET_RIGORS.includes(values.rigor) ? { progression: values.progression ?? MADDOX_PROGRESSION_DEFAULT, ...(values.startingLevel ? { startingLevel: values.startingLevel } : {}) } : {}) }, {
             onSuccess: (campaign) => {
                 form.reset(DEFAULTS)
                 onCreated(campaign)
@@ -63,6 +69,8 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated }: { open: 
                     </Field>
 
                     <RigorCard form={form} />
+                    <StartingLevelField rigor={rigor} value={startingLevel ?? null} onChange={(value) => form.setValue("startingLevel", value)} />
+                    <ProgressionModeField rigor={rigor} value={progression} onChange={(value) => form.setValue("progression", value)} />
                     <DensityCard form={form} />
                     {tactical && <CombatDifficultyCard form={form} />}
                     {tactical && <CombatantHpField form={form} />}

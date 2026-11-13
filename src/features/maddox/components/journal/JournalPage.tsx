@@ -4,7 +4,7 @@ import { useState } from "react"
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { motion } from "framer-motion"
-import { ArrowLeft, BookOpen, Dices, Image as ImageIcon, MapPin, MessageCircle, ScrollText, Search, UserRound, Users } from "lucide-react"
+import { ArrowLeft, BookMarked, BookOpen, Dices, Image as ImageIcon, MapPin, MessageCircle, ScrollText, Search, UserRound, Users } from "lucide-react"
 import { Button } from "@/components/ui/opex/button"
 import { Markdown } from "@/components/ui/opex/markdown"
 import { Skeleton } from "@/components/ui/opex/skeleton"
@@ -26,6 +26,7 @@ import { JournalImageFilter, JournalImageGallery } from "./JournalImageGallery"
 import { JournalMemoryList, NoteKindFilter, QuestStatusFilter, type QuestFilter } from "./JournalMemoryList"
 import { JournalNpcList } from "./JournalNpcList"
 import { JournalPartyList } from "./JournalPartyList"
+import { JournalChapterList } from "./JournalChapterList"
 import { JournalSearch } from "./JournalSearch"
 import { JournalStateCard } from "./JournalStateCard"
 import { announceJournalHash } from "./use-journal-hash-target"
@@ -100,6 +101,7 @@ function Journal({ summary }: { summary: MaddoxJournalSummaryDto }) {
         { id: "locais", label: "Locais", icon: MapPin, badge: counts.memories.local },
         { id: "missoes", label: "Missões", icon: ScrollText, badge: counts.memories.missao },
         { id: "anotacoes", label: "Anotações", icon: BookOpen, badge: notes },
+        { id: "capitulos", label: "Capítulos", icon: BookMarked, badge: counts.chapters ?? 0 },
         { id: "grupo", label: "Grupo", icon: Users, badge: counts.party },
     ]
 
@@ -166,6 +168,7 @@ function Journal({ summary }: { summary: MaddoxJournalSummaryDto }) {
                                 <JournalMemoryList campaignId={summary.campaignId} color={color} kind={noteKind} />
                             </div>
                         )}
+                        {tab === "capitulos" && <JournalChapterList campaignId={summary.campaignId} color={color} />}
                         {tab === "grupo" && <JournalPartyList campaignId={summary.campaignId} color={color} myMemberId={summary.myMemberId} />}
                     </IntegrationTabs>
                 </div>

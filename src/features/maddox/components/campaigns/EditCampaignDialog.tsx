@@ -16,6 +16,7 @@ import { CheckDcField } from "./CheckDcField"
 import { SceneImagesField } from "./SceneImagesField"
 import { PlayerActionsField } from "./PlayerActionsField"
 import { StartingLevelField } from "./StartingLevelField"
+import { ProgressionModeField } from "./ProgressionModeField"
 import { CombatDifficultyCard } from "./CombatDifficultyCard"
 import { CombatantHpField } from "./CombatantHpField"
 import { DensityCard } from "./DensityCard"
@@ -81,6 +82,7 @@ export function EditCampaignDialog({ campaign, open, onOpenChange }: { campaign:
                     <SceneImagesField form={form} />
                     <PlayerActionsField form={form} />
                     {levelEditable && <StartingLevelField rigor={formRigor} value={startingLevel} onChange={setLevelDraft} disabled={update.isPending} />}
+                    <ProgressionModeField rigor={formRigor} value={campaign.progression} readOnly />
                     <GlassModalFooter>
                         <Button type="button" variant="ghost" onClick={close} disabled={update.isPending}>
                             Cancelar
