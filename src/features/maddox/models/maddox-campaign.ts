@@ -206,6 +206,8 @@ export interface IMaddoxLevelUp {
     createdAt: Date
     doneAt: Date | null
     doneBy: string | null
+    /** Quando o Personagem Opex começou a decidir (DND-56): sem execução em andamento, o degrau é retomado. */
+    decidingAt?: Date | null
 }
 
 export interface IMaddoxChapter {
@@ -341,6 +343,7 @@ const MaddoxCampaignSchema = new Schema<IMaddoxCampaign>(
                         createdAt: { type: Date, default: Date.now },
                         doneAt: { type: Date, default: null },
                         doneBy: { type: String, default: null },
+                        decidingAt: { type: Date, default: null },
                     },
                     { _id: true },
                 ),

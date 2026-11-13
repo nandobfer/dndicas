@@ -101,6 +101,8 @@ export async function patchOwlbearSheet(req: NextRequest, id: string) {
         if (!sheet) return NextResponse.json({ error: "Ficha não encontrada" }, { status: 404 })
         return NextResponse.json(sheet)
     } catch (error) {
+        const { CampaignSheetPatchError } = await import("@/features/character-sheets/level-up/level-up-service")
+        if (error instanceof CampaignSheetPatchError) return NextResponse.json({ error: error.message }, { status: 409 })
         return owlbearErrorResponse(error, "[API] PATCH /api/owlbear/character-sheets/[id] error:")
     }
 }

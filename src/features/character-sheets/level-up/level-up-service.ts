@@ -86,3 +86,16 @@ export async function campaignPatchRefusal(sheetId: string, fields: { level?: un
     if (fields.experience !== undefined && gate.mode === "experiencia") return "A XP desta ficha é controlada pelo Maddox."
     return null
 }
+
+/** Erro de PATCH recusado pela trava da campanha (DND-56): todo caminho de escrita da ficha devolve 409 com a mensagem. */
+export class CampaignSheetPatchError extends LevelUpError {
+    constructor(message: string) {
+        super(message, 409)
+    }
+}
+
+/** Aplica a trava em qualquer caminho de escrita da ficha (rota, Owlbear, Agente Opex). */
+export async function assertCampaignPatchAllowed(sheetId: string, fields: { level?: unknown; experience?: unknown }): Promise<void> {
+    const refusal = await campaignPatchRefusal(sheetId, fields)
+    if (refusal) throw new CampaignSheetPatchError(refusal)
+}

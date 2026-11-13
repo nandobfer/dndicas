@@ -31,6 +31,11 @@ vi.mock("@/features/maddox/server/opex-player", async (importOriginal) => ({
     decideOpex: opex.decide,
 }))
 
+vi.mock("@/features/owlbear/server/auth", async (importOriginal) => ({
+    ...(await importOriginal<typeof import("@/features/owlbear/server/auth")>()),
+    requireOwlbearSheetAccess: vi.fn(async () => ({ session: { userId: "dono" } })),
+}))
+
 const { MaddoxCampaignModel, MaddoxCampaignMessageModel, MaddoxCampaignMemberModel, MaddoxCharacterModel, MaddoxCombatModel } = await import("@/features/maddox/models")
 const { CharacterSheet } = await import("@/features/character-sheets/models/character-sheet")
 const levels = await import("@/features/maddox/server/level-ups")
@@ -42,6 +47,17 @@ const runs = await import("@/features/maddox/server/question-runs")
 const { grantCombatExperience } = await import("@/features/maddox/server/combat-experience")
 const { runOpexLevelUp } = await import("@/features/maddox/server/level-up-opex")
 const { applySheetLevelUp, campaignPatchRefusal, getSheetLevelUp } = await import("@/features/character-sheets/level-up/level-up-service")
+
+const { patchSheet, patchSheetWithAccess } = await import("@/features/character-sheets/api/character-sheets-service")
+const { CampaignSheetPatchError } = await import("@/features/character-sheets/level-up/level-up-service")
+const { findOpexTool } = await import("@/features/opex-agent/server/tools/registry")
+const owlbearRoutes = await import("@/features/owlbear/server/character-sheet-routes")
+const { autoLevelUps, opexLevelUpKey } = await import("@/features/maddox/server/level-up-opex")
+const { isOpexRunning, waitForOpexIdle } = await import("@/features/maddox/server/opex-runtime")
+const { restoreSnapshot } = await import("@/features/maddox/server/turn-snapshots")
+const { sheetExperienceNumber } = await import("@/lib/db/migrations/sheet-experience-number")
+const { listJournalChapters } = await import("@/features/maddox/server/journal")
+const { NextRequest } = await import("next/server")
 
 let mongo: MongoMemoryServer
 const mention = (id: Types.ObjectId, label: string, type = "Habilidade") => `<p><span data-type="mention" data-id="${String(id)}" data-entity-type="${type}" data-label="${label}" class="mention">${label}</span></p>`
@@ -408,5 +424,159 @@ describe("Personagem Opex e a ficha da campanha", () => {
         await CharacterSheet.collection.insertOne({ _id: sheetId, slug: "solta", userId: "u1", name: "Solta", level: 1, experience: 0, classRef: classId, hpMax: 12, hpCurrent: 12, strength: 10, dexterity: 10, constitution: 10, intelligence: 10, wisdom: 10, charisma: 10, classFeatures: "", speciesTraits: "", featuresNotes: "", spellSlots: {}, resourceCharges: [], createdAt: new Date(), updatedAt: new Date() })
         await expect(campaignPatchRefusal(String(sheetId), { level: 4 })).resolves.toBeNull()
         await expect(applySheetLevelUp(String(sheetId), { userId: "u1", checkOwner: true }, { targetLevel: 2, hp: { method: "average" } })).resolves.toMatchObject({ gains: { toLevel: 2 } })
+    })
+})
+
+describe("trava da ficha de campanha em todos os caminhos de escrita (F1)", () => {
+    const owlbear = (method: "PATCH" | "GET" | "POST", sheetId: string, body?: unknown, query = "") =>
+        new NextRequest(`http://localhost/api/owlbear/character-sheets/${sheetId}${method === "PATCH" ? "" : "/level-up"}${query}`, { method, ...(body === undefined ? {} : { body: JSON.stringify(body), headers: { "content-type": "application/json" } }) })
+
+    it("serviço de PATCH (dono e acesso Owlbear) recusa nível e XP do modo Experiência; outros campos passam", async () => {
+        const t = await table({ mode: "experiencia" })
+        const sheetId = String(t.members[0]!.sheetId)
+        await expect(patchSheet(sheetId, t.owner, { level: 20 })).rejects.toBeInstanceOf(CampaignSheetPatchError)
+        await expect(patchSheetWithAccess(sheetId, { experience: 355_000 })).rejects.toThrow("A XP desta ficha é controlada pelo Maddox.")
+        await expect(patchSheetWithAccess(sheetId, { hpCurrent: 3 })).resolves.toMatchObject({ hpCurrent: 3 })
+        expect((await CharacterSheet.findById(sheetId).lean())).toMatchObject({ level: 1, experience: 0 })
+    })
+
+    it("PATCH do Owlbear responde 409 com a mensagem e não grava", async () => {
+        const t = await table({ mode: "experiencia" })
+        const sheetId = String(t.members[0]!.sheetId)
+        const res = await owlbearRoutes.patchOwlbearSheet(owlbear("PATCH", sheetId, { experience: 355_000, level: 20 }), sheetId)
+        expect(res.status).toBe(409)
+        expect(await res.json()).toEqual({ error: expect.stringContaining("subida de nível da campanha") })
+        expect((await CharacterSheet.findById(sheetId).lean())).toMatchObject({ level: 1, experience: 0 })
+    })
+
+    it("update_sheet do Agente Opex recusa nível e XP da ficha de campanha", async () => {
+        const t = await table({ mode: "experiencia" })
+        const sheetId = String(t.members[0]!.sheetId)
+        const tool = findOpexTool("update_sheet")!
+        const context = { scope: { kind: "user", actor: { id: t.owner } } } as never
+        await expect(tool.execute({ id: sheetId, fieldsJson: JSON.stringify({ experience: 355_000 }) } as never, context)).rejects.toThrow("A XP desta ficha é controlada pelo Maddox.")
+        await expect(tool.execute({ id: sheetId, fieldsJson: JSON.stringify({ level: 20 }) } as never, context)).rejects.toThrow("subida de nível da campanha")
+        expect((await CharacterSheet.findById(sheetId).lean())).toMatchObject({ level: 1, experience: 0 })
+    })
+
+    it("GET/POST de subida pelo Owlbear: sem pendência, 409; com pendência, sobe", async () => {
+        const t = await table()
+        const sheetId = String(t.members[0]!.sheetId)
+        const status = await owlbearRoutes.getOwlbearLevelUp(owlbear("GET", sheetId, undefined, "?situacao=1"), sheetId)
+        expect(status.status).toBe(200)
+        expect(await status.json()).toMatchObject({ campaign: { mode: "marco", stepId: null } })
+        const refused = await owlbearRoutes.postOwlbearLevelUp(owlbear("POST", sheetId, { targetLevel: 2, hp: { method: "average" } }), sheetId)
+        expect(refused.status).toBe(409)
+        expect((await owlbearRoutes.postOwlbearLevelUp(owlbear("POST", sheetId, { targetLevel: "x" }), sheetId)).status).toBe(400)
+        await levels.declareGroupLevelUp(t.campaignId, { reason: "r", trigger: "manual", offMilestone: true, turnNumber: 5 })
+        const done = await owlbearRoutes.postOwlbearLevelUp(owlbear("POST", sheetId, { targetLevel: 2, hp: { method: "average" } }), sheetId)
+        expect(done.status).toBe(200)
+        expect(await done.json()).toMatchObject({ gains: { toLevel: 2 } })
+        expect((await CharacterSheet.findById(sheetId).lean())!.level).toBe(2)
+    })
+})
+
+describe("subida do Opex interrompida (F2)", () => {
+    const deciding = async (t: Table) => {
+        await levels.declareGroupLevelUp(t.campaignId, { reason: "r", trigger: "combat-end", offMilestone: false, turnNumber: 5 })
+        const step = (await campaignOf(t.campaignId)).levelUps!.find((item) => item.kind === "opex")!
+        await MaddoxCampaignModel.collection.updateOne({ _id: t.campaignId, "levelUps._id": step._id }, { $set: { "levelUps.$.status": "deciding", "levelUps.$.decidingAt": new Date(Date.now() - 60 * 60_000) } })
+        return step
+    }
+    const opexMap = async (t: Table) => new Map((await MaddoxCampaignMemberModel.find({ campaignId: t.campaignId, kind: "opex" }).lean()).map((member) => [String(member._id), member as never]))
+
+    it("`deciding` sem execução neste processo (reinício) volta a ser decidido e conclui", async () => {
+        const t = await table()
+        const step = await deciding(t)
+        expect(isOpexRunning(opexLevelUpKey(step._id))).toBe(false)
+        await autoLevelUps(await campaignOf(t.campaignId), await opexMap(t))
+        await waitForOpexIdle()
+        expect((await campaignOf(t.campaignId)).levelUps!.find((item) => String(item._id) === String(step._id))).toMatchObject({ status: "done", doneBy: "opex" })
+        expect(opex.decide).toHaveBeenCalled()
+    })
+
+    it("Personagem Opex fora da mesa: o degrau interrompido vai para o dono", async () => {
+        const t = await table()
+        const step = await deciding(t)
+        await autoLevelUps(await campaignOf(t.campaignId), new Map())
+        const campaign = await campaignOf(t.campaignId)
+        expect(campaign.levelUps!.find((item) => String(item._id) === String(step._id))).toMatchObject({ status: "failed", error: expect.stringContaining("interrompida") })
+        const forOwner = await levels.viewerLevelUps(campaign, { memberId: String(t.members[0]!.memberId), isOwner: true })
+        expect(forOwner.find((item) => item.characterName === step.characterName)).toMatchObject({ canComplete: true })
+        expect(opex.decide).not.toHaveBeenCalled()
+    })
+
+    it("a decisão em andamento marca `decidingAt`", async () => {
+        const t = await table()
+        await levels.declareGroupLevelUp(t.campaignId, { reason: "r", trigger: "combat-end", offMilestone: false, turnNumber: 5 })
+        const step = (await campaignOf(t.campaignId)).levelUps!.find((item) => item.kind === "opex")!
+        let seen: unknown = null
+        opex.decide.mockImplementationOnce(async () => {
+            seen = (await campaignOf(t.campaignId)).levelUps!.find((item) => String(item._id) === String(step._id))
+            return { pv: "media", truques: [], magias: [] }
+        })
+        await runOpexLevelUp(t.campaignId, step._id)
+        expect(seen).toMatchObject({ status: "deciding", decidingAt: expect.any(Date) })
+    })
+})
+
+describe("caminhos laterais da progressão (F3)", () => {
+    it("quem conclui a ficha depois de uma declaração recebe as subidas pendentes até o nível declarado", async () => {
+        const t = await table()
+        const late = t.members[2]!
+        await MaddoxCharacterModel.collection.updateOne({ _id: late.characterId }, { $set: { "interview.status": "in-progress" } })
+        await levels.declareGroupLevelUp(t.campaignId, { reason: "a", trigger: "manual", offMilestone: true, turnNumber: 5 })
+        await levels.declareGroupLevelUp(t.campaignId, { reason: "b", trigger: "manual", offMilestone: true, turnNumber: 6 })
+        expect((await campaignOf(t.campaignId)).levelUps!.filter((step) => String(step.characterId) === String(late.characterId))).toHaveLength(0)
+        await MaddoxCharacterModel.collection.updateOne({ _id: late.characterId }, { $set: { "interview.status": "done" } })
+        await expect(levels.catchUpLevelUps(t.campaignId, late.characterId)).resolves.toBe(2)
+        const steps = (await campaignOf(t.campaignId)).levelUps!.filter((step) => String(step.characterId) === String(late.characterId))
+        expect(steps.map((step) => [step.fromLevel, step.toLevel, step.status])).toEqual([[1, 2, "pending"], [2, 3, "pending"]])
+        const card = await MaddoxCampaignMessageModel.findById(steps[0]!.messageId).lean()
+        expect(card!.levelUp!.toLevel).toBe(3)
+        expect(card!.levelUp!.levelUpIds.map(String)).toEqual(expect.arrayContaining(steps.map((step) => String(step._id))))
+        await expect(levels.catchUpLevelUps(t.campaignId, late.characterId)).resolves.toBe(0)
+        const xp = await table({ mode: "experiencia" })
+        await expect(levels.catchUpLevelUps(xp.campaignId, xp.members[0]!.characterId)).resolves.toBe(0)
+    })
+
+    it("voltar a um turno repõe progressão, subidas e capítulos; retrato antigo sem progressão não mexe", async () => {
+        const t = await table()
+        const base = { campaignId: t.campaignId, state: {}, npcs: [], characters: [], sheets: [], combats: [], combatIds: [], preps: [], messages: [], opexRuns: [] }
+        const before = await campaignOf(t.campaignId)
+        const snapshot = { ...base, progression: { progression: before.progression ?? null, levelUps: before.levelUps ?? [], chapters: before.chapters ?? [] } }
+        await levels.declareGroupLevelUp(t.campaignId, { reason: "a", trigger: "manual", offMilestone: true, turnNumber: 5 })
+        await MaddoxCampaignModel.collection.updateOne({ _id: t.campaignId }, { $push: { chapters: { _id: new Types.ObjectId(), title: "Ato", summary: "", turnNumber: 5, createdAt: new Date() } } as never })
+        await restoreSnapshot({ ...base, progression: null } as never)
+        expect((await campaignOf(t.campaignId)).levelUps).toHaveLength(3)
+        await restoreSnapshot(snapshot as never)
+        const after = await campaignOf(t.campaignId)
+        expect(after.levelUps ?? []).toHaveLength(0)
+        expect(after.chapters ?? []).toHaveLength(0)
+        expect(after.progression!.declared).toEqual([])
+    })
+
+    it("migração da XP texto → número (\"\" → 0, \"300\" → 300, número intacto)", async () => {
+        const ids = [new Types.ObjectId(), new Types.ObjectId(), new Types.ObjectId()]
+        await CharacterSheet.collection.insertMany([
+            { _id: ids[0], slug: "a", userId: "u", name: "A", experience: "" },
+            { _id: ids[1], slug: "b", userId: "u", name: "B", experience: "300" },
+            { _id: ids[2], slug: "c", userId: "u", name: "C", experience: 900 },
+        ])
+        await sheetExperienceNumber()
+        const rows = await CharacterSheet.collection.find({ _id: { $in: ids } }).toArray()
+        expect(Object.fromEntries(rows.map((row) => [row.name, row.experience]))).toEqual({ A: 0, B: 300, C: 900 })
+        await sheetExperienceNumber()
+        expect((await CharacterSheet.collection.findOne({ _id: ids[1] }))!.experience).toBe(300)
+    })
+
+    it("Diário: capítulos do mais recente para o mais antigo", async () => {
+        const t = await table()
+        await MaddoxCampaignModel.collection.updateOne({ _id: t.campaignId }, { $set: { chapters: [
+            { _id: new Types.ObjectId(), title: "Primeiro", summary: "Início.", turnNumber: 2, createdAt: new Date(1_000) },
+            { _id: new Types.ObjectId(), title: "Segundo", summary: "Meio.", turnNumber: 7, createdAt: new Date(2_000) },
+        ] } })
+        const result = await listJournalChapters(String(t.campaignId), t.owner)
+        expect(result.items.map((item) => [item.title, item.summary, item.turnNumber])).toEqual([["Segundo", "Meio.", 7], ["Primeiro", "Início.", 2]])
     })
 })

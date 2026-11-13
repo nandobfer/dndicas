@@ -2131,7 +2131,8 @@ Graus com ficha (`MADDOX_SHEET_RIGORS`) escolhem na criação o modo `progressio
 - **Chat**: cards `level-up` (status por personagem, ao vivo pelo estado da mesa; o que cada um ganhou), `experience` e `chapter` (`ProgressionCards.tsx`). O jogador vê o aviso "Subir de nível" no cabeçalho da mesa e o wizard abre sozinho uma vez (`GameLevelUps.tsx`); a subida não segura turno nenhum. `state.me.levelUps` traz as do próprio personagem e, para o dono, as de Personagens Opex com falha (motivo só para o dono).
 - **Personagem Opex** (`server/level-up-opex.ts`): o Opex decide as escolhas (`decideOpex`, com as opções do motor no prompt) e o servidor aplica sem clique; uma nova tentativa; depois disso, `failed` e o dono conclui no wizard da ficha do Opex.
 - **Diário**: aba Capítulos (`GET …/journal/chapters`) e capítulos na busca. Reinício (`campaign-reset.ts`) zera a progressão; voltar a um turno restaura `progression`/`levelUps`/`chapters` pelo retrato do turno.
-- A ficha de campanha só sobe com a subida pendente (ver `aicontext/modules/character-sheets.md`). Perfix: reutiliza `maddox.play`.
+- A ficha de campanha só sobe com a subida pendente (ver `aicontext/modules/character-sheets.md`); a trava de nível e XP fica dentro de `patchSheet`/`patchSheetWithAccess` (`assertCampaignPatchAllowed`, erro `CampaignSheetPatchError` → 409), então vale também para o Owlbear e para o `update_sheet` do Agente Opex. Perfix: reutiliza `maddox.play`.
+- Subida do Opex interrompida: o degrau guarda `decidingAt`; `autoLevelUps` trata `deciding` sem execução neste processo (reinício) como `pending` e decide de novo, ou marca `failed` para o dono se o Opex saiu da mesa.
 - Testes: `tests/backend/maddox/level-progression.test.ts` mocka `server/level-up-ai`, `server/settings` e `decideOpex`/`loadOpexModel` de `opex-player`; `tests/backend/character-sheets/level-up.test.ts` cobre o motor.
 
 ## Testes

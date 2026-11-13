@@ -338,6 +338,8 @@ export async function getSheetById(id: string): Promise<CharacterSheetFull | nul
 
 export async function patchSheet(id: string, userId: string, data: PatchSheetBody, originId?: string) {
     await dbConnect()
+    // DND-56: em ficha de campanha Maddox, o nível (e a XP do modo Experiência) não muda por PATCH, em nenhum caminho.
+    await (await import("../level-up/level-up-service")).assertCampaignPatchAllowed(id, data)
 
     // When name changes, also update the slug
     const updateData: Record<string, unknown> = { ...data }
@@ -365,6 +367,8 @@ export async function patchSheet(id: string, userId: string, data: PatchSheetBod
 
 export async function patchSheetWithAccess(id: string, data: PatchSheetBody, originId?: string) {
     await dbConnect()
+    // DND-56: em ficha de campanha Maddox, o nível (e a XP do modo Experiência) não muda por PATCH, em nenhum caminho.
+    await (await import("../level-up/level-up-service")).assertCampaignPatchAllowed(id, data)
 
     const existing = await CharacterSheet.findById(id, { username: 1, userId: 1 }).lean()
     if (!existing) return null

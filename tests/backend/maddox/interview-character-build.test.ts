@@ -99,7 +99,7 @@ const interviews = await import("@/features/maddox/server/interviews")
 const scoresService = await import("@/features/maddox/server/interview-scores-service")
 const { completeInterview } = await import("@/features/maddox/server/interview-consolidation")
 const hitPointsService = await import("@/features/maddox/server/interview-hit-points")
-const { writeCharacterSheet } = await import("@/features/maddox/server/sheet-builder")
+const { computeCharacterSheet, writeCharacterSheet } = await import("@/features/maddox/server/sheet-builder")
 const { CharacterItem } = await import("@/features/character-sheets/models/character-item")
 const { CharacterAttack } = await import("@/features/character-sheets/models/character-attack")
 const { CharacterSpell } = await import("@/features/character-sheets/models/character-spell")
@@ -466,6 +466,22 @@ describe("ficha completa pela entrevista de personagem", () => {
         await writeCharacterSheet(input)
         expect(await CharacterItem.countDocuments({ sheetId: sheet._id })).toBe(1)
         expect(await CharacterAttack.countDocuments({ sheetId: sheet._id })).toBe(1)
+    })
+
+    it("modo Experiência (DND-56): a ficha nasce no limiar de XP do nível; no Marco a XP não é tocada", async () => {
+        const campaignId = await characterInterview("fiel-dnd", 1)
+        await attributesWithSoldierBonus(campaignId)
+        scripted.push([
+            call("update_character_build", { raca: "Humano", classe: "Guerreiro", origem: "Soldado", periciasClasse: ["Percepção", "Sobrevivência"], estiloLuta: "Defesa", equipamento: [{ item: "Espada longa", equipado: true }], idiomas: ["Comum"] }),
+            say("Ok."),
+        ])
+        await run(await interviews.sendInterviewMessage(campaignId, "character", { content: "Ok." }, ids.ana))
+        const doc = await interviewDoc()
+        const sheet = await CharacterSheet.create({ userId: ids.ana, username: "ana", name: "Lyra", slug: "ana/lyra-xp" })
+        const input = (progression: "marco" | "experiencia", startingLevel: number) => ({ sheetId: sheet._id, name: "Lyra", portraitUrl: null, doc, seed: null, ctx: { rigor: "fiel-dnd" as const, startingLevel, progression }, reserved: [] })
+        expect((await computeCharacterSheet(input("experiencia", 3))).set.experience).toBe(900)
+        expect((await computeCharacterSheet(input("experiencia", 1))).set.experience).toBe(0)
+        expect((await computeCharacterSheet(input("marco", 3))).set).not.toHaveProperty("experience")
     })
 
     it("Fiel recusa item e raça fora do catálogo; Equilibrado aceita como próprio e não cobra o que depende do catálogo", async () => {

@@ -7,7 +7,7 @@ import { MaddoxCampaignMemberModel, MaddoxCampaignModel, MaddoxCharacterModel, t
 import type { LevelUpChoices, LevelUpFeatAttributeRule, LevelUpOptions } from "@/features/character-sheets/level-up/level-up-types"
 import type { AttributeType } from "@/features/character-sheets/types/character-sheet.types"
 import { completeLevelUpStep, currentSteps, hasLevels } from "./level-ups"
-import { runOpexOnce } from "./opex-runtime"
+import { isOpexRunning, runOpexOnce } from "./opex-runtime"
 
 /**
  * Subida de nível do Personagem Opex (DND-56) — SOMENTE servidor. As escolhas que o wizard mostraria (PV, subclasse,
@@ -29,9 +29,34 @@ export const opexLevelUpKey = (stepId: Types.ObjectId | string) => `levelup:${St
 export async function autoLevelUps(campaign: CampaignDoc, opex: ReadonlyMap<string, MemberDoc>): Promise<void> {
     if (!hasLevels(campaign.rigor)) return
     for (const step of currentSteps(campaign)) {
-        if (step.kind !== "opex" || step.status !== "pending" || !opex.has(String(step.memberId))) continue
+        if (step.kind !== "opex") continue
+        if (step.status === "deciding") {
+            await recoverInterrupted(campaign._id, step, opex.has(String(step.memberId)))
+            continue
+        }
+        if (step.status !== "pending" || !opex.has(String(step.memberId))) continue
         void runOpexOnce(opexLevelUpKey(step._id), () => runOpexLevelUp(campaign._id, step._id))
     }
+}
+
+/** Decisão que não roda mais neste processo depois de começar. */
+const INTERRUPTED_TEXT = "A decisão da subida de nível foi interrompida (o servidor reiniciou)."
+
+/**
+ * `deciding` sem execução em andamento neste processo (app de instância única: o processo caiu no meio da decisão)
+ * volta a `pending` e é decidido de novo; se o Personagem Opex não está mais na mesa, fica `failed` para o dono concluir.
+ */
+async function recoverInterrupted(campaignId: Types.ObjectId, step: IMaddoxLevelUp, opexAtTable: boolean): Promise<void> {
+    if (isOpexRunning(opexLevelUpKey(step._id))) return
+    const filter = { _id: campaignId, levelUps: { $elemMatch: { _id: step._id, status: "deciding" } } }
+    if (!opexAtTable) {
+        await markFailed(campaignId, step._id, INTERRUPTED_TEXT)
+        return
+    }
+    const reset = await MaddoxCampaignModel.updateOne(filter, { $set: { "levelUps.$.status": "pending", "levelUps.$.decidingAt": null } })
+    if (!reset.modifiedCount) return
+    log.warn({ campaignId: String(campaignId), stepId: String(step._id) }, "[maddox] subida de nível do Personagem Opex interrompida: decidindo de novo")
+    void runOpexOnce(opexLevelUpKey(step._id), () => runOpexLevelUp(campaignId, step._id))
 }
 
 const ruleText = (rule: LevelUpFeatAttributeRule) => (rule.kind === "asi" ? "+2 em um atributo ou +1 em dois" : rule.kind === "one-of" ? `+1 em ${rule.options.map((key) => MADDOX_ABILITY_LABELS[key]).join(" ou ")}` : "")
@@ -90,7 +115,7 @@ async function markFailed(campaignId: Types.ObjectId, stepId: Types.ObjectId, er
 }
 
 export async function runOpexLevelUp(campaignId: Types.ObjectId, stepId: Types.ObjectId): Promise<void> {
-    const claimed = await MaddoxCampaignModel.updateOne({ _id: campaignId, levelUps: { $elemMatch: { _id: stepId, status: "pending", kind: "opex" } } }, { $set: { "levelUps.$.status": "deciding", "levelUps.$.error": null } })
+    const claimed = await MaddoxCampaignModel.updateOne({ _id: campaignId, levelUps: { $elemMatch: { _id: stepId, status: "pending", kind: "opex" } } }, { $set: { "levelUps.$.status": "deciding", "levelUps.$.error": null, "levelUps.$.decidingAt": new Date() } })
     if (!claimed.modifiedCount) return
     try {
         const campaign = await MaddoxCampaignModel.findById(campaignId).lean<CampaignDoc>()
