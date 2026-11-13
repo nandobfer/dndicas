@@ -40,6 +40,16 @@ const mockRaceData = vi.hoisted(() => ({
     },
 }))
 
+const mockLevelUpStatus = vi.hoisted(() => ({ campaign: null as null | Record<string, unknown> }))
+
+vi.mock("@/features/character-sheets/api/character-sheets-queries", () => ({
+    useSheetLevelUpStatus: () => ({ data: { options: null, campaign: mockLevelUpStatus.campaign, unavailable: null } }),
+}))
+
+vi.mock("@/features/character-sheets/components/level-up/level-up-wizard", () => ({
+    LevelUpWizard: ({ open, sheetId }: { open: boolean; sheetId: string }) => (open ? <div data-testid="level-up-modal" data-sheet-id={sheetId} /> : null),
+}))
+
 vi.mock("@/features/classes/api/classes-queries", () => ({
     useClass: () => mockClassData,
 }))
@@ -251,7 +261,7 @@ const baseSheet: CharacterSheet = {
     subclass: "",
     subclassRef: null,
     level: 2,
-    experience: "0",
+    experience: 0,
     race: "Humano",
     raceRef: "race-1",
     origin: "Soldado",
@@ -360,6 +370,7 @@ function createHarness(overrides: Partial<CharacterSheet> = {}) {
 
 describe("SheetHeader", () => {
     beforeEach(() => {
+        mockLevelUpStatus.campaign = null
         glassImageUploaderMocks.render.mockReset()
         glassImageUploaderMocks.render.mockImplementation(({
             onChange,
@@ -604,111 +615,55 @@ describe("SheetHeader", () => {
         expect(levelUpButton.closest(".px-4.pt-4.pb-0")).toBeInTheDocument()
     })
 
-    it("shows the level-up modal for 2 -> 3 with hp preview, new traits and required subclass", async () => {
+    it("opens the server-driven level-up wizard from the button", async () => {
         const { sheet, form } = createHarness()
 
         render(<SheetHeader sheet={sheet} form={form} />)
 
         fireEvent.click(screen.getByTestId("level-up-button"))
 
-        const modal = await screen.findByTestId("level-up-modal")
-        expect(modal).toBeInTheDocument()
-        expect(screen.getByText("Nível 2 -> 3")).toBeInTheDocument()
-        expect(screen.getByText("Confira o que muda antes de aplicar a progressão do personagem.")).toBeInTheDocument()
-        expect(screen.getByText("20 -> 27")).toBeInTheDocument()
-        expect(screen.getByTestId("level-up-average-badge").parentElement).toHaveTextContent("Ganho de PV: 7")
-        expect(await screen.findByText("Especialização marcial")).toBeInTheDocument()
-        expect(screen.getByText("Versatilidade heroica")).toBeInTheDocument()
-        expect(screen.getAllByTestId("trait-preview")).toHaveLength(2)
-        expect(within(modal).getByLabelText("Subclasse")).toBeInTheDocument()
-
-        fireEvent.click(screen.getByRole("button", { name: "Confirmar" }))
-
-        expect(screen.getByText("Escolha uma subclasse para confirmar o nível 3.")).toBeInTheDocument()
-        expect(form.patchField).not.toHaveBeenCalledWith("level", 3)
+        expect(await screen.findByTestId("level-up-modal")).toHaveAttribute("data-sheet-id", sheet._id)
+        expect(form.patchField).not.toHaveBeenCalledWith("level", expect.anything())
     })
 
-    it("shows the required feat selector when leveling from 3 to 4", async () => {
-        const { sheet, form } = createHarness({
-            level: 3,
-            subclass: "<p><span data-type=\"mention\" data-id=\"subclass:class-1:subclass-1\" data-entity-type=\"Subclasse\" data-label=\"Campeão\" class=\"mention\">Campeão</span></p>",
-            subclassRef: "subclass-1",
-        })
+    it("shows how much XP is missing for the next level (D&D 2024 table)", () => {
+        const { sheet, form } = createHarness({ level: 2, experience: 500 })
 
         render(<SheetHeader sheet={sheet} form={form} />)
 
-        fireEvent.click(screen.getByTestId("level-up-button"))
+        expect(screen.getByTestId("experience-to-next")).toHaveTextContent("Faltam 400 XP para o nível 3")
+        fireEvent.change(screen.getByLabelText("XP"), { target: { value: "650" } })
+        expect(form.patchField).toHaveBeenCalledWith("experience", 650)
+    })
+
+    it("campaign sheet: the button only opens with a pending level-up, and the XP of Experience mode belongs to Maddox", () => {
+        mockLevelUpStatus.campaign = { campaignId: "c1", stepId: null, toLevel: null, mode: "experiencia", status: null, blocked: "Esta ficha só sobe de nível quando atingir a XP do próximo nível." }
+        const { sheet, form } = createHarness()
+
+        render(<SheetHeader sheet={sheet} form={form} />)
+
+        expect(screen.getByTestId("level-up-button")).toBeDisabled()
+        expect(screen.getByText("Controlado pelo Maddox")).toBeInTheDocument()
+        expect(screen.queryByTestId("level-up-banner")).not.toBeInTheDocument()
+    })
+
+    it("campaign sheet with a pending level-up: persistent banner and the wizard opens by itself once", async () => {
+        window.sessionStorage.clear()
+        mockLevelUpStatus.campaign = { campaignId: "c1", stepId: "step-1", toLevel: 3, mode: "marco", status: "pending", blocked: null }
+        const { sheet, form } = createHarness()
+
+        const { unmount } = render(<SheetHeader sheet={sheet} form={form} />)
 
         expect(await screen.findByTestId("level-up-modal")).toBeInTheDocument()
-        expect(screen.getByText("Nível 3 -> 4")).toBeInTheDocument()
-        expect(screen.getByLabelText("Talento")).toBeInTheDocument()
-
-        fireEvent.click(screen.getByRole("button", { name: "Confirmar" }))
-
-        expect(screen.getByText("Escolha um talento para confirmar o nível 4.")).toBeInTheDocument()
-    })
-
-    it("persists subclass, hpMax and level when confirming level 3 without changing hpCurrent", async () => {
-        const { sheet, form } = createHarness()
+        expect(screen.getByTestId("level-up-banner")).toHaveTextContent("Você pode subir para o nível 3.")
+        expect(screen.getByTestId("level-up-button")).not.toBeDisabled()
+        unmount()
 
         render(<SheetHeader sheet={sheet} form={form} />)
-
-        fireEvent.click(screen.getByTestId("level-up-button"))
-        const modal = await screen.findByTestId("level-up-modal")
-        fireEvent.change(within(modal).getByLabelText("Subclasse"), { target: { value: "Campeão" } })
-        fireEvent.click(screen.getByRole("button", { name: "Confirmar" }))
-
-        expect(form.patchField).toHaveBeenCalledWith(
-            "subclass",
-            expect.stringContaining('data-entity-type="Subclasse"')
-        )
-        expect(form.patchField).toHaveBeenCalledWith("hpMax", 27)
-        expect(form.patchField).toHaveBeenCalledWith("level", 3)
-        expect(form.patchField).not.toHaveBeenCalledWith("hpCurrent", expect.anything())
-    })
-
-    it("persists featuresNotes, hpMax and level when confirming level 4 without changing hpCurrent", async () => {
-        const { sheet, form } = createHarness({
-            level: 3,
-            subclass: "<p><span data-type=\"mention\" data-id=\"subclass:class-1:subclass-1\" data-entity-type=\"Subclasse\" data-label=\"Campeão\" class=\"mention\">Campeão</span></p>",
-            subclassRef: "subclass-1",
-            featuresNotes: "<p>Notas existentes</p>",
-        })
-
-        render(<SheetHeader sheet={sheet} form={form} />)
-
-        fireEvent.click(screen.getByTestId("level-up-button"))
-        fireEvent.change(await screen.findByLabelText("Talento"), { target: { value: "Sortudo" } })
-        fireEvent.click(screen.getByRole("button", { name: "Confirmar" }))
-
-        expect(form.patchField).toHaveBeenCalledWith(
-            "featuresNotes",
-            expect.stringContaining('data-entity-type="Talento"')
-        )
-        expect(form.patchField).toHaveBeenCalledWith("hpMax", 27)
-        expect(form.patchField).toHaveBeenCalledWith("level", 4)
-        expect(form.patchField).not.toHaveBeenCalledWith("hpCurrent", expect.anything())
-    })
-
-    it("replaces the average hp gain with a rolled result", async () => {
-        const { sheet, form } = createHarness()
-
-        render(<SheetHeader sheet={sheet} form={form} />)
-
-        fireEvent.click(screen.getByTestId("level-up-button"))
-        expect(await screen.findByText("20 -> 27")).toBeInTheDocument()
-
-        fireEvent.click(screen.getByRole("button", { name: "Rolar ganho de pontos de vida" }))
-        expect(screen.getByRole("button", { name: "Usar rolagem de PV" })).toBeInTheDocument()
-        fireEvent.click(screen.getByRole("button", { name: "Usar rolagem de PV" }))
-
-        await waitFor(() => {
-            expect(screen.getByText("20 -> 29")).toBeInTheDocument()
-        })
-        await waitFor(() => {
-            expect(screen.queryByRole("button", { name: "Usar rolagem de PV" })).not.toBeInTheDocument()
-        })
-        expect(screen.getByText("Resultado rolado: 9")).toBeInTheDocument()
+        expect(screen.getByTestId("level-up-banner")).toBeInTheDocument()
+        expect(screen.queryByTestId("level-up-modal")).not.toBeInTheDocument()
+        fireEvent.click(within(screen.getByTestId("level-up-banner")).getByRole("button", { name: "Subir de nível" }))
+        expect(await screen.findByTestId("level-up-modal")).toBeInTheDocument()
     })
 
     it("disables the level-up flow at level 20", () => {

@@ -21,6 +21,7 @@ const service = {
     listJournalParty: vi.fn(async () => []),
     listJournalImages: vi.fn(async () => ({ items: [], nextCursor: null })),
     searchJournal: vi.fn(async () => ({ query: "taverna" })),
+    listJournalChapters: vi.fn(async () => ({ items: [{ id: "ch1", title: "Ato I" }] })),
 }
 vi.doMock("@/features/maddox/server/journal", () => service)
 
@@ -34,6 +35,16 @@ describe("rotas do Diário da campanha (Maddox 9)", () => {
         who = "player"
         permissions.length = 0
         Object.values(service).forEach((fn) => fn.mockClear())
+    })
+
+    it("capítulos (DND-56): GET com maddox.play, no formato ApiResponse; sem a permissão, 403", async () => {
+        const res = await get("@/app/api/maddox/campaigns/[id]/journal/chapters/route", `${base}/chapters`)
+        expect(await res.json()).toMatchObject({ success: true, data: { items: [{ id: "ch1", title: "Ato I" }] } })
+        expect(service.listJournalChapters).toHaveBeenCalledWith("c1", "user-1")
+        who = "noPermission"
+        service.listJournalChapters.mockClear()
+        expect((await get("@/app/api/maddox/campaigns/[id]/journal/chapters/route", `${base}/chapters`)).status).toBe(403)
+        expect(service.listJournalChapters).not.toHaveBeenCalled()
     })
 
     it("sem maddox.play = 403 e o serviço não é chamado", async () => {

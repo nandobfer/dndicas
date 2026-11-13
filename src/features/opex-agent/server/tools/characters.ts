@@ -91,7 +91,7 @@ export const characterTools = [
         risk: "write",
         minRole: "user",
         description:
-            "Altera campos da ficha do usuário logado (os mesmos de get_my_sheet: name, class, race, level, atributos, perícias, notas...). Itens, magias, habilidades e ataques não são alterados por aqui.",
+            "Altera campos da ficha do usuário logado (os mesmos de get_my_sheet: name, class, race, level, atributos, perícias, notas...). Itens, magias, habilidades e ataques não são alterados por aqui. Em ficha de Campanha Maddox, o nível (e a XP no modo Experiência) não muda por aqui: a subida é feita pela campanha.",
         input: z.object({
             id: sheetId,
             fieldsJson: z.string().trim().min(2).max(20_000).describe('Objeto JSON com os campos a alterar, ex.: {"level": 5, "notes": "..."}'),
@@ -102,7 +102,12 @@ export const characterTools = [
             const fields = parseJsonObject(input.fieldsJson, "fieldsJson")
             const blocked = Object.keys(fields).filter((key) => PROTECTED_SHEET_FIELDS.has(key) || key.startsWith("$"))
             if (blocked.length) throw new OpexToolError(`Campos que não podem ser alterados: ${blocked.join(", ")}`)
-            const updated = await patchSheet(input.id, userId, fields as PatchSheetBody)
+            const updated = await patchSheet(input.id, userId, fields as PatchSheetBody).catch(async (error: unknown) => {
+                // DND-56: ficha de campanha Maddox — o nível sobe pela campanha e a XP do modo Experiência é do Maddox.
+                const { CampaignSheetPatchError } = await import("@/features/character-sheets/level-up/level-up-service")
+                if (error instanceof CampaignSheetPatchError) throw new OpexToolError(error.message)
+                throw error
+            })
             if (!updated) throw new OpexToolError("Ficha não encontrada entre as suas. Use list_my_sheets.")
             await recordAudit({ userId, entidade: "CharacterSheet", entidadeId: input.id, acao: AcaoAuditoria.ATUALIZAR, depois: { campos: Object.keys(fields), origem: "agente-opex" } })
             return { ok: true, ...slimSheet(updated as unknown as Record<string, unknown>) }

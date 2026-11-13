@@ -198,11 +198,18 @@ export interface BuildContext {
     startingLevel: number | null
     /** Povos e classes do mundo (Fiel ao D&D, Maddox 8); listas vazias ou ausente = todo o catálogo. */
     world?: WorldCatalog | null
+    /** Modo de progressão (DND-56): no modo Experiência, a ficha nasce com a XP do limiar do nível. */
+    progression?: "marco" | "experiencia" | null
 }
 
 /** Contexto da ficha a partir da campanha (rigor, nível da mesa e povos/classes do mundo). */
-export function buildContextOfCampaign(campaign: Pick<IMaddoxCampaign, "rigor" | "startingLevel" | "worldCatalog">): BuildContext {
-    return { rigor: campaign.rigor, startingLevel: campaign.startingLevel ?? null, world: MADDOX_WORLD_CATALOG_RIGORS.includes(campaign.rigor) ? worldCatalogOf(campaign.worldCatalog) : null }
+export function buildContextOfCampaign(campaign: Pick<IMaddoxCampaign, "rigor" | "startingLevel" | "worldCatalog"> & Partial<Pick<IMaddoxCampaign, "progression">>): BuildContext {
+    return {
+        rigor: campaign.rigor,
+        startingLevel: campaign.startingLevel ?? null,
+        world: MADDOX_WORLD_CATALOG_RIGORS.includes(campaign.rigor) ? worldCatalogOf(campaign.worldCatalog) : null,
+        progression: MADDOX_SHEET_RIGORS.includes(campaign.rigor) ? (campaign.progression?.mode ?? "marco") : null,
+    }
 }
 
 /** Lista do mundo que restringe a raça ou a classe (só no Fiel ao D&D com lista gravada). */

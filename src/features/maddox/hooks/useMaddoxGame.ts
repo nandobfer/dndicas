@@ -39,7 +39,7 @@ export async function fetchOlderGameMessages(campaignId: string, before: string)
     return unwrapApi((await api.get<ApiResponse<MaddoxGameMessagesPageDto>>(`${gamePath(campaignId)}/messages`, { params: { before } })).data)
 }
 
-const refreshGame = (queryClient: QueryClient) => void queryClient.invalidateQueries({ queryKey: MADDOX_CAMPAIGNS_KEY })
+export const refreshGame = (queryClient: QueryClient) => void queryClient.invalidateQueries({ queryKey: MADDOX_CAMPAIGNS_KEY })
 
 /**
  * Mesa em dia em todos os navegadores: o servidor avisa no canal do usuário (`maddox.game.changed` e

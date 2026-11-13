@@ -393,6 +393,9 @@ async function generate(args: GenerateArgs, sink: MaddoxMasterSink): Promise<str
                 if (message.kind === "combat") return { turnNumber: message.turnNumber, kind: message.kind, characterName: null, content: combatTranscriptLine(message, context.combats.get(String(message.combat?.combatId))) }
                 if (message.combatAction) return { turnNumber: message.turnNumber, kind: message.kind, characterName: null, content: message.combatAction.status === "cancelled" ? "" : message.combatAction.summary }
                 if (message.combatRoll) return { turnNumber: message.turnNumber, kind: message.kind, characterName: null, content: `${message.characterName ?? "Personagem"} — ${message.combatRoll.reason}: ${message.combatRoll.outcome ?? message.combatRoll.status}` }
+                if (message.levelUp) return { turnNumber: message.turnNumber, kind: message.kind, characterName: null, content: `Subida de nível para o nível ${message.levelUp.toLevel}: ${message.levelUp.reason}` }
+                if (message.experience) return { turnNumber: message.turnNumber, kind: message.kind, characterName: null, content: `Experiência (${message.experience.reason}): ${message.experience.entries.map((entry) => `${entry.characterName} +${entry.amount} XP (total ${entry.total})`).join(", ")}` }
+                if (message.chapter) return { turnNumber: message.turnNumber, kind: message.kind, characterName: null, content: `Capítulo encerrado: ${message.chapter.title}` }
                 if (message.kind === "rest" && message.rest) return { turnNumber: message.turnNumber, kind: message.kind, characterName: null, content: restTranscriptLine(message.rest) }
                 if (message.combatReaction) return { turnNumber: message.turnNumber, kind: message.kind, characterName: null, content: `${message.characterName ?? "Personagem"} — reação (${message.combatReaction.description}): ${message.combatReaction.outcome ?? message.combatReaction.status}` }
                 return { turnNumber: message.turnNumber, kind: message.kind, characterName: message.characterName, content: check ? checkResultLine(check) : message.content }
@@ -418,15 +421,37 @@ async function generate(args: GenerateArgs, sink: MaddoxMasterSink): Promise<str
     const opexNpcs = narrating && context.opexNpcNames.length > 0
     // No bloco de um adversário do combate tático, o servidor já consultou o agente (a decisão ou a falha vêm na tarefa): a
     // seção que manda consultar fica de fora.
+    // Progressão de nível (DND-56): ferramentas pelo modo e pela geração; o marco pendente e as subidas por XP a narrar vão
+    // na tarefa desta narração (saem depois de a fala ser gravada, em `commitProgression`).
+    const levels = await import("./level-ups")
+    const progressionMode = levels.progressionModeOf(context.campaign)
+    const { progressionToolNames } = await import("./master-tools")
+    const progression = progressionToolNames({ mode: progressionMode, answer: args.task.kind === "answer" })
+    let progressionText: string | null = null
+    if (args.task.kind !== "answer" && progressionMode) {
+        const { jobDraftProgression } = await import("./game-live")
+        const draft = jobDraftProgression(String(campaignId), args.jobId)
+        // Durante o combate tático a declaração é recusada: o marco pendente espera a primeira narração depois dele.
+        const pending = progressionMode === "marco" && context.campaign.progression?.pendingMilestone && !(await levels.tacticalCombatActive(campaignId)) ? context.campaign.progression.pendingMilestone : null
+        const narrate = progressionMode === "experiencia" ? levels.unnarratedLevelUps(context.campaign) : []
+        if (draft) {
+            if (pending) draft.claimedMilestoneAt = pending.at
+            draft.claimedLevelUps = narrate.map((step) => String(step._id))
+        }
+        const { progressionTaskLines } = await import("./narrator-prompt")
+        progressionText = progressionTaskLines({ milestone: pending ? { trigger: pending.trigger, reason: pending.reason } : null, levelUps: narrate })
+    }
     const npcBlock = narrating && task.tactical?.block?.kind === "npc"
     const userText = [
         transcript ? `# Últimos acontecimentos\n\n${mentionsToMarkup(transcript)}` : null,
         narratorTaskText(args.task, { density: context.campaign.density ?? MADDOX_DEFAULT_DENSITY, combatDifficulty, actionOptions, opexNpcs: opexNpcs && !npcBlock ? context.opexNpcNames : [] }),
         remindersText || null,
+        progressionText,
     ]
         .filter(Boolean)
         .join("\n\n")
     const promptContext: NarratorPromptContext = { instructions: settings.instructions, agentMemories: memories, ...context.prompt }
+    if (progressionMode) promptContext.progression = { mode: progressionMode, level: levels.groupLevel(await levels.partyOf(campaignId), context.campaign) }
     const stream = liveText(sink)
     let failure: string | null = null
     // Testes só nas narrações do turno do mestre dos graus com ficha (respostas a perguntas nunca pedem teste).
@@ -450,7 +475,7 @@ async function generate(args: GenerateArgs, sink: MaddoxMasterSink): Promise<str
         await ensureMaddoxMcp(settings)
         const sessionId = await ensureMaddoxSession({ campaignId: args.campaignId, purpose: "narrator", agent: model.agent, model: model.model, variant: model.variant, title: `Maddox · narrador · ${context.campaign.name}` })
         const turnToken = createMaddoxTurnToken({ campaignId: args.campaignId, jobId: args.jobId, turnNumber: args.turnNumber })
-        const instructions = buildNarratorInstructions(promptContext, { kind: "mcp", server: MADDOX_MCP_SERVER_NAME, turnToken, checks, combat, tactical, sceneImages, actionOptions, opexNpcs, sheetFix, rest })
+        const instructions = buildNarratorInstructions(promptContext, { kind: "mcp", server: MADDOX_MCP_SERVER_NAME, turnToken, checks, combat, tactical, sceneImages, actionOptions, opexNpcs, sheetFix, progression, rest })
         for await (const event of streamAi({
             provider: "opencode",
             model: model.model,
@@ -469,7 +494,7 @@ async function generate(args: GenerateArgs, sink: MaddoxMasterSink): Promise<str
         }
     } else {
         failure = await generateWithTools(
-            { model, instructions: buildNarratorInstructions(promptContext, { kind: "ai-sdk" }), userText, campaignId, turnNumber: args.turnNumber, jobId: args.jobId, checks, combat, tactical, sceneImages, actionOptions, opexNpcs, sheetFix, rest, signal: args.signal },
+            { model, instructions: buildNarratorInstructions(promptContext, { kind: "ai-sdk" }), userText, campaignId, turnNumber: args.turnNumber, jobId: args.jobId, checks, combat, tactical, sceneImages, actionOptions, opexNpcs, sheetFix, progression, rest, signal: args.signal },
             stream,
             sink,
         )
@@ -502,6 +527,7 @@ interface ToolGeneration {
     actionOptions: boolean
     opexNpcs: boolean
     sheetFix: boolean
+    progression: string[]
     rest: boolean
     signal?: AbortSignal
 }
@@ -524,7 +550,7 @@ async function generateWithTools(input: ToolGeneration, stream: ReturnType<typeo
             model: prepared.model,
             instructions: input.instructions,
             messages: [{ role: "user", content: input.userText }],
-            tools: await buildMaddoxAiTools({ campaignId: input.campaignId, turnNumber: input.turnNumber, jobId: input.jobId }, { checks: input.checks, combat: input.combat, tactical: input.tactical, sceneImages: input.sceneImages, actionOptions: input.actionOptions, opexNpcs: input.opexNpcs, sheetFix: input.sheetFix, rest: input.rest }),
+            tools: await buildMaddoxAiTools({ campaignId: input.campaignId, turnNumber: input.turnNumber, jobId: input.jobId }, { checks: input.checks, combat: input.combat, tactical: input.tactical, sceneImages: input.sceneImages, actionOptions: input.actionOptions, opexNpcs: input.opexNpcs, sheetFix: input.sheetFix, progression: input.progression, rest: input.rest }),
             stopWhen: stepCountIs(MADDOX_NARRATOR_MAX_STEPS),
             abortSignal: input.signal,
             providerOptions: prepared.providerOptions,

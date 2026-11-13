@@ -64,7 +64,7 @@ export interface MaddoxJournalSummaryDto {
     state: MaddoxJournalStateDto
     activeQuests: MaddoxJournalMemoryDto[]
     /** `images`: imagens prontas que os jogadores veem (aba Imagens, DND-22). */
-    counts: { npcs: number; party: number; images: number; memories: Record<MaddoxCampaignMemoryKind, number> }
+    counts: { npcs: number; party: number; images: number; memories: Record<MaddoxCampaignMemoryKind, number>; chapters?: number }
     /** As anotações vêm do Engramind; `true` quando a rede não respondeu (contagens zeradas, sem missões). */
     memoriesUnavailable: boolean
     /** Dono com a permissão "Adicionar Personagens Opex": vê "Promover a NPC Opex" e "Remover Opex" na aba NPCs (DND-27). */
@@ -142,6 +142,22 @@ export interface MaddoxJournalSearchPartyHit {
     excerpt: string
 }
 
+/** Capítulo encerrado pelo Maddox (aba Capítulos do diário, DND-56). */
+export interface MaddoxJournalChapterDto {
+    id: string
+    title: string
+    summary: string
+    turnNumber: number
+    createdAt: string
+}
+
+export interface MaddoxJournalSearchChapterHit {
+    id: string
+    title: string
+    turnNumber: number
+    excerpt: string
+}
+
 export interface MaddoxJournalSearchDto {
     query: string
     npcs: MaddoxJournalSearchGroup<MaddoxJournalSearchNpcHit>
@@ -152,6 +168,8 @@ export interface MaddoxJournalSearchDto {
     images: MaddoxJournalSearchGroup<MaddoxJournalSearchImageHit>
     /** Trecho da situação atual, quando ela contém o termo. */
     state: { excerpt: string } | null
+    /** Capítulos cujo título ou resumo contém o termo (DND-56). */
+    chapters?: MaddoxJournalSearchGroup<MaddoxJournalSearchChapterHit>
     /** As anotações vêm do Engramind; `true` quando a rede não respondeu (o grupo de anotações fica vazio). */
     memoriesUnavailable?: boolean
 }

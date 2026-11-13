@@ -43,7 +43,7 @@ function toCardSheet(item: AdminSheetListItem): CharacterSheet {
         subclass: item.subclass,
         subclassRef: null,
         level: item.level ?? 1,
-        experience: "",
+        experience: 0,
         race: item.race,
         raceRef: null,
         origin: item.origin,

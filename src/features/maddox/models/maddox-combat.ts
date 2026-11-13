@@ -73,6 +73,10 @@ export interface IMaddoxCombat {
     image: { status: MaddoxCombatImageStatus; requestedAt: Date | null } | null
     /** Efeitos do fim (NPCs, personagens, memória, recompensas, imagem) já disparados — rodam depois de gravar os cards. */
     effectsApplied: boolean
+    /** A decisão do marco de nível (DND-56) já rodou para este fim de combate. */
+    milestoneEvaluated?: boolean
+    /** A XP dos monstros (DND-56, modo Experiência) já foi concedida. */
+    experienceGranted?: boolean
     /** Combate narrativo (Maddox 6) ou tático (Maddox 7: iniciativa e turnos, Rigoroso e Fiel ao D&D). */
     mode: "narrative" | "tactical"
     /** Estado do combate tático (ordem, rodada, personagens); `null` no narrativo. */
@@ -135,6 +139,8 @@ const MaddoxCombatSchema = new Schema<IMaddoxCombat>(
         finalScene: { type: String, default: "" },
         image: { type: new Schema({ status: { type: String, enum: MADDOX_COMBAT_IMAGE_STATUSES }, requestedAt: Date }, { _id: false }), default: null },
         effectsApplied: { type: Boolean, default: false },
+        milestoneEvaluated: { type: Boolean, default: false },
+        experienceGranted: { type: Boolean, default: false },
         mode: { type: String, enum: ["narrative", "tactical"], default: "narrative" },
         tactical: { type: Schema.Types.Mixed, default: null },
         rev: { type: Number, default: 0 },

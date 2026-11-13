@@ -96,6 +96,7 @@ export function SheetForm({
                 </div>
             ) : (
                 <div className="space-y-4">
+                    {headerSections.levelUpBanner}
                     {headerSections.identityCard}
 
                     <div className="grid grid-cols-2 gap-4 items-stretch">
@@ -119,6 +120,7 @@ export function SheetForm({
                     <ItemList sheet={sheet} form={form} isReadOnly={isReadOnly} />
                     <SpellList sheet={sheet} form={form} isReadOnly={isReadOnly} />
                     <SheetNotes sheet={sheet} form={form} isReadOnly={isReadOnly} />
+                    {headerSections.levelUpModal}
                 </div>
             )}
         </motion.div>

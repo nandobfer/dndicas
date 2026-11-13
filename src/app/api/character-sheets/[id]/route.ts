@@ -33,6 +33,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         if (!sheet) return NextResponse.json({ error: "Ficha não encontrada ou não autorizado" }, { status: 404 })
         return NextResponse.json(sheet)
     } catch (error) {
+        // DND-56: ficha de campanha Maddox — o nível e a XP (modo Experiência) não mudam por aqui.
+        const { CampaignSheetPatchError } = await import("@/features/character-sheets/level-up/level-up-service")
+        if (error instanceof CampaignSheetPatchError) return NextResponse.json({ error: error.message }, { status: 409 })
         console.error("[API] PATCH /api/character-sheets/[id] error:", error)
         return NextResponse.json({ error: "Erro interno do servidor" }, { status: 500 })
     }

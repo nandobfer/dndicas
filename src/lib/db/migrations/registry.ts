@@ -15,6 +15,7 @@ import { ensureAiConsumptionIndexes } from "./ensure-ai-consumption-indexes"
 import { ensureOpexIndexes } from "./ensure-opex-indexes"
 import { ensureMaddoxIndexes } from "./ensure-maddox-indexes"
 import { ensureOpexFeedbackIndexes } from "./ensure-opex-feedback-indexes"
+import { sheetExperienceNumber } from "./sheet-experience-number"
 import { reclassifyOpexMemoriesOnce } from "./reclassify-opex-memories"
 
 registerMigrations(
@@ -30,5 +31,6 @@ registerMigrations(
     { name: "ensure-opex-indexes", run: () => ensureOpexIndexes() },
     { name: "ensure-maddox-indexes", run: () => ensureMaddoxIndexes() },
     { name: "ensure-opex-feedback-indexes", run: () => ensureOpexFeedbackIndexes() },
+    { name: "sheet-experience-number", run: () => sheetExperienceNumber() },
     { name: "reclassify-opex-memories", run: () => reclassifyOpexMemoriesOnce() },
 )

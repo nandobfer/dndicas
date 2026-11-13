@@ -291,3 +291,34 @@ export function buildBoundResourceCharge(entity: ChargeBoundEntity, context: Res
 export function mentionParagraphHtml(mention: ParsedMention): string {
     return `<p>${buildMentionHtml(mention)}</p>`
 }
+
+// ── Experiência (D&D 2024) ──────────────────────────────────────────────────────
+
+/** XP mínima de cada nível (índice 0 = nível 1), pela tabela do D&D 2024. */
+export const XP_BY_LEVEL = [0, 300, 900, 2_700, 6_500, 14_000, 23_000, 34_000, 48_000, 64_000, 85_000, 100_000, 120_000, 140_000, 165_000, 195_000, 225_000, 265_000, 305_000, 355_000] as const
+
+/** Limiar de XP do nível (1–20). */
+export function xpForLevel(level: number): number {
+    const index = Math.min(20, Math.max(1, Math.trunc(level))) - 1
+    return XP_BY_LEVEL[index]!
+}
+
+/** Nível que a XP alcança (1–20). */
+export function levelForXp(xp: number): number {
+    let level = 1
+    for (let index = 0; index < XP_BY_LEVEL.length; index++) if (xp >= XP_BY_LEVEL[index]!) level = index + 1
+    return level
+}
+
+/** Quanto falta para o próximo nível; `null` no nível 20. */
+export function xpToNextLevel(xp: number, level: number): { next: number; missing: number } | null {
+    if (level >= 20) return null
+    const next = xpForLevel(level + 1)
+    return { next, missing: Math.max(0, next - Math.max(0, xp)) }
+}
+
+/** XP como número (fichas antigas guardavam texto livre). */
+export function experienceValue(value: unknown): number {
+    const parsed = typeof value === "number" ? value : parseInt(String(value ?? "").replace(/\D/g, ""), 10)
+    return Number.isFinite(parsed) && parsed > 0 ? Math.trunc(parsed) : 0
+}

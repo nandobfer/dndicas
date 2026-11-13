@@ -1,6 +1,7 @@
 import { memoriesSection } from "@/features/ai/memories-prompt"
 import { MADDOX_ACTION_OPTIONS_MAX, MADDOX_CATALOG_TOOL_NAMES, MADDOX_COMBAT_DIFFICULTY_DEFAULT, MADDOX_COMBAT_DIFFICULTY_LEVEL_DEFS, MADDOX_DEFAULT_DENSITY, MADDOX_DENSITY_LEVEL_DEFS, MADDOX_CHECK_RIGORS, MADDOX_CHECK_ROUNDS_MAX, MADDOX_COMBAT_LONG_TURNS, MADDOX_COMBAT_RIGORS, MADDOX_DECLARATION_VALIDATION_RIGORS, MADDOX_PROFILE_SECTIONS, MADDOX_SHEET_FIX_TOOL_NAMES, MADDOX_SHEET_RIGORS, MADDOX_TACTICAL_COMBAT_RIGORS, MADDOX_TOOL_TEXT_GUIDE, MADDOX_WORLD_CATALOG_RIGORS, type MaddoxCampaignMemoryKind, type MaddoxCombatDifficultyLevel, type MaddoxDensityLevel, type MaddoxGameMessageKind, type MaddoxQuestStatus, type MaddoxRigorLevel, type MaddoxVisibility } from "../constants"
 import { CATALOG_CITATION_RULE, rigorBlock } from "./interview-prompt"
+import { MADDOX_PROGRESSION_TOOL_NAMES, MADDOX_MILESTONE_TRIGGER_LABELS, type MaddoxMilestoneTrigger, type MaddoxProgressionMode } from "../constants"
 import { checkSucceeded } from "../check-modifier"
 import { worldCatalogLines, type WorldCatalog } from "../world-catalog"
 
@@ -237,6 +238,8 @@ export interface NarratorPromptContext {
     tacticalCombat?: string | null
     /** Imagens nas cenas (Maddox 10): situações que o narrador pode pedir e a cota agora. `null` = desligadas. */
     sceneImages?: NarratorSceneImages | null
+    /** Progressão de nível (DND-56): modo (`null` nos graus sem ficha) e o nível do grupo. */
+    progression?: { mode: MaddoxProgressionMode | null; level: number | null } | null
 }
 
 export interface NarratorSceneImages {
@@ -331,17 +334,44 @@ function memoriesBlock(memories: readonly NarratorMemory[]): string | null {
     return parts.join("\n")
 }
 
-export type NarratorToolMode = { kind: "ai-sdk" } | { kind: "mcp"; server: string; turnToken: string; checks?: boolean; combat?: boolean; tactical?: boolean; sceneImages?: boolean; actionOptions?: boolean; opexNpcs?: boolean; sheetFix?: boolean; rest?: boolean }
+export type NarratorToolMode = { kind: "ai-sdk" } | { kind: "mcp"; server: string; turnToken: string; checks?: boolean; combat?: boolean; tactical?: boolean; sceneImages?: boolean; actionOptions?: boolean; opexNpcs?: boolean; sheetFix?: boolean; progression?: readonly string[]; rest?: boolean }
 
 /** Bloco das ferramentas: na AI SDK elas vêm na chamada; no OpenCode, pelo MCP com o token de turno. */
 function toolsBlock(mode: NarratorToolMode): string | null {
     if (mode.kind === "ai-sdk") return null
     return [
         "## Ferramentas desta narração",
-        `- As ferramentas de anotações da campanha estão no servidor MCP \`${mode.server}\` (get_campaign_state, update_campaign_state, list_npcs, get_npc, save_npc, search_memories, save_memory, update_character_state, update_character_hit_points, update_character_exhaustion, resolve_reminder${mode.checks ? ", request_check" : ""}${mode.rest ? ", start_rest" : ""}${mode.combat ? ", get_combat, start_combat, update_combat, end_combat" : ""}${mode.tactical ? ", monster_action, apply_effect, request_damage_roll, offer_reaction" : ""}${mode.sceneImages ? ", request_scene_image" : ""}${mode.actionOptions ? ", suggest_actions" : ""}, promover_npc_opex, desfazer_npc_opex, gravar_memoria_npc_opex${mode.opexNpcs ? ", consultar_npc_opex" : ""}${mode.sheetFix ? `, ${MADDOX_SHEET_FIX_TOOL_NAMES.join(", ")}` : ""}, ${MADDOX_CATALOG_TOOL_NAMES.search}, ${MADDOX_CATALOG_TOOL_NAMES.get}).`,
+        `- As ferramentas de anotações da campanha estão no servidor MCP \`${mode.server}\` (get_campaign_state, update_campaign_state, list_npcs, get_npc, save_npc, search_memories, save_memory, update_character_state, update_character_hit_points, update_character_exhaustion, resolve_reminder${mode.checks ? ", request_check" : ""}${mode.rest ? ", start_rest" : ""}${mode.combat ? ", get_combat, start_combat, update_combat, end_combat" : ""}${mode.tactical ? ", monster_action, apply_effect, request_damage_roll, offer_reaction" : ""}${mode.sceneImages ? ", request_scene_image" : ""}${mode.actionOptions ? ", suggest_actions" : ""}, promover_npc_opex, desfazer_npc_opex, gravar_memoria_npc_opex${mode.opexNpcs ? ", consultar_npc_opex" : ""}${mode.sheetFix ? `, ${MADDOX_SHEET_FIX_TOOL_NAMES.join(", ")}` : ""}${mode.progression?.length ? `, ${mode.progression.join(", ")}` : ""}, ${MADDOX_CATALOG_TOOL_NAMES.search}, ${MADDOX_CATALOG_TOOL_NAMES.get}).`,
         `- Em TODA chamada a essas ferramentas, envie o campo \`turno\` exatamente com este valor: \`${mode.turnToken}\`.`,
         "- Não use outras ferramentas (arquivos, terminal, web): a campanha vive só nessas anotações.",
     ].join("\n")
+}
+
+/** Regras da progressão de nível (DND-56): capítulos em todos os graus; marco ou experiência nos graus com ficha. */
+export function progressionRule(progression: NarratorPromptContext["progression"]): string {
+    const lines = ["## Capítulos e progressão de nível", `- Ao fechar um arco da história (não a cada cena), encerre o capítulo com \`${MADDOX_PROGRESSION_TOOL_NAMES.chapter}\` (título e resumo): ele vai para o Diário da campanha.`]
+    if (progression?.mode === "marco") {
+        lines.push(
+            `- Progressão por **Marco**: o grupo está no nível ${progression.level ?? "?"}. O servidor avalia o marco no fim de combate, na missão marcada como concluída e no capítulo encerrado, e devolve a orientação no retorno da ferramenta (ou na tarefa da próxima narração).`,
+            `- Com o marco atingido, declare com \`${MADDOX_PROGRESSION_TOOL_NAMES.declare}\` (sempre o grupo inteiro, que sobe para o maior nível + 1) e narre o momento num trecho curto. Fora de marco, declare só quando a narrativa justificar (por exemplo, uma recompensa), com o motivo.`,
+            "- Nunca declare durante o combate tático. As escolhas (PV, subclasse, talento, magias) são dos jogadores no wizard e dos Personagens Opex: não as descreva nem decida por eles.",
+        )
+    } else if (progression?.mode === "experiencia") {
+        lines.push(
+            "- Progressão por **Experiência**: a XP dos monstros do combate tático é concedida pelo servidor no fim do combate (pelo ND).",
+            `- Conceda XP de missões e feitos com \`${MADDOX_PROGRESSION_TOOL_NAMES.grant}\` (personagens, valor e motivo). No combate narrativo, é a única forma de dar XP de combate. Quem atinge o limiar do próximo nível sobe; narre a subida brevemente quando a tarefa pedir.`,
+            "- Não declare subida de nível nem invente níveis: o nível segue a XP.",
+        )
+    }
+    return lines.join("\n")
+}
+
+/** Orientações da tarefa sobre a progressão (marco pendente e subidas por XP a narrar). */
+export function progressionTaskLines(input: { milestone: { trigger: MaddoxMilestoneTrigger; reason: string } | null; levelUps: readonly { characterName: string; toLevel: number }[] }): string | null {
+    const lines: string[] = []
+    if (input.milestone) lines.push(`- O marco de subida de nível foi atingido (${MADDOX_MILESTONE_TRIGGER_LABELS[input.milestone.trigger]}): ${input.milestone.reason} Declare a subida do grupo com \`${MADDOX_PROGRESSION_TOOL_NAMES.declare}\` nesta narração e narre o momento num trecho curto (fora de combate tático).`)
+    if (input.levelUps.length) lines.push(`- Subiram de nível pela experiência: ${input.levelUps.map((item) => `${item.characterName} (nível ${item.toLevel})`).join(", ")}. Narre brevemente esse momento.`)
+    return lines.length ? ["## Progressão de nível", ...lines].join("\n") : null
 }
 
 export function buildNarratorInstructions(context: NarratorPromptContext, mode: NarratorToolMode): string {
@@ -356,6 +386,7 @@ export function buildNarratorInstructions(context: NarratorPromptContext, mode: 
     parts.push(MADDOX_NARRATOR_FORMAT, MADDOX_PERSISTENCE_RULE, narratorCatalogRule(context.rigor, context.worldCatalog ?? null))
     const images = sceneImagesRule(context.sceneImages)
     if (images) parts.push(images)
+    parts.push(progressionRule(context.progression ?? null))
     const tools = toolsBlock(mode)
     if (tools) parts.push(tools)
     parts.push(`# Campanha "${context.campaignName}"`)

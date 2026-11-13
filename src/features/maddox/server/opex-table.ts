@@ -476,6 +476,8 @@ async function driveOnce(id: string): Promise<void> {
     const opex = new Map(members.map((member) => [String(member._id), member]))
     await autoRolls(campaign, opex)
     await autoReactions(campaign, opex)
+    // Subida de nível (DND-56): o agente decide em paralelo, sem segurar a mesa.
+    await (await import("./level-up-opex")).autoLevelUps(campaign, opex)
     // Descanso aberto (DND-58): a parte de cada Personagem Opex (dados de vida e trocas) entra na fila.
     await (await import("./rest")).scheduleOpexRests(campaignId).catch((error: unknown) => log.warn({ campaignId: id, err: errorText(error) }, "[maddox] descanso do Personagem Opex não agendado"))
     const fresh = await MaddoxCampaignModel.findById(campaignId).lean<CampaignDoc>()

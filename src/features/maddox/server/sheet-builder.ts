@@ -17,6 +17,7 @@ import {
     mapSpellSlotsForLevel,
     mentionParagraphHtml,
     resolveCatalogItemType,
+    xpForLevel,
     type ParsedMention,
 } from "@/features/character-sheets/utils/sheet-rules"
 import type { AttributeType as CatalogAttributeType } from "@/features/classes/types/classes.types"
@@ -217,6 +218,8 @@ export async function computeCharacterSheet(input: BuildSheetInput): Promise<Com
     const { set, mods, prof, featMentions } = deriveSheetFields(build, catalog, scores, level, { choices: hpCard?.choices ?? null, rolls: input.doc.hitPointRolls ?? [] })
     set.name = input.name
     if (input.portraitUrl) set.photo = input.portraitUrl
+    // DND-56: no modo Experiência, a ficha começa no limiar de XP do nível (ex.: nível 3 = 900).
+    if (input.ctx.progression === "experiencia") set.experience = xpForLevel(level)
 
     const seed = input.seed
     if (seed) {

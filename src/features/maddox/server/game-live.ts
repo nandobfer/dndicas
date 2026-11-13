@@ -142,9 +142,30 @@ interface MaddoxJobState {
     /** NPCs Opex (DND-27): decisões já consultadas nesta geração (pelo id do NPC) e as falhas do agente. */
     opexNpcConsults: Map<string, unknown>
     opexNpcFailures: MaddoxDraftOpexNpcFailure[]
+    /** Progressão de nível (DND-56): marco, declaração, XP e capítulo, gravados depois da fala. */
+    progression: MaddoxDraftProgression
     /** Descanso pedido nesta narração (DND-58; um por narração). */
     rest: MaddoxDraftRest | null
 }
+
+/** Progressão de nível pedida pelo narrador na geração (DND-56), aplicada depois de a fala ser gravada. */
+export interface MaddoxDraftProgression {
+    /** Marco positivo decidido nesta geração (vira orientação para a próxima narração se não for declarado). */
+    milestone: { trigger: string; reason: string } | null
+    /** Gatilhos já avaliados nesta geração (o fim do combate não é avaliado de novo depois). */
+    evaluated: string[]
+    /** Combates encerrados nesta geração cuja decisão do marco já rodou. */
+    evaluatedCombats: string[]
+    declare: { reason: string; offMilestone: boolean; trigger: string } | null
+    grants: { entries: { characterId: string; amount: number }[]; reason: string }[]
+    chapter: { title: string; summary: string } | null
+    /** Marco pendente entregue a esta narração (`at` dele): sai depois de a fala ser gravada. */
+    claimedMilestoneAt: Date | null
+    /** Subidas por XP que esta narração recebeu para narrar. */
+    claimedLevelUps: string[]
+}
+
+export const emptyDraftProgression = (): MaddoxDraftProgression => ({ milestone: null, evaluated: [], evaluatedCombats: [], declare: null, grants: [], chapter: null, claimedMilestoneAt: null, claimedLevelUps: [] })
 
 /** Agente de um NPC Opex que não respondeu nesta geração (o Maddox decidiu por ele); o motivo só vai ao dono. */
 export interface MaddoxDraftOpexNpcFailure {
@@ -226,7 +247,7 @@ export function enqueueMaddoxJob(campaignId: string, label: string, run: (job: M
             return
         }
         const controller = new AbortController()
-        hub.jobs.set(jobId, { controller, meta, checks: [], combat: [], sceneImage: null, actionOptions: [], npcPortraits: [], workspace: null, liveId: null, reminders: [], opexNpcConsults: new Map(), opexNpcFailures: [], rest: null })
+        hub.jobs.set(jobId, { controller, meta, checks: [], combat: [], sceneImage: null, actionOptions: [], npcPortraits: [], workspace: null, liveId: null, reminders: [], opexNpcConsults: new Map(), opexNpcFailures: [], progression: emptyDraftProgression(), rest: null })
         try {
             const work = run({ jobId, signal: controller.signal })
             // O job que segue rodando depois da interrupção não derruba o processo com uma rejeição solta.
@@ -595,4 +616,18 @@ export function subscribeGameLive(campaignId: string, listener: Listener): () =>
         hubs.get(campaignId)?.listeners.delete(listener)
         prune(campaignId)
     }
+}
+
+/** Progressão de nível do job em andamento (mutável); `null` se o job não está rodando (DND-56). */
+export function jobDraftProgression(campaignId: string, jobId: string): MaddoxDraftProgression | null {
+    return hubs.get(campaignId)?.jobs.get(jobId)?.progression ?? null
+}
+
+/** Retira a progressão de nível do job (depois de gravar a fala). */
+export function takeDraftProgression(campaignId: string, jobId: string): MaddoxDraftProgression {
+    const job = hubs.get(campaignId)?.jobs.get(jobId)
+    if (!job) return emptyDraftProgression()
+    const progression = job.progression
+    job.progression = emptyDraftProgression()
+    return progression
 }

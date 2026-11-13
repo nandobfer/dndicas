@@ -5,6 +5,8 @@ import {
     MADDOX_COMBAT_DIFFICULTY_LEVELS,
     MADDOX_DEFAULT_DENSITY,
     MADDOX_DENSITY_LEVELS,
+    MADDOX_LEVEL_UP_STATUSES,
+    MADDOX_PROGRESSION_MODES,
     MADDOX_RIGOR_LEVELS,
     MADDOX_SCENARIO_STATUSES,
     MADDOX_TURN_PHASES,
@@ -12,6 +14,9 @@ import {
     type MaddoxCampaignStatus,
     type MaddoxCombatDifficultyLevel,
     type MaddoxDensityLevel,
+    type MaddoxLevelUpStatus,
+    type MaddoxMilestoneTrigger,
+    type MaddoxProgressionMode,
     type MaddoxRigorLevel,
     type MaddoxScenarioStatus,
     type MaddoxTurnPhase,
@@ -142,12 +147,75 @@ export interface IMaddoxCampaign {
          */
         publicFields?: MaddoxCampaignStateField[]
     }
+    /**
+     * Progressão de nível (DND-56, graus com ficha). `mode` é escolhido na criação (ausente = "marco"); `declared` guarda
+     * os níveis já declarados no modo Marco (não abrem duas vezes); `pendingMilestone` é o marco positivo que o Maddox
+     * ainda não declarou (vai como orientação para a próxima narração).
+     */
+    progression?: { mode?: MaddoxProgressionMode | null; declared?: IMaddoxLevelDeclaration[]; pendingMilestone?: IMaddoxPendingMilestone | null } | null
+    /** Degraus de subida de nível (um por personagem e por nível), concluídos em ordem (DND-56). */
+    levelUps?: IMaddoxLevelUp[]
+    /** Capítulos encerrados pelo Maddox (DND-56), no Diário. */
+    chapters?: IMaddoxChapter[]
     /** Quando o dono iniciou a campanha (Maddox 3). */
     startedAt: Date | null
     /** Link de convite (Maddox 1). `select: false`: só o dono o recebe; gerar outro invalida o anterior. */
     invite: { token: string | null; rotatedAt: Date | null }
     createdAt: Date
     updatedAt: Date
+}
+
+export interface IMaddoxLevelDeclaration {
+    id: string
+    level: number
+    reason: string
+    trigger: MaddoxMilestoneTrigger | "manual"
+    /** Declarado sem marco positivo (recompensa narrativa). */
+    offMilestone: boolean
+    turnNumber: number
+    messageId: Types.ObjectId | null
+    at: Date
+}
+
+export interface IMaddoxPendingMilestone {
+    trigger: MaddoxMilestoneTrigger
+    reason: string
+    turnNumber: number
+    at: Date
+}
+
+export interface IMaddoxLevelUp {
+    _id: Types.ObjectId
+    characterId: Types.ObjectId
+    memberId: Types.ObjectId
+    characterName: string
+    kind: "human" | "opex"
+    fromLevel: number
+    toLevel: number
+    source: MaddoxProgressionMode
+    declarationId: string | null
+    status: MaddoxLevelUpStatus
+    /** Ganhos aplicados na ficha (`LevelUpGains`). */
+    gains: Record<string, unknown> | null
+    /** Motivo da falha do Opex (só o dono vê). */
+    error: string | null
+    /** Card "Subida de nível" do chat. */
+    messageId: Types.ObjectId | null
+    /** O Maddox já narrou a subida (modo Experiência). */
+    narrated: boolean
+    createdAt: Date
+    doneAt: Date | null
+    doneBy: string | null
+    /** Quando o Personagem Opex começou a decidir (DND-56): sem execução em andamento, o degrau é retomado. */
+    decidingAt?: Date | null
+}
+
+export interface IMaddoxChapter {
+    _id: Types.ObjectId
+    title: string
+    summary: string
+    turnNumber: number
+    createdAt: Date
 }
 
 export interface MaddoxCampaignReset {
@@ -243,6 +311,48 @@ const MaddoxCampaignSchema = new Schema<IMaddoxCampaign>(
             updatedTurn: { type: Number, default: null },
             updatedAt: { type: Date, default: null },
             publicFields: { type: [String], default: [] },
+        },
+        progression: {
+            type: new Schema(
+                {
+                    mode: { type: String, enum: MADDOX_PROGRESSION_MODES, default: "marco" },
+                    declared: { type: [Schema.Types.Mixed], default: [] },
+                    pendingMilestone: { type: Schema.Types.Mixed, default: null },
+                },
+                { _id: false },
+            ),
+            default: null,
+        },
+        levelUps: {
+            type: [
+                new Schema(
+                    {
+                        characterId: { type: Schema.Types.ObjectId, required: true },
+                        memberId: { type: Schema.Types.ObjectId, required: true },
+                        characterName: { type: String, default: "" },
+                        kind: { type: String, enum: ["human", "opex"], default: "human" },
+                        fromLevel: { type: Number, required: true },
+                        toLevel: { type: Number, required: true },
+                        source: { type: String, enum: MADDOX_PROGRESSION_MODES, required: true },
+                        declarationId: { type: String, default: null },
+                        status: { type: String, enum: MADDOX_LEVEL_UP_STATUSES, default: "pending" },
+                        gains: { type: Schema.Types.Mixed, default: null },
+                        error: { type: String, default: null },
+                        messageId: { type: Schema.Types.ObjectId, default: null },
+                        narrated: { type: Boolean, default: false },
+                        createdAt: { type: Date, default: Date.now },
+                        doneAt: { type: Date, default: null },
+                        doneBy: { type: String, default: null },
+                        decidingAt: { type: Date, default: null },
+                    },
+                    { _id: true },
+                ),
+            ],
+            default: [],
+        },
+        chapters: {
+            type: [new Schema({ title: { type: String, required: true }, summary: { type: String, default: "" }, turnNumber: { type: Number, default: 0 }, createdAt: { type: Date, default: Date.now } }, { _id: true })],
+            default: [],
         },
         startedAt: { type: Date, default: null },
         invite: {

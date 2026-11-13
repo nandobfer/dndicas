@@ -176,3 +176,20 @@ export const patchAttack = (sheetId: string, attackId: string, data: PatchAttack
 
 export const removeAttack = (sheetId: string, attackId: string): Promise<{ success: boolean }> =>
     fetch(`${getCharacterSheetClientConfig().apiBase}/${sheetId}/attacks/${attackId}`, buildJsonRequestInit("DELETE")).then(handleResponse<{ success: boolean }>)
+
+// ─── Subida de nível (DND-56) ─────────────────────────────────────────────────
+
+export const fetchSheetLevelUp = (id: string, subclassId?: string | null, statusOnly = false): Promise<import("../level-up/level-up-types").SheetLevelUpState> => {
+    const query = new URLSearchParams()
+    if (subclassId) query.set("subclasse", subclassId)
+    if (statusOnly) query.set("situacao", "1")
+    const suffix = query.toString() ? `?${query.toString()}` : ""
+    return fetch(`${getCharacterSheetClientConfig().apiBase}/${id}/level-up${suffix}`, {
+        headers: {
+            ...getCharacterSheetClientConfig().getHeaders?.(),
+        },
+    }).then(handleResponse<import("../level-up/level-up-types").SheetLevelUpState>)
+}
+
+export const postSheetLevelUp = (id: string, choices: import("../level-up/level-up-types").LevelUpChoices): Promise<{ gains: import("../level-up/level-up-types").LevelUpGains }> =>
+    fetch(`${getCharacterSheetClientConfig().apiBase}/${id}/level-up`, buildJsonRequestInit("POST", choices)).then(handleResponse<{ gains: import("../level-up/level-up-types").LevelUpGains }>)

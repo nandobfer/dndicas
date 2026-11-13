@@ -23,6 +23,7 @@ import type {
     MaddoxJournalSearchMessageHit,
     MaddoxJournalStateDto,
     MaddoxJournalSummaryDto,
+    MaddoxJournalChapterDto,
 } from "../journal-types"
 import { loadMembership } from "./campaigns"
 import { isOpexUserId } from "./opex-members"
@@ -152,13 +153,20 @@ export async function getJournalSummary(campaignId: string, userId: string): Pro
         openingSituation: campaign.openingSituation ?? "",
         state: stateDto(campaign.state),
         activeQuests: activeQuests.map(memoryDto),
-        counts: { npcs, party, images, memories },
+        counts: { npcs, party, images, memories, chapters: (campaign.chapters ?? []).length },
         memoriesUnavailable: memoryState.unavailable,
         canManageOpexNpcs: await (await import("./opex-npcs")).canManageOpexNpcsAs(campaign.ownerId, userId),
     }
 }
 
 // ── Listas ─────────────────────────────────────────────────────────────────────
+
+/** Capítulos encerrados pelo Maddox (DND-56), do mais recente para o mais antigo. */
+export async function listJournalChapters(campaignId: string, userId: string): Promise<{ items: MaddoxJournalChapterDto[] }> {
+    const campaign = await loadJournalCampaign(campaignId, userId)
+    const chapters = [...(campaign.chapters ?? [])].sort((a, b) => b.turnNumber - a.turnNumber || iso(b.createdAt).localeCompare(iso(a.createdAt)))
+    return { items: chapters.map((chapter) => ({ id: String(chapter._id), title: chapter.title, summary: chapter.summary ?? "", turnNumber: chapter.turnNumber, createdAt: iso(chapter.createdAt) })) }
+}
 
 const cursorFilter = (cursor: string | undefined) => (cursor ? { _id: { $lt: new Types.ObjectId(cursor) } } : {})
 
@@ -384,6 +392,13 @@ export async function searchJournal(campaignId: string, input: unknown, userId: 
         party: group(partyHits),
         images: group(imageHits),
         state: stateHit ? { excerpt: excerptAround(stateHit, q) } : null,
+        chapters: group(
+            (campaign.chapters ?? [])
+                .filter((chapter) => regex.test(chapter.title) || regex.test(chapter.summary ?? ""))
+                .sort((a, b) => b.turnNumber - a.turnNumber)
+                .slice(0, take)
+                .map((chapter) => ({ id: String(chapter._id), title: chapter.title, turnNumber: chapter.turnNumber, excerpt: excerptAround(regex.test(chapter.summary ?? "") ? chapter.summary : chapter.summary || chapter.title, q) })),
+        ),
         memoriesUnavailable: memoryHits.unavailable,
     }
 }

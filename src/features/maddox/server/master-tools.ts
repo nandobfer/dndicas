@@ -43,6 +43,8 @@ import {
     MADDOX_OPEX_NPC_CONSULTS_PER_NARRATION,
     MADDOX_SHEET_FIX_TOOL_NAMES,
     MADDOX_CATALOG_TOOL_NAMES,
+    MADDOX_EXPERIENCE_GRANT_MAX,
+    MADDOX_PROGRESSION_TOOL_NAMES,
     MADDOX_EXHAUSTION_TOOL_NAME,
     MADDOX_REST_TOOL_NAME,
 } from "../constants"
@@ -348,7 +350,11 @@ export const MADDOX_MASTER_TOOLS: readonly MaddoxMasterTool[] = [
                     ...(tags ? { tags } : {}),
                     ...(input.kind === "missao" && input.status ? { status: input.status } : {}),
                 })
-                return { ...result, kind: input.kind, title, ...fit.notice() }
+                // DND-56: missão que passa a "concluida" é um acontecimento-chave do marco de nível.
+                const completed = input.kind === "missao" && input.status === "concluida" && result.previousStatus !== "concluida"
+                const milestone = completed ? await (await import("./progression-actions")).milestoneOnEvent(context, "quest-completed", title).catch(() => null) : null
+                const { previousStatus: _previousStatus, ...saved } = result
+                return { ...saved, kind: input.kind, title, ...(milestone ?? {}), ...fit.notice() }
             } catch (error) {
                 memoryToolError(error)
             }
@@ -841,7 +847,11 @@ export const MADDOX_COMBAT_TOOLS: readonly MaddoxMasterTool[] = [
                 finalScene: fit.fit("cenaFinal", input.cenaFinal),
             })
             if (!added) throw new MaddoxToolError("Esta narração já terminou.")
-            return { ended: true, title: state.title, rewards: rewards.length, note: "Narre o desfecho e termine num ponto de decisão.", ...fit.notice() }
+            // DND-56: o fim do combate é um acontecimento-chave do marco de nível (a orientação volta nesta mesma geração).
+            const { findActiveCombat } = await import("./combat")
+            const activeCombat = await findActiveCombat(context.campaignId)
+            const milestone = await (await import("./progression-actions")).milestoneOnEvent(context, "combat-end", state.title ?? "", activeCombat?._id ?? null).catch(() => null)
+            return { ended: true, title: state.title, rewards: rewards.length, note: "Narre o desfecho e termine num ponto de decisão.", ...(milestone ?? {}), ...fit.notice() }
         },
     }),
 ]
@@ -1298,8 +1308,75 @@ export const MADDOX_SHEET_FIX_TOOLS: readonly MaddoxMasterTool[] = [
     }),
 ]
 
+// ── Progressão de nível (DND-56) ───────────────────────────────────────────────
+
+/** Recusa da progressão vira mensagem para o modelo. */
+async function progressionCall<T>(run: (actions: typeof import("./progression-actions")) => Promise<T>): Promise<T> {
+    const [actions, { ProgressionRefusal }] = await Promise.all([import("./progression-actions"), import("./level-ups")])
+    try {
+        return await run(actions)
+    } catch (error) {
+        if (error instanceof ProgressionRefusal) throw new MaddoxToolError(error.message)
+        throw error
+    }
+}
+
+export const MADDOX_PROGRESSION_TOOLS: readonly MaddoxMasterTool[] = [
+    define({
+        name: MADDOX_PROGRESSION_TOOL_NAMES.evaluate,
+        description:
+            'Avalia agora se o grupo atingiu o marco de subida de nível (modo Marco). Use no "Pergunte ao mestre" quando um jogador perguntar sobre subir de nível ("não deveríamos ter subido?"). Positiva: a subida do grupo é acionada (anuncie-a). Negativa: explique o motivo. Durante o combate tático, a avaliação é recusada (só depois do combate).',
+        readOnly: false,
+        input: z.object({}),
+        async execute(context) {
+            return progressionCall((actions) => actions.evaluateMilestoneForQuestion(context))
+        },
+    }),
+    define({
+        name: MADDOX_PROGRESSION_TOOL_NAMES.declare,
+        description:
+            "Declara a subida de nível do GRUPO INTEIRO (modo Marco) para o maior nível do grupo + 1; quem está abaixo é igualado. Use quando o marco foi atingido (orientação do servidor) ou, fora de marco, quando a narrativa justificar (ex.: recompensa) — o motivo fica registrado. Recusa durante combate tático, acima do nível 20 ou nível já declarado. Narre o momento num trecho curto.",
+        readOnly: false,
+        input: z.object({ motivo: z.string().min(1).describe("Por que o grupo sobe agora (os jogadores leem no card)") }),
+        async execute(context, input) {
+            return progressionCall((actions) => actions.draftDeclaration(context, input.motivo))
+        },
+    }),
+    define({
+        name: MADDOX_PROGRESSION_TOOL_NAMES.chapter,
+        description: "Encerra um capítulo da história: registra o título e o resumo no Diário da campanha (todos os graus). Use ao fechar um arco da história, não a cada cena.",
+        readOnly: false,
+        input: z.object({ titulo: z.string().min(1).describe("Título do capítulo"), resumo: z.string().min(1).describe("Resumo do que aconteceu no capítulo (os jogadores leem no Diário)") }),
+        async execute(context, input) {
+            return progressionCall((actions) => actions.draftChapter(context, input.titulo, input.resumo))
+        },
+    }),
+    define({
+        name: MADDOX_PROGRESSION_TOOL_NAMES.grant,
+        description:
+            'Concede experiência (modo Experiência) aos personagens: missões (o grupo, com personagens ["grupo"]) e feitos individuais. Sem teto. No grau Equilibrado (combate narrativo), é a única forma de dar XP de combate. Gera um card no chat com o motivo; quem atingir o limiar do próximo nível sobe.',
+        readOnly: false,
+        input: z.object({
+            personagens: z.array(z.string().min(1)).min(1).describe('Nomes dos personagens ou ["grupo"]'),
+            valor: z.number().int().min(1).max(MADDOX_EXPERIENCE_GRANT_MAX).describe("XP para cada personagem"),
+            motivo: z.string().min(1),
+        }),
+        async execute(context, input) {
+            return progressionCall((actions) => actions.draftGrant(context, input.personagens, input.valor, input.motivo))
+        },
+    }),
+]
+
+export const MADDOX_PROGRESSION_ANSWER_TOOL_NAMES: readonly string[] = [MADDOX_PROGRESSION_TOOL_NAMES.evaluate]
+
 /** Todas as ferramentas do narrador (persistência, testes, combate, a vez dos adversários, a imagem da cena e as sugestões de ação). */
-export const MADDOX_NARRATOR_TOOLS: readonly MaddoxMasterTool[] = [...MADDOX_MASTER_TOOLS, ...MADDOX_COMBAT_TOOLS, ...MADDOX_TACTICAL_TOOLS, ...MADDOX_SCENE_IMAGE_TOOLS, ...MADDOX_ACTION_OPTIONS_TOOLS, ...MADDOX_OPEX_NPC_TOOLS, ...MADDOX_SHEET_FIX_TOOLS]
+export const MADDOX_NARRATOR_TOOLS: readonly MaddoxMasterTool[] = [...MADDOX_MASTER_TOOLS, ...MADDOX_COMBAT_TOOLS, ...MADDOX_TACTICAL_TOOLS, ...MADDOX_SCENE_IMAGE_TOOLS, ...MADDOX_ACTION_OPTIONS_TOOLS, ...MADDOX_OPEX_NPC_TOOLS, ...MADDOX_SHEET_FIX_TOOLS, ...MADDOX_PROGRESSION_TOOLS]
+
+/** Ferramentas de progressão oferecidas na geração (DND-56): o modo da campanha e o tipo da geração decidem. */
+export function progressionToolNames(options: { mode: "marco" | "experiencia" | null; answer: boolean }): string[] {
+    if (options.answer) return options.mode === "marco" ? [MADDOX_PROGRESSION_TOOL_NAMES.evaluate] : []
+    return [MADDOX_PROGRESSION_TOOL_NAMES.chapter, ...(options.mode === "marco" ? [MADDOX_PROGRESSION_TOOL_NAMES.declare] : []), ...(options.mode === "experiencia" ? [MADDOX_PROGRESSION_TOOL_NAMES.grant] : [])]
+}
 
 export function findMaddoxTool(name: string): MaddoxMasterTool | undefined {
     return MADDOX_NARRATOR_TOOLS.find((tool) => tool.name === name)
@@ -1331,10 +1408,12 @@ export const MADDOX_CHECK_TOOL_NAME = "request_check"
  * imagem da cena (Maddox 10); `actionOptions: false` tira a das sugestões de ação (DND-30); `opexNpcs: false` tira a consulta
  * aos NPCs Opex (DND-27; respostas a perguntas).
  */
-export async function buildMaddoxAiTools(context: MaddoxToolContext, options: { checks?: boolean; combat?: boolean; tactical?: boolean; sceneImages?: boolean; actionOptions?: boolean; opexNpcs?: boolean; sheetFix?: boolean; rest?: boolean } = {}): Promise<ToolSet> {
+export async function buildMaddoxAiTools(context: MaddoxToolContext, options: { checks?: boolean; combat?: boolean; tactical?: boolean; sceneImages?: boolean; actionOptions?: boolean; opexNpcs?: boolean; sheetFix?: boolean; progression?: string[]; rest?: boolean } = {}): Promise<ToolSet> {
     const { dynamicTool } = await import("ai")
     const tools: ToolSet = {}
+    const progressionNames = Object.values(MADDOX_PROGRESSION_TOOL_NAMES) as string[]
     for (const def of MADDOX_NARRATOR_TOOLS) {
+        if (progressionNames.includes(def.name) && !(options.progression ?? []).includes(def.name)) continue
         if (def.name === MADDOX_CHECK_TOOL_NAME && !options.checks) continue
         if (def.name === MADDOX_REST_TOOL_NAME && !options.rest) continue
         if ((MADDOX_COMBAT_TOOL_NAMES as readonly string[]).includes(def.name) && !options.combat) continue

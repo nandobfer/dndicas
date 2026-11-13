@@ -10,6 +10,8 @@ import {
     createAssistedSheet,
     patchSheet,
     deleteSheet,
+    fetchSheetLevelUp,
+    postSheetLevelUp,
     fetchItems,
     addItem,
     patchItem,
@@ -512,5 +514,49 @@ export function useRemoveAttack(sheetId: string) {
     return useMutation({
         mutationFn: (attackId: string) => removeAttack(sheetId, attackId),
         onSuccess: () => qc.invalidateQueries({ queryKey: sheetsKeys.attacks(sheetId) }),
+    })
+}
+
+// ─── Subida de nível (DND-56) ─────────────────────────────────────────────────
+
+export const levelUpKeys = {
+    options: (sheetId: string, subclassId: string | null) => [...sheetsKeys.all, "level-up", sheetId, "options", subclassId ?? ""] as const,
+    status: (sheetId: string) => [...sheetsKeys.all, "level-up", sheetId, "status"] as const,
+    all: (sheetId: string) => [...sheetsKeys.all, "level-up", sheetId] as const,
+}
+
+/** Opções do próximo nível (e a subida pendente da campanha, quando a ficha é de uma). */
+export function useSheetLevelUp(sheetId: string | null, subclassId: string | null = null, enabled = true) {
+    return useQuery({
+        queryKey: levelUpKeys.options(sheetId ?? "", subclassId),
+        queryFn: () => fetchSheetLevelUp(sheetId!, subclassId),
+        enabled: Boolean(sheetId) && enabled,
+        staleTime: 0,
+        refetchOnWindowFocus: true,
+    })
+}
+
+/** Só a situação da subida (ficha de campanha, degrau pendente, modo): leve, para o botão, o aviso e o campo XP. */
+export function useSheetLevelUpStatus(sheetId: string | null, enabled = true) {
+    return useQuery({
+        queryKey: levelUpKeys.status(sheetId ?? ""),
+        queryFn: () => fetchSheetLevelUp(sheetId!, null, true),
+        enabled: Boolean(sheetId) && enabled,
+        staleTime: 0,
+        refetchOnWindowFocus: true,
+        refetchInterval: 60_000,
+    })
+}
+
+export function useApplySheetLevelUp(sheetId: string) {
+    const qc = useQueryClient()
+    return useMutation({
+        mutationFn: (choices: import("../level-up/level-up-types").LevelUpChoices) => postSheetLevelUp(sheetId, choices),
+        onSuccess: () => {
+            void qc.invalidateQueries({ queryKey: levelUpKeys.all(sheetId) })
+            void qc.invalidateQueries({ queryKey: sheetsKeys.details() })
+            void qc.invalidateQueries({ queryKey: sheetsKeys.spells(sheetId) })
+            void qc.invalidateQueries({ queryKey: sheetsKeys.attacks(sheetId) })
+        },
     })
 }

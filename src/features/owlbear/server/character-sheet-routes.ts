@@ -100,6 +100,8 @@ export async function patchOwlbearSheet(req: NextRequest, id: string) {
         if (!sheet) return NextResponse.json({ error: "Ficha não encontrada" }, { status: 404 })
         return NextResponse.json(sheet)
     } catch (error) {
+        const { CampaignSheetPatchError } = await import("@/features/character-sheets/level-up/level-up-service")
+        if (error instanceof CampaignSheetPatchError) return NextResponse.json({ error: error.message }, { status: 409 })
         return owlbearErrorResponse(error, "[API] PATCH /api/owlbear/character-sheets/[id] error:")
     }
 }
@@ -340,5 +342,35 @@ export async function deleteOwlbearAttack(req: NextRequest, id: string, attackId
         return NextResponse.json({ success: true })
     } catch (error) {
         return owlbearErrorResponse(error, "[API] DELETE /api/owlbear/character-sheets/[id]/attacks/[attackId] error:")
+    }
+}
+
+/** Subida de nível pela ficha no Owlbear (DND-56): o mesmo motor da ficha, com o acesso conferido pela sessão do Owlbear. */
+async function levelUpErrorResponse(error: unknown, context: string) {
+    const { LevelUpError } = await import("@/features/character-sheets/level-up/level-up-context")
+    if (error instanceof LevelUpError) return NextResponse.json({ error: error.message }, { status: error.status })
+    return owlbearErrorResponse(error, context)
+}
+
+export async function getOwlbearLevelUp(req: NextRequest, id: string) {
+    try {
+        const { session } = await requireOwlbearSheetAccess(req, id)
+        const { getSheetLevelUp } = await import("@/features/character-sheets/level-up/level-up-service")
+        return NextResponse.json(await getSheetLevelUp(id, { userId: String(session.userId), checkOwner: false }, req.nextUrl.searchParams.get("subclasse"), req.nextUrl.searchParams.get("situacao") === "1"))
+    } catch (error) {
+        return levelUpErrorResponse(error, "[API] GET /api/owlbear/character-sheets/[id]/level-up error:")
+    }
+}
+
+export async function postOwlbearLevelUp(req: NextRequest, id: string) {
+    try {
+        const { session } = await requireOwlbearSheetAccess(req, id)
+        const { levelUpChoicesSchema } = await import("@/features/character-sheets/level-up/level-up-schemas")
+        const parsed = levelUpChoicesSchema.safeParse(await req.json().catch(() => null))
+        if (!parsed.success) return NextResponse.json({ error: "Dados inválidos", details: parsed.error.flatten() }, { status: 400 })
+        const { applySheetLevelUp } = await import("@/features/character-sheets/level-up/level-up-service")
+        return NextResponse.json(await applySheetLevelUp(id, { userId: String(session.userId), checkOwner: false }, parsed.data))
+    } catch (error) {
+        return levelUpErrorResponse(error, "[API] POST /api/owlbear/character-sheets/[id]/level-up error:")
     }
 }

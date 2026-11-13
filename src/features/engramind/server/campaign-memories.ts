@@ -128,6 +128,8 @@ export interface SaveCampaignMemoryResult {
     pending?: true
     truncated?: true
     aviso?: string
+    /** Missão: situação anterior à gravação (`null` = missão nova). Usado pelo marco de nível (DND-56). */
+    previousStatus?: string | null
 }
 
 export const PENDING_NOTICE = "A rede de memórias está indisponível: a memória entra assim que ela voltar e, até lá, não aparece no Diário nem na busca."
@@ -226,6 +228,7 @@ export async function saveCampaignMemory(campaignId: string, input: SaveCampaign
             saved: true,
             created,
             ...(existing?.status === "archived" ? { restored: true as const } : {}),
+            ...(input.kind === "missao" ? { previousStatus: previous?.status ?? null } : {}),
             ...(text.length < input.text.length ? { truncated: true as const, aviso: `Texto cortado em ${max} caracteres (limite da rede de memórias).` } : {}),
         }
     } catch (error) {

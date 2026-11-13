@@ -221,6 +221,8 @@ async function runMasterTurn(campaignId: Types.ObjectId, token: string, turnNumb
             if (restMessage) await (await import("./rest")).afterRestCreated(campaign, restMessage)
             // Lembranças desta narração (DND-25): guardadas como memória ou usadas só agora, depois da narração gravada.
             await (await import("./reminders")).commitReminders(campaignId, jobId, turnNumber)
+            // Progressão de nível (DND-56): capítulo, XP e declaração pedidos nesta geração, e a orientação do marco.
+            await (await import("./level-ups")).commitProgression(campaignId, jobId, turnNumber)
             // Imagens nas cenas (Maddox 10): a pedida nesta narração fica ligada a ela; os retratos marcados, aos NPCs.
             await scheduleDraftImages(campaignId, jobId, turnNumber, round, message!._id)
             if (drafts.length) log.info({ campaignId: String(campaignId), turnNumber, round, checks: drafts.length }, "[maddox] Maddox pediu testes")
@@ -779,6 +781,8 @@ export async function answerQuestion(campaignId: Types.ObjectId, jobId: string, 
         const message = await MaddoxCampaignMessageModel.create({ campaignId, turnNumber, phase: "players", kind: "answer", content: error ? "" : content, error, replyToId: questionId })
         stored = message.content
         live.end({ messageId: String(message._id), error })
+        // "Avaliar marco de nível" (DND-56): a subida acionada pela resposta entra logo abaixo dela.
+        if (!error) await (await import("./level-ups")).commitProgression(campaignId, jobId, turnNumber)
     } catch (failure) {
         live.end({ messageId: null, error: MADDOX_ANSWER_FAILED_MESSAGE })
         throw failure
@@ -933,6 +937,11 @@ async function messagesDto(all: MessageDoc[], viewer: MessagesViewer): Promise<M
         ? await (await import("./rest")).restDtos(messages, { userId: "", memberId: viewer.memberId, isOwner: viewer.isOwner }, new Map(characters.map((character) => [String(character._id), character.portraitUrl ?? null])))
         : null
     const userById = new Map(users.map((user) => [String(user._id), user.name?.trim() || user.username || "Dono"]))
+    // Cards "Subida de nível" (DND-56): o status de cada degrau é lido agora na campanha.
+    const levelUpMessage = messages.find((message) => message.kind === "level-up" && message.levelUp)
+    const levels = levelUpMessage || messages.some((message) => message.kind === "experience") ? await import("./level-ups") : null
+    const levelCampaign = levelUpMessage ? await MaddoxCampaignModel.findById(levelUpMessage.campaignId).select("_id levelUps").lean<Pick<CampaignDoc, "_id" | "levelUps">>() : null
+    const levelLookups = levels && levelCampaign ? await levels.levelUpLookups(levelCampaign) : null
     return messages.map((message) => {
         const character = message.characterId ? characterById.get(String(message.characterId)) : undefined
         const hiddenAction = isHiddenPlayerAction(message, viewer)
@@ -970,6 +979,9 @@ async function messagesDto(all: MessageDoc[], viewer: MessagesViewer): Promise<M
             ...(message.kind === "rest" && rests?.has(String(message._id)) ? { rest: rests.get(String(message._id))! } : {}),
             ...(message.kind === "rest-request" && message.restId ? { restId: String(message.restId) } : {}),
             ...(message.kind === "rewind" && message.rewindNotice ? { rewindNotice: { event: message.rewindNotice.event, turnNumber: message.rewindNotice.turnNumber, originTurn: message.rewindNotice.originTurn } } : {}),
+            ...(message.kind === "level-up" && message.levelUp && levels && levelCampaign && levelLookups ? { levelUp: levels.levelUpCardDto(message.levelUp, levelCampaign, { memberId: viewer.memberId, isOwner: viewer.isOwner }, levelLookups) } : {}),
+            ...(message.kind === "experience" && message.experience && levels ? { experience: levels.experienceCardDto(message.experience) } : {}),
+            ...(message.kind === "chapter" && message.chapter ? { chapter: { title: message.chapter.title, summary: message.chapter.summary } } : {}),
             createdAt: new Date(message.createdAt).toISOString(),
         }
     })
@@ -1189,6 +1201,7 @@ export async function getGameState(campaignId: string, userId: string): Promise<
             sheet: await mySheet(members.find(({ member }) => String(member._id) === String(loaded.member._id))?.character ?? null),
             combat: tacticalCombat && tacticalModule ? await tacticalModule.myCombatDto(tacticalCombat, String(loaded.member._id), Boolean(combatActor && String(combatActor.memberId) === String(loaded.member._id)), campaign._id, campaign.ownerId === userId) : null,
             rewind: rewindControl,
+            levelUps: await (await import("./level-ups")).viewerLevelUps(campaign, { memberId: String(loaded.member._id), isOwner: campaign.ownerId === userId }),
         },
         messages: page.messages,
         hasMore: page.hasMore,

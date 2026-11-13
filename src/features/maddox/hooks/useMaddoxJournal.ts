@@ -7,7 +7,7 @@ import { useDebounce } from "@/core/hooks/useDebounce"
 import type { MaddoxCampaignMemoryKind, MaddoxQuestStatus } from "../constants"
 import type { MaddoxGameMessagesPageDto } from "../game-types"
 import { MADDOX_JOURNAL_QUERY_MIN, type MaddoxJournalImageKind } from "../journal-schemas"
-import type { MaddoxJournalImageDto, MaddoxJournalMemoryDto, MaddoxJournalNpcDto, MaddoxJournalPageDto, MaddoxJournalPartyMemberDto, MaddoxJournalSearchDto, MaddoxJournalSummaryDto } from "../journal-types"
+import type { MaddoxJournalChapterDto, MaddoxJournalImageDto, MaddoxJournalMemoryDto, MaddoxJournalNpcDto, MaddoxJournalPageDto, MaddoxJournalPartyMemberDto, MaddoxJournalSearchDto, MaddoxJournalSummaryDto } from "../journal-types"
 import { MADDOX_CAMPAIGNS_KEY } from "./useMaddoxCampaigns"
 
 /**
@@ -62,6 +62,15 @@ export function useMaddoxJournalParty(campaignId: string, enabled = true) {
     return useQuery({
         queryKey: [...maddoxJournalKey(campaignId), "party"],
         queryFn: async () => unwrapApi((await api.get<ApiResponse<MaddoxJournalPartyMemberDto[]>>(`${journalPath(campaignId)}/party`)).data),
+        enabled,
+    })
+}
+
+/** Capítulos encerrados pelo Maddox (aba Capítulos, DND-56). */
+export function useMaddoxJournalChapters(campaignId: string, enabled = true) {
+    return useQuery({
+        queryKey: [...maddoxJournalKey(campaignId), "chapters"],
+        queryFn: async () => unwrapApi((await api.get<ApiResponse<{ items: MaddoxJournalChapterDto[] }>>(`${journalPath(campaignId)}/chapters`)).data).items,
         enabled,
     })
 }

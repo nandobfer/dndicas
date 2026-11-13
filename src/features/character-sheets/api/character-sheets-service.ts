@@ -10,6 +10,7 @@ import { CharacterAttack } from "../models/character-attack"
 import { User } from "@/features/users/models/user"
 import { generateSlug } from "../utils/slug"
 import { computeSheetArmorClass } from "../utils/armor-class"
+import { experienceValue } from "../utils/sheet-rules"
 import type {
     AdminSheetsListResponse,
     CharacterItem as CharacterItemType,
@@ -344,6 +345,8 @@ async function applyExhaustionDeath(id: string, data: PatchSheetBody) {
 
 export async function patchSheet(id: string, userId: string, data: PatchSheetBody, originId?: string) {
     await dbConnect()
+    // DND-56: em ficha de campanha Maddox, o nível (e a XP do modo Experiência) não muda por PATCH, em nenhum caminho.
+    await (await import("../level-up/level-up-service")).assertCampaignPatchAllowed(id, data)
 
     // When name changes, also update the slug
     const updateData: Record<string, unknown> = { ...data }
@@ -372,6 +375,8 @@ export async function patchSheet(id: string, userId: string, data: PatchSheetBod
 
 export async function patchSheetWithAccess(id: string, data: PatchSheetBody, originId?: string) {
     await dbConnect()
+    // DND-56: em ficha de campanha Maddox, o nível (e a XP do modo Experiência) não muda por PATCH, em nenhum caminho.
+    await (await import("../level-up/level-up-service")).assertCampaignPatchAllowed(id, data)
 
     const existing = await CharacterSheet.findById(id, { username: 1, userId: 1 }).lean()
     if (!existing) return null
@@ -727,6 +732,7 @@ function toPlainSheet(doc: any) {
         obj.spellSlots = Object.fromEntries(obj.spellSlots)
     }
     obj.notePages = Array.isArray(obj.notePages) ? obj.notePages : []
+    obj.experience = experienceValue(obj.experience)
     // lean() returns plain objects but savingThrows/skills/spellSlots may be plain already
     return obj
 }

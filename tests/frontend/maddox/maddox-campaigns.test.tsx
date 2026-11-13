@@ -222,7 +222,7 @@ describe("lista de campanhas", () => {
 
         fireEvent.change(screen.getByLabelText("Nome da campanha"), { target: { value: "Nova Mesa" } })
         fireEvent.click(screen.getByRole("button", { name: "Criar campanha" }))
-        await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns", { name: "Nova Mesa", rigor: "fiel-dnd", density: "equilibrada", combatDifficulty: "equilibrado", showCheckDc: false }))
+        await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns", { name: "Nova Mesa", rigor: "fiel-dnd", density: "equilibrada", combatDifficulty: "equilibrado", showCheckDc: false, progression: "marco" }))
         await waitFor(() => expect(push).toHaveBeenCalledWith("/campanhas/c9/entrevista/cenario"))
     })
 
@@ -240,7 +240,7 @@ describe("lista de campanhas", () => {
         await waitFor(() => expect(slider).toHaveAttribute("aria-valuetext", "Rigoroso"))
         fireEvent.change(screen.getByLabelText("Nome da campanha"), { target: { value: "Nova Mesa" } })
         fireEvent.click(screen.getByRole("button", { name: "Criar campanha" }))
-        await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns", { name: "Nova Mesa", rigor: "rigoroso", density: "equilibrada", combatDifficulty: "equilibrado", showCheckDc: true }))
+        await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns", { name: "Nova Mesa", rigor: "rigoroso", density: "equilibrada", combatDifficulty: "equilibrado", showCheckDc: true, progression: "marco" }))
     })
 
     it("CD dos testes na criação: grau narrativo esconde o campo e não envia showCheckDc", async () => {

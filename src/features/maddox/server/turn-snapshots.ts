@@ -107,6 +107,7 @@ async function collect(campaign: IMaddoxCampaign, turnNumber: number): Promise<O
         boundaryMessageId: last?._id ?? null,
         excerpt: await excerptForTurn(campaign, turnNumber),
         state: (campaign.state as unknown as Record<string, unknown>) ?? null,
+        progression: { progression: campaign.progression ?? null, levelUps: campaign.levelUps ?? [], chapters: campaign.chapters ?? [] },
         npcs,
         characters: characters.map((character) => ({ _id: character._id, currentState: character.currentState ?? "", currentStatePublic: Boolean(character.currentStatePublic), status: character.status })),
         sheets: await sheetsOf(sheetIds),
@@ -152,6 +153,8 @@ const idsOf = (rows: readonly { _id: unknown }[]) => rows.map((row) => row._id a
 export async function restoreSnapshot(snapshot: IMaddoxCampaignSnapshot): Promise<void> {
     const campaignId = snapshot.campaignId
     await MaddoxCampaignModel.updateOne({ _id: campaignId }, { $set: { state: snapshot.state ?? {} } }, { timestamps: false })
+    // Progressão de nível (DND-56): subidas, níveis declarados e capítulos voltam ao turno (retratos antigos não têm).
+    if (snapshot.progression) await MaddoxCampaignModel.collection.updateOne({ _id: campaignId }, { $set: { progression: snapshot.progression.progression ?? null, levelUps: snapshot.progression.levelUps ?? [], chapters: snapshot.progression.chapters ?? [] } })
 
     const npcIds = idsOf(snapshot.npcs as { _id: unknown }[])
     await MaddoxNpcModel.deleteMany({ campaignId, _id: { $nin: npcIds } })
