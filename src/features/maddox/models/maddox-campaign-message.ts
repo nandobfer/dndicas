@@ -17,6 +17,7 @@ import {
 } from "../constants"
 import type { CombatPrepChange, IMaddoxCombatAction, IMaddoxCombatReaction, IMaddoxCombatRoll } from "../combat-types"
 import { applyDiscardFilter, type IMaddoxDiscardMark } from "./discard-filter"
+import type { MaddoxRestType, RestLine, RestMissLine } from "../rest-rules"
 
 /**
  * Teste pedido pelo Maddox (Maddox 5) para o personagem da mensagem (`memberId`/`characterId`). A CD é sempre gravada
@@ -42,6 +43,66 @@ export interface IMaddoxCheck {
     rolledAt: Date | null
     /** Motivo do cancelamento (o jogador saiu da campanha). */
     cancelReason: string | null
+}
+
+/** Rolagem de um dado de vida no descanso curto (DND-58): valores absolutos gravados antes de escrever a ficha. */
+export interface IMaddoxRestHitDieRoll {
+    roll: DiceRollResponse
+    /** Total rolado (dado + Constituição) e a cura aplicada (nunca abaixo de 0). */
+    total: number
+    healed: number
+    hpBefore: number
+    hpAfter: number
+    usedAfter: number
+    rolledBy: string
+    at: Date
+}
+
+export const MADDOX_REST_PREP_STATUSES = ["pending", "running", "applying", "ready", "failed"] as const
+export type MaddoxRestPrepStatus = (typeof MADDOX_REST_PREP_STATUSES)[number]
+export type MaddoxRestHitDiceStatus = "none" | "open" | "done" | "declined" | "skipped"
+export type MaddoxRestExchangeStatus = "open" | "processing" | "done" | "nothing" | "skipped"
+
+/** Um personagem do descanso (DND-58): preparação da ficha, dados de vida (curto) e trocas. */
+export interface IMaddoxRestCharacter {
+    characterId: Types.ObjectId
+    memberId: Types.ObjectId
+    userId: string
+    sheetId: Types.ObjectId
+    name: string
+    opex: boolean
+    prep: {
+        status: MaddoxRestPrepStatus
+        attempts: number
+        /** Motivo técnico da falha (só o dono vê). */
+        error: string | null
+        token: string | null
+        /** Plano com os valores absolutos (gravado antes de escrever a ficha: reaplicar não soma). */
+        plan: { set: Record<string, unknown>; recovered: RestLine[]; notRecovered: RestMissLine[] } | null
+        recovered: RestLine[]
+        notRecovered: RestMissLine[]
+        /** "Seguir sem" do dono: as partes do catálogo ficaram sem recuperar. */
+        skippedCatalog: boolean
+        appliedAt: Date | null
+    }
+    hitDice: { status: MaddoxRestHitDiceStatus; die: string | null; rolls: IMaddoxRestHitDieRoll[] }
+    exchange: { status: MaddoxRestExchangeStatus; requests: number; applied: string[] }
+    /** Personagem Opex cujo agente falhou: o dono responde por ele. */
+    answeredBy: "player" | "owner"
+    opexError: string | null
+    /** Concluiu sem a parte dele: offline, saiu da campanha ou morreu. */
+    doneReason: "offline" | "left" | "dead" | null
+}
+
+/** Descanso conduzido pelo Maddox (`kind: "rest"`, DND-58). */
+export interface IMaddoxRest {
+    type: MaddoxRestType
+    status: "interrupted" | "running" | "closed"
+    description: string
+    interruption: string | null
+    jobId: string | null
+    closedAt: Date | null
+    characters: IMaddoxRestCharacter[]
 }
 
 export interface IMaddoxReminder {
@@ -121,6 +182,10 @@ export interface IMaddoxCampaignMessage {
      * `content` fica vazio (fora da transcrição do narrador e do Diário).
      */
     combatPrep: { combatId: Types.ObjectId; actorKey: string; characterName: string; changes: CombatPrepChange[]; question?: { prepId: string; text: string; status: "awaiting" | "answered" | "expired"; answer: string | null; deadline: Date; settled?: boolean; halted?: "discarded" | "failed" | null } | null } | null
+    /** Descanso (`kind: "rest"`, DND-58). */
+    rest?: IMaddoxRest | null
+    /** Pedido de troca após o descanso (`kind: "rest-request"`, DND-58): o descanso a que pertence. */
+    restId?: Types.ObjectId | null
     /** Linha de aviso da volta a um turno (DND-44, `kind: "rewind"`): ida ao turno X ou retomada do turno N. */
     rewindNotice?: { event: "goto" | "resume"; turnNumber: number; originTurn: number } | null
     /**
@@ -211,6 +276,8 @@ const MaddoxCampaignMessageSchema = new Schema<IMaddoxCampaignMessage>(
         levelUp: { type: Schema.Types.Mixed, default: null },
         experience: { type: Schema.Types.Mixed, default: null },
         chapter: { type: Schema.Types.Mixed, default: null },
+        rest: { type: Schema.Types.Mixed, default: null },
+        restId: { type: Schema.Types.ObjectId, default: null },
         rewindNotice: { type: new Schema({ event: { type: String, enum: ["goto", "resume"], required: true }, turnNumber: Number, originTurn: Number }, { _id: false }), default: null },
         actionOptions: {
             type: [

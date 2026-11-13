@@ -85,9 +85,6 @@ export const patchSheet = (id: string, data: PatchSheetBody): Promise<CharacterS
 export const deleteSheet = (id: string): Promise<{ success: boolean }> =>
     fetch(`${getCharacterSheetClientConfig().apiBase}/${id}`, buildJsonRequestInit("DELETE")).then(handleResponse<{ success: boolean }>)
 
-export const triggerLongRest = (id: string): Promise<CharacterSheet> =>
-    fetch(`${getCharacterSheetClientConfig().apiBase}/${id}/long-rest`, buildJsonRequestInit("POST")).then(handleResponse<CharacterSheet>)
-
 // ─── Items ────────────────────────────────────────────────────────────────────
 
 export const fetchItems = (sheetId: string): Promise<CharacterItem[]> =>

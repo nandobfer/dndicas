@@ -5,7 +5,7 @@ export { MaddoxNpcModel, type IMaddoxNpc, type IMaddoxNpcOpex } from "./maddox-n
 export { MaddoxInterviewScriptModel, type IMaddoxInterviewScript } from "./maddox-interview-script"
 export { MaddoxOpencodeSessionModel, type IMaddoxOpencodeSession } from "./maddox-opencode-session"
 export { MaddoxInterviewModel, type IMaddoxInterview, type IMaddoxInterviewMessage, type IMaddoxAbilityScoresCard, type IMaddoxAbilityBonus, type IMaddoxAbilityRolls, type MaddoxAbilityScores, type IMaddoxCharacterBuild, type IMaddoxBuildRef, type IMaddoxExtraSpell, type IMaddoxHitPointsCard, type IMaddoxWorldCatalog, type IMaddoxOpexDraft } from "./maddox-interview"
-export { MaddoxCampaignMessageModel, type IMaddoxCampaignMessage, type IMaddoxActionOptions, type IMaddoxOpexNpcFailure, type IMaddoxLevelUpCard, type IMaddoxExperienceCard } from "./maddox-campaign-message"
+export { MaddoxCampaignMessageModel, type IMaddoxCampaignMessage, type IMaddoxActionOptions, type IMaddoxOpexNpcFailure, type IMaddoxLevelUpCard, type IMaddoxExperienceCard, type IMaddoxRest, type IMaddoxRestCharacter, type IMaddoxRestHitDieRoll } from "./maddox-campaign-message"
 export { MaddoxCombatModel, type IMaddoxCombat, type IMaddoxCombatant, type IMaddoxCombatReward } from "./maddox-combat"
 export { MaddoxCombatOptionProfileModel, type IMaddoxCombatOptionProfile } from "./maddox-combat-option-profile"
 export { MaddoxSceneImageModel, type IMaddoxSceneImage, type IMaddoxSceneImageCatalogRef } from "./maddox-scene-image"

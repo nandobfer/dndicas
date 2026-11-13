@@ -27,7 +27,7 @@ const opex = vi.hoisted(() => ({ decide: vi.fn(async (): Promise<unknown> => ({ 
 vi.mock("@/features/maddox/server/opex-player", async (importOriginal) => ({
     ...(await importOriginal<typeof import("@/features/maddox/server/opex-player")>()),
     loadOpexModel: vi.fn(async () => ({ settings: {}, model: { provider: "openai", model: "x", agent: null, variant: null } })),
-    opexPromptContext: vi.fn(async () => ({ instructions: "", memories: "", basePrompt: "", campaign: { name: "Phandelver", rigor: "fiel-dnd", setting: "", openingSituation: "", state: { scene: "", location: "", situation: "", pendingDecision: "" } }, character: null })),
+    opexPromptContext: vi.fn(async () => ({ instructions: "", ownerGuidance: "", memories: "", table: [], basePrompt: "", campaign: { name: "Phandelver", rigor: "fiel-dnd", setting: "", openingSituation: "", state: { scene: "", location: "", situation: "", pendingDecision: "" } }, character: null })),
     decideOpex: opex.decide,
 }))
 

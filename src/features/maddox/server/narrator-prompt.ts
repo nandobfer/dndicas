@@ -134,8 +134,8 @@ export function tacticalCombatRule(rigor: MaddoxRigorLevel): string {
  */
 export const MADDOX_HIT_POINTS_RULE = [
     "## PV dos personagens",
-    "- Os PV ficam na ficha. Antes de narrar um personagem a 0 PV acordando, agindo ou se recuperando (cura, descanso, estabilização, primeiros socorros), chame `update_character_hit_points` com a operação pela regra e o motivo; sem isso, ele continua a 0 PV na ficha e entra no próximo combate caído.",
-    "- Descanso curto gasta dados de vida (`descanso-curto` com `dadosDeVida`); descanso longo recupera todos os PV e zera os testes contra a morte. Dentro do combate tático, os PV mudam pelas ações e pelo `apply_effect`.",
+    "- Os PV ficam na ficha. Antes de narrar um personagem a 0 PV acordando, agindo ou se recuperando (cura, estabilização, primeiros socorros), chame `update_character_hit_points` com a operação pela regra e o motivo; sem isso, ele continua a 0 PV na ficha e entra no próximo combate caído.",
+    "- Descanso NUNCA passa por `update_character_hit_points`: use `start_rest` (ele recupera PV, dados de vida, espaços e recursos). Dentro do combate tático, os PV mudam pelas ações e pelo `apply_effect`.",
 ].join("\n")
 
 /** Graus que julgam a validade da ação livre na narração (os demais validam ao declarar). */
@@ -334,14 +334,14 @@ function memoriesBlock(memories: readonly NarratorMemory[]): string | null {
     return parts.join("\n")
 }
 
-export type NarratorToolMode = { kind: "ai-sdk" } | { kind: "mcp"; server: string; turnToken: string; checks?: boolean; combat?: boolean; tactical?: boolean; sceneImages?: boolean; actionOptions?: boolean; opexNpcs?: boolean; sheetFix?: boolean; progression?: readonly string[] }
+export type NarratorToolMode = { kind: "ai-sdk" } | { kind: "mcp"; server: string; turnToken: string; checks?: boolean; combat?: boolean; tactical?: boolean; sceneImages?: boolean; actionOptions?: boolean; opexNpcs?: boolean; sheetFix?: boolean; progression?: readonly string[]; rest?: boolean }
 
 /** Bloco das ferramentas: na AI SDK elas vêm na chamada; no OpenCode, pelo MCP com o token de turno. */
 function toolsBlock(mode: NarratorToolMode): string | null {
     if (mode.kind === "ai-sdk") return null
     return [
         "## Ferramentas desta narração",
-        `- As ferramentas de anotações da campanha estão no servidor MCP \`${mode.server}\` (get_campaign_state, update_campaign_state, list_npcs, get_npc, save_npc, search_memories, save_memory, update_character_state, update_character_hit_points, resolve_reminder${mode.checks ? ", request_check" : ""}${mode.combat ? ", get_combat, start_combat, update_combat, end_combat" : ""}${mode.tactical ? ", monster_action, apply_effect, request_damage_roll, offer_reaction" : ""}${mode.sceneImages ? ", request_scene_image" : ""}${mode.actionOptions ? ", suggest_actions" : ""}, promover_npc_opex, desfazer_npc_opex, gravar_memoria_npc_opex${mode.opexNpcs ? ", consultar_npc_opex" : ""}${mode.sheetFix ? `, ${MADDOX_SHEET_FIX_TOOL_NAMES.join(", ")}` : ""}${mode.progression?.length ? `, ${mode.progression.join(", ")}` : ""}, ${MADDOX_CATALOG_TOOL_NAMES.search}, ${MADDOX_CATALOG_TOOL_NAMES.get}).`,
+        `- As ferramentas de anotações da campanha estão no servidor MCP \`${mode.server}\` (get_campaign_state, update_campaign_state, list_npcs, get_npc, save_npc, search_memories, save_memory, update_character_state, update_character_hit_points, update_character_exhaustion, resolve_reminder${mode.checks ? ", request_check" : ""}${mode.rest ? ", start_rest" : ""}${mode.combat ? ", get_combat, start_combat, update_combat, end_combat" : ""}${mode.tactical ? ", monster_action, apply_effect, request_damage_roll, offer_reaction" : ""}${mode.sceneImages ? ", request_scene_image" : ""}${mode.actionOptions ? ", suggest_actions" : ""}, promover_npc_opex, desfazer_npc_opex, gravar_memoria_npc_opex${mode.opexNpcs ? ", consultar_npc_opex" : ""}${mode.sheetFix ? `, ${MADDOX_SHEET_FIX_TOOL_NAMES.join(", ")}` : ""}${mode.progression?.length ? `, ${mode.progression.join(", ")}` : ""}, ${MADDOX_CATALOG_TOOL_NAMES.search}, ${MADDOX_CATALOG_TOOL_NAMES.get}).`,
         `- Em TODA chamada a essas ferramentas, envie o campo \`turno\` exatamente com este valor: \`${mode.turnToken}\`.`,
         "- Não use outras ferramentas (arquivos, terminal, web): a campanha vive só nessas anotações.",
     ].join("\n")
@@ -381,7 +381,7 @@ export function buildNarratorInstructions(context: NarratorPromptContext, mode: 
     parts.push(MADDOX_NARRATOR_RULES, usesChecks(context.rigor) ? checksRule(context.rigor) : MADDOX_NARRATIVE_MODE_RULE, rigorBlock(context.rigor))
     if (usesCombat(context.rigor)) parts.push(combatRule(context.rigor))
     if (usesTacticalCombat(context.rigor)) parts.push(tacticalCombatRule(context.rigor))
-    if (MADDOX_SHEET_RIGORS.includes(context.rigor)) parts.push(MADDOX_HIT_POINTS_RULE)
+    if (MADDOX_SHEET_RIGORS.includes(context.rigor)) parts.push(MADDOX_HIT_POINTS_RULE, MADDOX_REST_RULE)
     if (judgesFreeActionsInNarration(context.rigor)) parts.push(MADDOX_FREE_ACTION_RULE)
     parts.push(MADDOX_NARRATOR_FORMAT, MADDOX_PERSISTENCE_RULE, narratorCatalogRule(context.rigor, context.worldCatalog ?? null))
     const images = sceneImagesRule(context.sceneImages)
@@ -485,6 +485,17 @@ export type NarratorTask =
           /** DND-51: a conversa da pergunta até aqui (perguntas e respostas anteriores), da mais antiga à atual, sem a pergunta atual. */
           thread?: readonly { role: "player" | "maddox"; characterName: string | null; content: string }[]
           /** DND-51: o Maddox pode ler e corrigir a ficha pelo "Pergunte ao mestre" (graus com ficha). */
+          sheetFix?: boolean
+      }
+    | {
+          /** DND-58: trocas pedidas depois de um descanso (o Maddox avalia pelo catálogo e aplica na ficha). */
+          kind: "rest-exchange"
+          turnNumber: number
+          characterName: string
+          restType: "short" | "long"
+          request: string
+          /** Pedidos e respostas anteriores desta troca, do mais antigo ao atual (sem o pedido atual). */
+          thread?: readonly { role: "player" | "maddox"; characterName: string | null; content: string }[]
           sheetFix?: boolean
       }
 
@@ -610,7 +621,7 @@ export function opexNpcsTaskSection(names: readonly string[]): string | null {
  * `actionOptions`, a linha das sugestões de ação; com `opexNpcs`, a seção dos NPCs Opex (DND-27).
  */
 export function narratorTaskText(task: NarratorTask, options: { density?: MaddoxDensityLevel | null; combatDifficulty?: MaddoxCombatDifficultyLevel | null; actionOptions?: boolean; opexNpcs?: readonly string[] } = {}): string {
-    if (task.kind === "answer") return taskBody(task)
+    if (task.kind === "answer" || task.kind === "rest-exchange") return taskBody(task)
     return [
         taskBody(task),
         options.density ? narrationDensityLine(options.density) : null,
@@ -623,7 +634,7 @@ export function narratorTaskText(task: NarratorTask, options: { density?: Maddox
 }
 
 function taskBody(task: NarratorTask): string {
-    const tactical = task.kind !== "answer" ? task.tactical : null
+    const tactical = task.kind === "narration" || task.kind === "continuation" ? task.tactical : null
     const block = tactical?.block
     if (block?.kind === "npc" && !block.resumed && !tactical?.enemiesDown && !tactical?.charactersDown) {
         return [`# Turno ${task.turnNumber} do mestre — vez de ${block.actor}`, ...tacticalTaskLines(tactical), "", "Depois grave o que mudou."].join("\n")
@@ -641,6 +652,17 @@ function taskBody(task: NarratorTask): string {
             last
                 ? "Este é o último pedido de testes deste turno: resolva o que faltar sem novos testes, termine no próximo ponto de decisão e grave o que mudou."
                 : "Se a situação pedir um novo teste, peça-o e pare de novo; senão, termine no próximo ponto de decisão. Depois grave o que mudou.",
+        ].join("\n")
+    }
+    if (task.kind === "rest-exchange") {
+        const thread = task.thread ?? []
+        const rest = task.restType === "long" ? "descanso longo" : "descanso curto"
+        return [
+            `# Trocas depois do ${rest} (turno ${task.turnNumber})`,
+            ...(thread.length ? ["Conversa até aqui:", ...thread.map((entry) => (entry.role === "maddox" ? `- Maddox: ${entry.content.trim()}` : `- **${entry.characterName ?? task.characterName}**: ${entry.content.trim()}`)), ""] : []),
+            `**${task.characterName}** pede: ${task.request.trim()}`,
+            "",
+            MADDOX_REST_EXCHANGE_TASK_RULES,
         ].join("\n")
     }
     if (task.kind === "answer") {
@@ -688,6 +710,28 @@ export const MADDOX_SHEET_FIX_TASK_RULES = [
     "Se faltar um dado para corrigir (qual truque, qual item, quanto), pergunte antes de gravar. A correção nunca gasta a Ação do personagem nem fecha o turno.",
 ].join("\n")
 
+/** DND-58: regras fixas das trocas depois do descanso (valem com qualquer instrução salva na aba Agente Maddox). */
+export const MADDOX_REST_EXCHANGE_TASK_RULES = [
+    "## Como avaliar as trocas",
+    `O jogador diz, em linguagem natural, o que o personagem quer trocar depois deste descanso (magias preparadas, truques, invocações, manobras, maestrias de arma, o que a classe permitir). Leia a ficha com \`${MADDOX_SHEET_FIX_TOOL_NAMES[0]}\`, consulte no catálogo a classe, a subclasse e a característica que permite a troca (nível e tipo de descanso) e decida PELAS REGRAS DO CATÁLOGO.`,
+    `Aplique com \`${MADDOX_SHEET_FIX_TOOL_NAMES[2]}\` só o que a regra permite depois deste tipo de descanso: aceite tudo, parte ou recuse. Toda alteração de regra leva \`source\` (a entidade lida e o trecho exato). As magias preparadas que o jogador não citou ficam como estão.`,
+    "Na recusa, diga o motivo em uma frase (o jogador pode pedir de novo). Se o pedido for ambíguo (qual magia sai, qual entra), PERGUNTE e não aplique nada.",
+    "Responda em poucas frases, falando com o jogador: o que mudou e o que não mudou. Não avance a cena nem narre o que os outros fazem.",
+].join("\n")
+
+/**
+ * DND-58: descanso conduzido pelo Maddox (graus com ficha). O servidor faz a recuperação e as partes dos jogadores; o
+ * Maddox só decide se a cena permite, o tipo, quem descansa e o desfecho.
+ */
+export const MADDOX_REST_RULE = [
+    "## Descanso",
+    "- Só você inicia o descanso, quando os jogadores pedem e a cena permite (lugar seguro o bastante, tempo). Chame `start_rest` com o tipo (curto: 1 hora; longo: 8 horas), quem descansa (vazio = o grupo), o desfecho já decidido e uma frase do momento. Nunca use `update_character_hit_points` para descansar.",
+    "- Interrompido (emboscada, alarme, o tempo não deu): `desfecho: \"interrompido\"` com o motivo; nada é recuperado. Se a cena começar um combate, o descanso é interrompido sozinho.",
+    "- Concluído: o servidor prepara as fichas pela regra e pelo catálogo, os jogadores rolam os dados de vida (curto) e pedem as trocas que a classe permite; você só narra o descanso. Não use durante um combate.",
+    "## Exaustão",
+    "- A exaustão (0 a 6) fica na ficha: cada nível tira 2 de todo teste de d20, e no nível 6 o personagem morre. Quando a história causar ou aliviar exaustão (marcha forçada, fome, frio, magia), chame `update_character_exhaustion` com a variação e o motivo. O descanso longo concluído já tira 1 nível.",
+].join("\n")
+
 // ── Transcrição recente ────────────────────────────────────────────────────────
 
 export interface NarratorTranscriptMessage {
@@ -721,6 +765,10 @@ export function narratorTranscript(messages: readonly NarratorTranscriptMessage[
                         ? `[Turno ${message.turnNumber} — combate] ${content}`
                       : message.kind === "hit-points" || message.kind === "sheet-change"
                         ? `[Turno ${message.turnNumber} — ficha] ${content}`
+                      : message.kind === "rest"
+                        ? `[Turno ${message.turnNumber} — descanso] ${content}`
+                      : message.kind === "rest-request"
+                        ? `[Turno ${message.turnNumber} — ${who} pede uma troca depois do descanso] ${content}`
                       : message.kind === "pass"
                         ? `[Turno ${message.turnNumber} — ${who} não fez nada]`
                         : `[Turno ${message.turnNumber} — ${who} declara] ${content}`

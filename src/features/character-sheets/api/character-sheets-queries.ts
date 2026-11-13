@@ -10,7 +10,6 @@ import {
     createAssistedSheet,
     patchSheet,
     deleteSheet,
-    triggerLongRest,
     fetchSheetLevelUp,
     postSheetLevelUp,
     fetchItems,
@@ -184,16 +183,6 @@ export function useDeleteSheet() {
                 qc.invalidateQueries({ queryKey: sheetsKeys.lists() }),
                 qc.invalidateQueries({ queryKey: sheetsKeys.details() }),
             ])
-        },
-    })
-}
-
-export function useTriggerLongRest(id: string) {
-    const qc = useQueryClient()
-    return useMutation({
-        mutationFn: () => triggerLongRest(id),
-        onSuccess: (updated) => {
-            qc.setQueryData(sheetsKeys.detail(id), updated)
         },
     })
 }

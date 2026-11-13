@@ -32,7 +32,8 @@ interface CampaignHub {
 
 /** O que a geração faz: narração do turno do mestre (rodada de testes `round`) ou resposta a uma pergunta. */
 export interface MaddoxJobMeta {
-    kind: "narration" | "answer"
+    /** `rest-exchange` (DND-58): o Maddox avalia as trocas pedidas depois de um descanso. */
+    kind: "narration" | "answer" | "rest-exchange"
     turnNumber: number
     round: number
 }
@@ -50,6 +51,15 @@ export interface MaddoxDraftCheck {
     dc: number
     mode: "normal" | "advantage" | "disadvantage"
     reason: string
+}
+
+/** Descanso pedido pelo narrador (`start_rest`, DND-58), gravado logo abaixo da narração. */
+export interface MaddoxDraftRest {
+    type: "short" | "long"
+    outcome: "concluded" | "interrupted"
+    description: string
+    interruption: string | null
+    characters: { characterId: string; memberId: string; userId: string; sheetId: string; name: string; opex: boolean }[]
 }
 
 /** Adversário ou aliado informado pelo narrador (`start_combat`/`update_combat`). */
@@ -134,6 +144,8 @@ interface MaddoxJobState {
     opexNpcFailures: MaddoxDraftOpexNpcFailure[]
     /** Progressão de nível (DND-56): marco, declaração, XP e capítulo, gravados depois da fala. */
     progression: MaddoxDraftProgression
+    /** Descanso pedido nesta narração (DND-58; um por narração). */
+    rest: MaddoxDraftRest | null
 }
 
 /** Progressão de nível pedida pelo narrador na geração (DND-56), aplicada depois de a fala ser gravada. */
@@ -235,7 +247,7 @@ export function enqueueMaddoxJob(campaignId: string, label: string, run: (job: M
             return
         }
         const controller = new AbortController()
-        hub.jobs.set(jobId, { controller, meta, checks: [], combat: [], sceneImage: null, actionOptions: [], npcPortraits: [], workspace: null, liveId: null, reminders: [], opexNpcConsults: new Map(), opexNpcFailures: [], progression: emptyDraftProgression() })
+        hub.jobs.set(jobId, { controller, meta, checks: [], combat: [], sceneImage: null, actionOptions: [], npcPortraits: [], workspace: null, liveId: null, reminders: [], opexNpcConsults: new Map(), opexNpcFailures: [], progression: emptyDraftProgression(), rest: null })
         try {
             const work = run({ jobId, signal: controller.signal })
             // O job que segue rodando depois da interrupção não derruba o processo com uma rejeição solta.
@@ -337,6 +349,28 @@ export function takeDraftChecks(campaignId: string, jobId: string): MaddoxDraftC
     const checks = job.checks
     job.checks = []
     return checks
+}
+
+/** Descanso já pedido neste job (DND-58). */
+export function jobDraftRest(campaignId: string, jobId: string): MaddoxDraftRest | null {
+    return hubs.get(campaignId)?.jobs.get(jobId)?.rest ?? null
+}
+
+/** Guarda o descanso pedido pelo narrador; `false` se o job não está rodando ou já tem um descanso. */
+export function setDraftRest(campaignId: string, jobId: string, rest: MaddoxDraftRest): boolean {
+    const job = hubs.get(campaignId)?.jobs.get(jobId)
+    if (!job || job.rest) return false
+    job.rest = rest
+    return true
+}
+
+/** Retira o descanso do job (depois de gravar a narração). */
+export function takeDraftRest(campaignId: string, jobId: string): MaddoxDraftRest | null {
+    const job = hubs.get(campaignId)?.jobs.get(jobId)
+    if (!job) return null
+    const rest = job.rest
+    job.rest = null
+    return rest
 }
 
 /** Eventos de combate já pedidos neste job (o estado do combate considera banco + rascunho). */
@@ -513,6 +547,11 @@ export function emitCombatStepRolled(campaignId: string, messageId: string, step
 /** Avisa as mesas abertas que uma rolagem do combate tático saiu (todos repetem a animação). */
 export function emitCombatRolled(campaignId: string, messageId: string, roll: DiceRollResponse): void {
     emit(campaignId, { type: "combat-rolled", messageId, roll })
+}
+
+/** Avisa as mesas abertas que um dado de vida foi rolado no descanso (DND-58; todos veem o dado). */
+export function emitRestRolled(campaignId: string, messageId: string, characterId: string, roll: DiceRollResponse): void {
+    emit(campaignId, { type: "rest-rolled", messageId, characterId, roll })
 }
 
 /** Avisa as mesas abertas que um teste foi rolado (todos repetem a animação com o resultado oficial). */

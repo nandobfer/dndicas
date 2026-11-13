@@ -16,8 +16,9 @@ import { isHiddenPlayerAction } from "../player-actions-visibility"
 import { isMemberReadyToPlay } from "./campaigns"
 import { enqueueMaddoxJob, maddoxJobSignal } from "./game-live"
 import { narratorTranscript, checkResultLine } from "./narrator-prompt"
+import { restTranscriptLine } from "../rest-rules"
 import { isOpexMember } from "./opex-members"
-import { decideOpex, loadOpexModel, OpexDecisionInterruptedError, opexPromptContext } from "./opex-player"
+import { decideOpex, loadOpexModel, loadOpexTableRoster, OpexDecisionInterruptedError, opexPromptContext } from "./opex-player"
 import {
     buildOpexInstructions,
     opexCombatPlanSchema,
@@ -62,10 +63,24 @@ const scheduled = () => (opexScheduled.__maddoxOpexScheduled ??= new Set())
 
 // ── Transcrição vista pelo Opex ─────────────────────────────────────────────
 
-/** Transcrição recente do ponto de vista do Opex: as declarações ocultas dos outros ficam de fora (DND-36). */
+/** Mensagens de personagem que levam a marca de quem joga (DND-57). */
+const MARKED_KINDS = new Set(["question", "declaration", "pass"])
+
+/** Nome com a marca de quem controla o personagem: "(Personagem Opex)" ou "(jogador humano)" (DND-57). */
+export function markedCharacterName(name: string, kind: "human" | "opex"): string {
+    return `${name} (${kind === "opex" ? "Personagem Opex" : "jogador humano"})`
+}
+
+/**
+ * Transcrição recente do ponto de vista do Opex: as declarações ocultas dos outros ficam de fora (DND-36) e cada fala,
+ * pergunta, declaração ou "não fez nada" de personagem leva a marca de quem o controla (DND-57). Linhas de quem não
+ * está mais na campanha ficam sem marca. A transcrição do narrador não muda.
+ */
 async function opexTranscript(campaign: CampaignDoc, member: MemberDoc): Promise<string> {
     const { checkResultOf } = await import("./narrator")
-    const recent = (await MaddoxCampaignMessageModel.find({ campaignId: campaign._id }).sort({ _id: -1 }).limit(200).lean<MessageDoc[]>()).reverse()
+    const [messages, roster] = await Promise.all([MaddoxCampaignMessageModel.find({ campaignId: campaign._id }).sort({ _id: -1 }).limit(200).lean<MessageDoc[]>(), loadOpexTableRoster(campaign._id, String(member._id))])
+    const recent = messages.reverse()
+    const kindOf = new Map(roster.map((entry) => [entry.memberId, entry.kind]))
     const viewer = { memberId: String(member._id), hidePlayerActions: Boolean(campaign.hidePlayerActions) }
     return narratorTranscript(
         recent
@@ -78,7 +93,10 @@ async function opexTranscript(campaign: CampaignDoc, member: MemberDoc): Promise
                 if (message.combatReaction) return { turnNumber: message.turnNumber, kind: message.kind, characterName: null, content: `${message.characterName ?? "Personagem"} — reação (${message.combatReaction.description}): ${message.combatReaction.outcome ?? message.combatReaction.status}` }
                 if (message.kind === "check") return { turnNumber: message.turnNumber, kind: message.kind, characterName: null, content: check ? checkResultLine(check) : "" }
                 if (message.kind === "combat") return { turnNumber: message.turnNumber, kind: message.kind, characterName: null, content: "" }
-                return { turnNumber: message.turnNumber, kind: message.kind, characterName: message.characterName, content: message.content }
+                if (message.kind === "rest" && message.rest) return { turnNumber: message.turnNumber, kind: message.kind, characterName: null, content: restTranscriptLine(message.rest) }
+                const controller = MARKED_KINDS.has(message.kind) && message.memberId ? kindOf.get(String(message.memberId)) : undefined
+                const characterName = controller && message.characterName ? markedCharacterName(message.characterName, controller) : message.characterName
+                return { turnNumber: message.turnNumber, kind: message.kind, characterName, content: message.content }
             }),
         MADDOX_NARRATOR_HISTORY_CHARS,
     )
@@ -152,7 +170,7 @@ async function runOpexTurn(campaignId: Types.ObjectId, memberId: Types.ObjectId,
             const action = await decideOpex({
                 model,
                 instructions,
-                prompt: opexTableTask({ turnNumber, transcript, questionsLeft: Math.max(0, MADDOX_OPEX_QUESTIONS_MAX - questions), invalidReason }),
+                prompt: opexTableTask({ turnNumber, transcript, questionsLeft: Math.max(0, MADDOX_OPEX_QUESTIONS_MAX - questions), invalidReason, ownerGuidance: context.ownerGuidance }),
                 schema: opexTableActionSchema,
                 title: `Personagem Opex · turno ${turnNumber} · ${campaign.name}`,
                 origin: MADDOX_OPEX_TURN_CONSUMPTION_ORIGIN,
@@ -460,6 +478,8 @@ async function driveOnce(id: string): Promise<void> {
     await autoReactions(campaign, opex)
     // Subida de nível (DND-56): o agente decide em paralelo, sem segurar a mesa.
     await (await import("./level-up-opex")).autoLevelUps(campaign, opex)
+    // Descanso aberto (DND-58): a parte de cada Personagem Opex (dados de vida e trocas) entra na fila.
+    await (await import("./rest")).scheduleOpexRests(campaignId).catch((error: unknown) => log.warn({ campaignId: id, err: errorText(error) }, "[maddox] descanso do Personagem Opex não agendado"))
     const fresh = await MaddoxCampaignModel.findById(campaignId).lean<CampaignDoc>()
     if (!fresh || fresh.status !== "active" || fresh.turn?.phase !== "players") return
     const combatActor = fresh.turn.combatActor

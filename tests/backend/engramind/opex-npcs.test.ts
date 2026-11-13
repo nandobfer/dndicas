@@ -104,6 +104,20 @@ describe("agente do NPC Opex", () => {
         expect(channelMemories(ref).some((memory) => memory.key === "npc-inicial:segredos")).toBe(false)
     })
 
+    it("DND-57: grava a categoria escolhida pelo agente; a do Maddox (sem categoria) vira OUTRO e a inicial é FATO", async () => {
+        const ref = await setup()
+        await domain.promoteOpexNpc(ref.campaignId, { id: ref.npcId }, "system:maddox")
+        await domain.waitForOpexNpcWork()
+        await npcs.saveOpexNpcMemories(ref, [{ title: "Opinião sobre Kael", text: "Kael é arrogante.", category: "OPINIAO" }])
+        await npcs.saveOpexNpcMemories(ref, [{ title: "Recado", text: "O grupo pagou a dívida." }], "Maddox")
+        const byKey = new Map(channelMemories(ref).map((memory) => [memory.key, memory.category]))
+        expect(byKey.get("opex:opiniao-sobre-kael")).toBe("OPINIAO")
+        expect(byKey.get("opex:recado")).toBe("OUTRO")
+        expect(byKey.get("npc-inicial:descricao")).toBe("FATO")
+        expect(byKey.get("npc-inicial:segredos")).toBe("FATO")
+        expect([...byKey.values()].some((category) => ["PROJECT_RULES", "ARCHITECTURE", "CONSTRAINTS"].includes(category))).toBe(false)
+    })
+
     it("desfazer arquiva o canal, desativa o agente e revoga o token; promover de novo restaura as memórias e atualiza a inicial", async () => {
         const ref = await setup()
         await domain.promoteOpexNpc(ref.campaignId, { id: ref.npcId }, "system:maddox")

@@ -191,6 +191,12 @@ export function useSheetHeaderSections({ sheet, form, items = [], isReadOnly = f
     }
   }
 
+  const exhaustion = watch("exhaustion") ?? sheet.exhaustion ?? 0
+  const handleExhaustionToggle = (index: number) => {
+    if (isReadOnly) return
+    patchField("exhaustion", exhaustion === index ? index - 1 : index)
+  }
+
   const handleProgressionEnter = () => {
     if (closeTimeoutRef.current) clearTimeout(closeTimeoutRef.current)
     setIsProgressionOpen(true)
@@ -666,6 +672,28 @@ export function useSheetHeaderSections({ sheet, form, items = [], isReadOnly = f
                               ))}
                           </div>
                           <span className="text-[8px] font-black uppercase text-white/40">Falhas</span>
+                      </div>
+                  </div>
+                  <div className="mt-3 w-full max-w-[150px] border-t border-white/10 pt-2" data-testid="sheet-exhaustion" title="−2 em todos os testes de d20 por nível; no nível 6, o personagem morre.">
+                      <div className="flex items-center justify-between">
+                          <div className="flex gap-1">
+                              {[1, 2, 3, 4, 5, 6].map((i) => (
+                                  <button
+                                      key={`e-${i}`}
+                                      type="button"
+                                      aria-label={`Exaustão nível ${i}`}
+                                      aria-pressed={exhaustion >= i}
+                                      className={cn(
+                                          "w-2.5 h-2.5 rounded-full border transition-all",
+                                          !isReadOnly && "cursor-pointer",
+                                          exhaustion >= i ? "border-red-300 bg-red-400/80 shadow-[0_0_6px_rgba(248,113,113,0.5)]" : "border-white/30 bg-transparent",
+                                      )}
+                                      disabled={isReadOnly}
+                                      onClick={() => handleExhaustionToggle(i)}
+                                  />
+                              ))}
+                          </div>
+                          <span className="text-[8px] font-black uppercase text-white/40">Exaustão {exhaustion}</span>
                       </div>
                   </div>
               </div>

@@ -1267,3 +1267,60 @@ describe("mesa Maddox — preparação do combate (DND-41)", () => {
         await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns/c1/game/combat/adjustments", { economy: "action", optionId: "weapon:adaga", text: "a adaga tem acuidade" }))
     })
 })
+
+describe("mesa Maddox — descanso conduzido pelo Maddox (DND-58)", () => {
+    const restEntry = (over: Record<string, unknown> = {}) => ({
+        characterId: "c2",
+        name: "Lyra",
+        portraitUrl: null,
+        opex: false,
+        prep: { status: "ready" as const, recovered: [], notRecovered: [], skippedCatalog: false, error: null },
+        hitDice: { status: "open" as const, die: "d8", available: 2, hp: 5, hpMax: 20, constitution: 2, rolls: [] },
+        exchange: { status: "open" as const, applied: [], requests: 0 },
+        answeredBy: "player" as const,
+        doneReason: null,
+        done: false,
+        can: { roll: true, exchange: true, retryPrep: false },
+        ...over,
+    })
+    const restMessage = (entry = restEntry()) => message("0000000000000000000000r1", { kind: "rest", phase: "master", turnNumber: 2, rest: { type: "short", status: "running", description: "Uma fogueira.", interruption: null, characters: [entry] } })
+    const restingState = (entry = restEntry()) =>
+        gameState({
+            rigor: "fiel-dnd",
+            me: ME({ memberId: "m2", isOwner: false }),
+            turn: { number: 2, phase: "players", startedAt: null, generating: false, failed: false, awaitingChecks: false, pendingChecks: [], restWaiting: [{ characterName: "Lyra", parts: ["hit-dice", "exchange"] }] },
+            messages: [message("n2", { kind: "narration", phase: "master", turnNumber: 2, content: "Vocês param para descansar." }), restMessage(entry)],
+        })
+    const rollD8 = { rollId: "r1", terms: [{ dice: "d8", quantity: 1, results: [6] }], mode: "normal", diceTotal: 6, modifier: 2, total: 8, createdAt: "" }
+
+    it("o balão aparece no chat com os controles; 'Rolar dado de vida' chama a rota do descanso; faixa e assento mostram quem falta", async () => {
+        const state = restingState()
+        post.mockResolvedValue(ok({ roll: rollD8, state }))
+        await renderGame(state)
+        const card = screen.getByTestId("rest-card")
+        expect(card).toHaveTextContent("Descanso curto")
+        expect(card).toHaveTextContent("Uma fogueira.")
+        expect(screen.getByTestId("turn-banner")).toHaveTextContent("Descanso — aguardando Lyra (dados de vida, trocas)")
+        expect(screen.getByTestId("game-tools")).toHaveTextContent("Descansando")
+        await act(async () => fireEvent.click(within(card).getByRole("button", { name: "Rolar dado de vida" })))
+        await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns/c1/game/rests/0000000000000000000000r1/characters/c2/hit-dice/roll", {}))
+        expect(within(card).getByLabelText("Trocas de Lyra depois do descanso")).toBeInTheDocument()
+    })
+
+    it("as trocas enviam o texto pela rota do descanso", async () => {
+        const state = restingState(restEntry({ hitDice: { status: "none", die: "d8", available: 0, hp: 20, hpMax: 20, constitution: 2, rolls: [] } }))
+        post.mockResolvedValue(ok(state))
+        await renderGame(state)
+        fireEvent.change(screen.getByLabelText("Trocas de Lyra depois do descanso"), { target: { value: "Troco Escudo por Mísseis." } })
+        await act(async () => fireEvent.click(screen.getByRole("button", { name: "Enviar pedido de troca" })))
+        await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns/c1/game/rests/0000000000000000000000r1/characters/c2/exchange", { text: "Troco Escudo por Mísseis." }))
+    })
+
+    it("seatStatus: 'resting' só para quem ainda tem parte e está online", () => {
+        const turn = { number: 2, phase: "players" as const, startedAt: null, generating: false, failed: false, awaitingChecks: false, pendingChecks: [], restWaiting: [{ characterName: "Lyra", parts: ["exchange" as const] }] }
+        const lyra = participant("m2", "u-ana", "Lyra")
+        expect(seatStatus(lyra, { status: "active", turn }, { available: true, online: new Set(["u-ana"]) })).toBe("resting")
+        expect(seatStatus(lyra, { status: "active", turn }, { available: true, online: new Set() })).toBe("offline")
+        expect(seatStatus(participant("m3", "u-bia", "Borin"), { status: "active", turn }, { available: true, online: new Set(["u-bia"]) })).toBe("waiting")
+    })
+})

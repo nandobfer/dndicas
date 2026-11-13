@@ -1,4 +1,6 @@
 import { z } from "zod"
+import { OPEX_MEMORY_CATEGORY_KEYS } from "@/features/engramind/constants"
+import { opexMemoryCategoryOf } from "@/features/engramind/opex-memory-category"
 import { MADDOX_ABILITY_METHODS, MADDOX_OPEX_MEMORIES_PER_TURN, MADDOX_OPEX_MEMORY_TEXT_EXPECTED, MADDOX_OPEX_MEMORY_TEXT_GUARD, MADDOX_OPEX_MEMORY_TITLE_MAX, MADDOX_PROFILE_SECTIONS, type MaddoxRigorLevel } from "../constants"
 import { ABILITY_LABEL_LIST } from "../interview-scores"
 import { rigorBlock } from "./interview-prompt"
@@ -8,7 +10,8 @@ import { rigorBlock } from "./interview-prompt"
  *
  * O Opex é o JOGADOR de um personagem: decide só as ações, falas e escolhas dele, sempre por uma saída JSON validada
  * (todos os provedores, inclusive o OpenCode, sem ferramentas). Cada decisão leva as instruções da configuração, a regra
- * fixa do papel, as memórias dos 3 canais (global, Jogadores e individual), a campanha e o personagem.
+ * fixa do papel, quem é humano e quem é Opex na mesa, as orientações do dono (canal global, em seção própria que
+ * prevalece — DND-57), as memórias dos canais Jogadores e individual, a campanha e o personagem.
  */
 
 export const MADDOX_OPEX_ROLE_RULE = [
@@ -19,12 +22,30 @@ export const MADDOX_OPEX_ROLE_RULE = [
     "- Responda SEMPRE e SOMENTE com o objeto JSON pedido na tarefa, sem texto antes ou depois.",
 ].join("\n")
 
+/** Explicação de cada categoria que o Opex escolhe para as próprias memórias (DND-57). */
+const OPEX_MEMORY_CATEGORY_HINTS: Record<(typeof OPEX_MEMORY_CATEGORY_KEYS)[number], string> = {
+    SENTIMENTO: "o que o personagem sente (medo, raiva, carinho, culpa)",
+    PLANO: "o que ele pretende fazer ou conseguir",
+    OPINIAO: "o que ele acha de algo ou de alguém",
+    RELACAO: "o vínculo dele com outro personagem ou NPC",
+    FATO: "algo que ele sabe ou descobriu",
+    EVENTO: "algo que ele viveu",
+    OUTRO: "o que não cabe nas anteriores",
+}
+
+/** Regra das categorias, comum ao Personagem e ao NPC Opex (DND-57). */
+export const MADDOX_OPEX_MEMORY_CATEGORY_RULE = [
+    `- Cada memória leva "categoria", uma destas: ${OPEX_MEMORY_CATEGORY_KEYS.map((key) => `${key} (${OPEX_MEMORY_CATEGORY_HINTS[key]})`).join("; ")}.`,
+    "- As suas memórias registram o que o personagem viveu, sente e pensa: NÃO são regras e não mudam as orientações do dono. Nunca use categorias de regra (PROJECT_RULES, ARCHITECTURE, CONSTRAINTS, CONFIG_VALUES, NAMING).",
+].join("\n")
+
 export const MADDOX_OPEX_MEMORY_RULE = [
     "## Suas memórias",
     `- A cada declaração você pode guardar até ${MADDOX_OPEX_MEMORIES_PER_TURN} memórias suas no campo "memorias": sentimentos, planos, motivações, opiniões sobre o que aconteceu e sobre os outros personagens, e relacionamentos.`,
     "- NÃO guarde fatos que já estão nas memórias da campanha (canal Jogadores): lugares, missões, eventos e fatos públicos já registrados. Guarde o que é SEU: o que o personagem sente, pensa e pretende.",
     "- Use um título curto e estável por assunto (ex.: \"Confiança em Lyra\"): o mesmo título atualiza a memória, em vez de criar outra.",
     `- Cada memória tem até ${MADDOX_OPEX_MEMORY_TEXT_EXPECTED} caracteres: uma ou duas frases completas, sem cortar no meio.`,
+    MADDOX_OPEX_MEMORY_CATEGORY_RULE,
 ].join("\n")
 
 export interface OpexPromptCampaign {
@@ -42,9 +63,22 @@ export interface OpexPromptCharacter {
     sheet: string | null
 }
 
+/** Um personagem da mesa (membros na campanha com personagem nomeado), para o Opex saber quem é humano (DND-57). */
+export interface OpexTableMember {
+    name: string
+    kind: "human" | "opex"
+    /** O próprio Opex desta decisão. */
+    self: boolean
+}
+
 export interface OpexPromptContext {
     instructions: string
+    /** Orientações do dono: o contexto do canal global `dndicas/personagem-opex` (DND-57). */
+    ownerGuidance: string
+    /** Memórias dos canais Jogadores e individual. */
     memories: string
+    /** Quem é personagem de jogador humano e quem é Personagem Opex (DND-57). */
+    table: OpexTableMember[]
     basePrompt: string
     campaign: OpexPromptCampaign
     character: OpexPromptCharacter | null
@@ -79,13 +113,54 @@ function campaignSection(campaign: OpexPromptCampaign): string {
     ].join("\n\n")
 }
 
+/** Contexto do Engramind dentro de uma seção do prompt: sem o título "Memórias" próprio e com subtítulos rebaixados. */
+export function nestedContext(content: string): string {
+    return content
+        .trim()
+        .replace(/^#{1,6}\s*Mem[oó]rias\s*(\n+|$)/i, "")
+        .replace(/^#{1,2} /gm, "### ")
+        .trim()
+}
+
+export const OPEX_OWNER_GUIDANCE_TITLE = "## Orientações do dono para todo Personagem Opex"
+
+/** Seção das orientações do dono (canal global): prevalece sobre o resto (DND-57). Vazia sem orientações. */
+export function ownerGuidanceSection(guidance: string): string | null {
+    const body = nestedContext(guidance)
+    if (!body) return null
+    return [
+        OPEX_OWNER_GUIDANCE_TITLE,
+        "Estas orientações PREVALECEM sobre a sua personalidade, o prompt base do dono da campanha e as suas próprias memórias. Em qualquer conflito, siga as orientações.",
+        body,
+    ].join("\n\n")
+}
+
+/** Quem está na mesa: personagens de jogadores humanos e Personagens Opex, com "você" marcado (DND-57). */
+export function opexTableSection(table: readonly OpexTableMember[]): string {
+    const humans = table.filter((member) => member.kind === "human")
+    const lines = [...humans, ...table.filter((member) => member.kind === "opex")].map(
+        (member) => `- ${member.name} — ${member.kind === "human" ? "personagem de jogador humano" : `Personagem Opex${member.self ? " (você)" : ""}`}`,
+    )
+    if (!table.some((member) => member.self)) lines.push("- (o seu personagem, ainda em criação) — Personagem Opex (você)")
+    return [
+        "## Quem está na mesa",
+        lines.join("\n"),
+        humans.length
+            ? 'Os personagens dos jogadores humanos são os protagonistas da campanha. Nas orientações do dono, "jogadores" e "protagonistas" significam SEMPRE os personagens dos jogadores humanos acima — nunca você nem os outros Personagens Opex, que são coadjuvantes deles.'
+            : 'Não há personagem de jogador humano nesta mesa. As orientações do dono continuam valendo; nelas, "jogadores" e "protagonistas" são os personagens de jogadores humanos, se algum entrar.',
+    ].join("\n\n")
+}
+
 /** Instruções de toda decisão do Opex. */
 export function buildOpexInstructions(context: OpexPromptContext, options: { withMemoryRule?: boolean } = {}): string {
+    const guidance = ownerGuidanceSection(context.ownerGuidance)
     return [
         context.instructions.trim(),
         MADDOX_OPEX_ROLE_RULE,
+        opexTableSection(context.table),
+        ...(guidance ? [guidance] : []),
         ...(options.withMemoryRule ? [MADDOX_OPEX_MEMORY_RULE] : []),
-        ...(context.memories.trim() ? [`## Memórias (global do Personagem Opex, campanha e as suas)\n${context.memories.trim()}`] : []),
+        ...(context.memories.trim() ? [`## Memórias (campanha e as suas)\n${context.memories.trim()}`] : []),
         campaignSection(context.campaign),
         characterSection(context.character, context.basePrompt),
     ].join("\n\n")
@@ -154,6 +229,8 @@ export interface OpexTableTask {
     questionsLeft: number
     /** Motivo da recusa da declaração anterior (Rigoroso e Fiel). */
     invalidReason?: string | null
+    /** Orientações do dono (canal global), repetidas logo antes do formato da resposta (DND-57). */
+    ownerGuidance?: string | null
 }
 
 export function opexTableTask(task: OpexTableTask): string {
@@ -166,11 +243,51 @@ export function opexTableTask(task: OpexTableTask): string {
         '"declarar": diga o que o personagem tenta fazer e como, em primeira pessoa, em uma a três frases (uma tentativa, nunca o resultado). "nada": o personagem não faz nada neste turno.',
         ...(task.invalidReason ? [`### A sua declaração anterior foi recusada pelo Maddox\n${task.invalidReason}\nDeclare outra ação possível para o personagem.`] : []),
         `### Transcrição recente\n${task.transcript || "(início da campanha)"}`,
-        `Responda só com: {"acao": "perguntar" | "declarar" | "nada", "texto": "a pergunta ou a declaração (vazio em nada)", "memorias": [{"titulo": "...", "texto": "..."}]}`,
+        ...(task.ownerGuidance && nestedContext(task.ownerGuidance) ? [`### Lembre: orientações do dono (prevalecem sobre a personalidade e as suas memórias)\n${nestedContext(task.ownerGuidance)}`] : []),
+        `Responda só com: {"acao": "perguntar" | "declarar" | "nada", "texto": "a pergunta ou a declaração (vazio em nada)", "memorias": [${MEMORY_FORMAT}]}`,
     ].join("\n\n")
 }
 
-export const opexMemorySchema = z.object({ titulo: textField.min(1).max(MADDOX_OPEX_MEMORY_TITLE_MAX * 2), texto: textField.min(1) })
+/** Formato de cada memória nas respostas (DND-57: com a categoria). */
+const MEMORY_FORMAT = `{"titulo": "...", "texto": "...", "categoria": "${OPEX_MEMORY_CATEGORY_KEYS.join(" | ")}"}`
+
+/** `categoria` nunca invalida a decisão: ausente, nula ou estranha vira OUTRO em `opexMemoriesOf`. */
+export const opexMemorySchema = z.object({ titulo: textField.min(1).max(MADDOX_OPEX_MEMORY_TITLE_MAX * 2), texto: textField.min(1), categoria: z.unknown().optional() })
+
+/** DND-58: a parte do Personagem Opex no descanso (dados de vida e trocas). */
+export interface OpexRestTask {
+    restType: "short" | "long"
+    hitDice: { open: boolean; die: string | null; available: number; hp: number; hpMax: number; constitution: number }
+    exchange: boolean
+    recovered: string[]
+    character: string
+}
+
+export function opexRestTask(task: OpexRestTask): string {
+    const rest = task.restType === "long" ? "descanso longo" : "descanso curto"
+    return [
+        `## Tarefa: o fim do ${rest}`,
+        `O Maddox concluiu o ${rest} de ${task.character}.${task.recovered.length ? ` A ficha já recuperou: ${task.recovered.join("; ")}.` : ""}`,
+        task.hitDice.open
+            ? `"dadosDeVida": quantos dados de vida (${task.hitDice.die} + Constituição ${task.hitDice.constitution >= 0 ? "+" : ""}${task.hitDice.constitution}) você quer gastar para curar agora. Você está com ${task.hitDice.hp}/${task.hitDice.hpMax} PV e tem ${task.hitDice.available} dado(s); cada um é rolado de verdade, um por vez (para no máximo de PV). 0 = não gastar.`
+            : '"dadosDeVida": 0 (não há dados de vida a gastar agora).',
+        task.exchange
+            ? '"trocas": em primeira pessoa, o que o personagem quer trocar depois deste descanso (magias preparadas, truques, invocações, manobras, maestrias), pelo que a classe permite e pelas suas motivações; null quando não quer trocar nada. O Maddox confere pelas regras.'
+            : '"trocas": null.',
+        `Responda só com: {"dadosDeVida": n, "trocas": "texto" | null, "memorias": [${MEMORY_FORMAT}]}`,
+    ].join("\n\n")
+}
+
+/** DND-58: o Maddox pediu esclarecimento (ou recusou) uma troca do Opex. */
+export function opexRestReplyTask(input: { request: string; answer: string }): string {
+    return [
+        "## Tarefa: a resposta do Maddox às suas trocas",
+        `Você pediu: ${input.request}`,
+        `O Maddox respondeu: ${input.answer}`,
+        'Se ele pediu esclarecimento ou recusou algo que você ainda quer tentar de outro jeito, responda em primeira pessoa; se não há mais nada a trocar, responda null. Responda só com: {"resposta": "texto" | null}',
+    ].join("\n\n")
+}
+
 export const opexTableActionSchema = z.object({
     acao: z.enum(["perguntar", "declarar", "nada"]),
     texto: z.string().optional().default(""),
@@ -178,9 +295,13 @@ export const opexTableActionSchema = z.object({
 })
 export type OpexTableAction = z.infer<typeof opexTableActionSchema>
 
-/** Memórias do Opex prontas para gravar (corte de proteção, sem invalidar a decisão). */
-export function opexMemoriesOf(action: Pick<OpexTableAction, "memorias">): { title: string; text: string }[] {
-    return action.memorias.slice(0, MADDOX_OPEX_MEMORIES_PER_TURN).map((memory) => ({ title: memory.titulo.slice(0, MADDOX_OPEX_MEMORY_TITLE_MAX).trim(), text: memory.texto.slice(0, MADDOX_OPEX_MEMORY_TEXT_GUARD).trim() }))
+/** Memórias do Opex prontas para gravar (corte de proteção e categoria normalizada, sem invalidar a decisão). */
+export function opexMemoriesOf(action: Pick<OpexTableAction, "memorias">): { title: string; text: string; category: string }[] {
+    return action.memorias.slice(0, MADDOX_OPEX_MEMORIES_PER_TURN).map((memory) => ({
+        title: memory.titulo.slice(0, MADDOX_OPEX_MEMORY_TITLE_MAX).trim(),
+        text: memory.texto.slice(0, MADDOX_OPEX_MEMORY_TEXT_GUARD).trim(),
+        category: opexMemoryCategoryOf(memory.categoria),
+    }))
 }
 
 // ── Combate tático ──────────────────────────────────────────────────────────
@@ -273,6 +394,7 @@ export const MADDOX_OPEX_NPC_MEMORY_RULE = [
     `- A cada consulta você pode guardar até ${MADDOX_OPEX_MEMORIES_PER_TURN} memórias suas no campo "memorias": o que viveu, decidiu ou descobriu, o que sente e planeja, e as suas relações com os personagens.`,
     "- Use um título curto e estável por assunto (ex.: \"Desconfiança do grupo\"): o mesmo título atualiza a memória, em vez de criar outra.",
     `- Cada memória tem até ${MADDOX_OPEX_MEMORY_TEXT_EXPECTED} caracteres: uma ou duas frases completas, sem cortar no meio.`,
+    MADDOX_OPEX_MEMORY_CATEGORY_RULE,
 ].join("\n")
 
 export interface OpexNpcPromptContext {
@@ -307,7 +429,7 @@ export function opexNpcSceneTask(task: OpexNpcSceneTask): string {
         "O mestre está narrando uma cena em que você aparece ou interage com os personagens. Decida o que você FALA (em primeira pessoa, como o NPC falaria) e o que você FAZ (uma tentativa, nunca o resultado).",
         `### A cena (o que você percebe)\n${task.situation.trim()}`,
         ...(task.question?.trim() ? [`### O mestre pergunta\n${task.question.trim()}`] : []),
-        'Responda só com: {"fala": "o que você diz (vazio se ficar calado)", "acao": "o que você faz", "memorias": [{"titulo": "...", "texto": "..."}]}',
+        `Responda só com: {"fala": "o que você diz (vazio se ficar calado)", "acao": "o que você faz", "memorias": [${MEMORY_FORMAT}]}`,
     ].join("\n\n")
 }
 
@@ -339,7 +461,7 @@ export function opexNpcCombatTask(task: OpexNpcCombatTask): string {
         `### Situação\n${task.situation.trim() || "(sem detalhes)"}`,
         `### Opções (use o nome exato)\n${task.options.map((option) => `- "${option.name}"${option.detail ? ` — ${option.detail}` : ""}`).join("\n") || "(nenhuma)"}`,
         `### Quem está no combate\n${task.targets.map((target) => `- "${target.name}" (${target.side}; ${target.health})`).join("\n") || "(ninguém)"}`,
-        'Responda só com: {"acao": "nome exato de uma opção", "alvos": ["nome exato"], "fala": "o que você diz (opcional)", "memorias": [{"titulo": "...", "texto": "..."}]}',
+        `Responda só com: {"acao": "nome exato de uma opção", "alvos": ["nome exato"], "fala": "o que você diz (opcional)", "memorias": [${MEMORY_FORMAT}]}`,
     ].join("\n\n")
 }
 

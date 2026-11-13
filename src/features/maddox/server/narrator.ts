@@ -33,9 +33,10 @@ import {
 } from "../models"
 import type { MaddoxSettings } from "../schemas"
 import { resolveNarratorModel, type MaddoxResolvedModel } from "../model-resolution"
-import type { MaddoxAnswerContext, MaddoxMaster, MaddoxMasterSink, MaddoxNarrationContext } from "./game-master"
+import type { MaddoxAnswerContext, MaddoxMaster, MaddoxMasterSink, MaddoxNarrationContext, MaddoxRestExchangeContext } from "./game-master"
 import { checkTitle, sheetSummary, type MaddoxCheckSheet } from "../check-modifier"
 import { worldCatalogOf } from "../world-catalog"
+import { restTranscriptLine } from "../rest-rules"
 import { buildNarratorInstructions, checkResultLine, narratorTaskText, narratorTranscript, usesChecks, usesCombat, usesTacticalCombat, type NarratorCheckResult, type NarratorDeclaration, type NarratorPromptContext, type NarratorTacticalTask, type NarratorTask } from "./narrator-prompt"
 import { isOpexUserId } from "./opex-members"
 import { MADDOX_OPEX_LABEL, MADDOX_SHEET_RIGORS, maddoxOpexNpcFallbackNote } from "../constants"
@@ -395,28 +396,31 @@ async function generate(args: GenerateArgs, sink: MaddoxMasterSink): Promise<str
                 if (message.levelUp) return { turnNumber: message.turnNumber, kind: message.kind, characterName: null, content: `Subida de nível para o nível ${message.levelUp.toLevel}: ${message.levelUp.reason}` }
                 if (message.experience) return { turnNumber: message.turnNumber, kind: message.kind, characterName: null, content: `Experiência (${message.experience.reason}): ${message.experience.entries.map((entry) => `${entry.characterName} +${entry.amount} XP (total ${entry.total})`).join(", ")}` }
                 if (message.chapter) return { turnNumber: message.turnNumber, kind: message.kind, characterName: null, content: `Capítulo encerrado: ${message.chapter.title}` }
+                if (message.kind === "rest" && message.rest) return { turnNumber: message.turnNumber, kind: message.kind, characterName: null, content: restTranscriptLine(message.rest) }
                 if (message.combatReaction) return { turnNumber: message.turnNumber, kind: message.kind, characterName: null, content: `${message.characterName ?? "Personagem"} — reação (${message.combatReaction.description}): ${message.combatReaction.outcome ?? message.combatReaction.status}` }
                 return { turnNumber: message.turnNumber, kind: message.kind, characterName: message.characterName, content: check ? checkResultLine(check) : message.content }
             }),
         MADDOX_NARRATOR_HISTORY_CHARS,
     )
     const { mentionsToMarkup } = await import("./catalog-mentions")
+    // DND-58: as trocas depois do descanso são como uma resposta (sem testes, combate, imagens nem sugestões).
+    const task = args.task
+    const narrating = task.kind === "narration" || task.kind === "continuation"
     // Injetar Lembrança (DND-25): as pendentes valem para esta narração (as enviadas durante ela, para a próxima).
     let remindersText = ""
-    if (args.task.kind !== "answer") {
+    if (narrating) {
         const { claimReminders, remindersTaskSection } = await import("./reminders")
         remindersText = remindersTaskSection(await claimReminders(campaignId, args.jobId), usesTacticalCombat(context.campaign.rigor))
     }
     // Sugestões de ação (DND-30): só nas narrações fora do combate tático (lá a vez é pelos botões).
-    const actionOptions = args.task.kind !== "answer" && !args.task.tactical
+    const actionOptions = narrating && !task.tactical
     // Dificuldade dos combates (DND-42): só nos graus táticos e nas narrações (não nas respostas); com o combate tático em
     // andamento, a tarefa leva a versão curta, para os reforços.
-    const combatDifficulty = args.task.kind !== "answer" && usesTacticalCombat(context.campaign.rigor) ? (context.campaign.combatDifficulty ?? MADDOX_COMBAT_DIFFICULTY_DEFAULT) : null
+    const combatDifficulty = narrating && usesTacticalCombat(context.campaign.rigor) ? (context.campaign.combatDifficulty ?? MADDOX_COMBAT_DIFFICULTY_DEFAULT) : null
     // NPCs Opex (DND-27): a consulta ao agente só existe nas narrações (nas respostas, o Maddox decide sozinho).
-    const opexNpcs = args.task.kind !== "answer" && context.opexNpcNames.length > 0
+    const opexNpcs = narrating && context.opexNpcNames.length > 0
     // No bloco de um adversário do combate tático, o servidor já consultou o agente (a decisão ou a falha vêm na tarefa): a
     // seção que manda consultar fica de fora.
-    const npcBlock = args.task.kind !== "answer" && args.task.tactical?.block?.kind === "npc"
     // Progressão de nível (DND-56): ferramentas pelo modo e pela geração; o marco pendente e as subidas por XP a narrar vão
     // na tarefa desta narração (saem depois de a fala ser gravada, em `commitProgression`).
     const levels = await import("./level-ups")
@@ -437,6 +441,7 @@ async function generate(args: GenerateArgs, sink: MaddoxMasterSink): Promise<str
         const { progressionTaskLines } = await import("./narrator-prompt")
         progressionText = progressionTaskLines({ milestone: pending ? { trigger: pending.trigger, reason: pending.reason } : null, levelUps: narrate })
     }
+    const npcBlock = narrating && task.tactical?.block?.kind === "npc"
     const userText = [
         transcript ? `# Últimos acontecimentos\n\n${mentionsToMarkup(transcript)}` : null,
         narratorTaskText(args.task, { density: context.campaign.density ?? MADDOX_DEFAULT_DENSITY, combatDifficulty, actionOptions, opexNpcs: opexNpcs && !npcBlock ? context.opexNpcNames : [] }),
@@ -450,25 +455,27 @@ async function generate(args: GenerateArgs, sink: MaddoxMasterSink): Promise<str
     const stream = liveText(sink)
     let failure: string | null = null
     // Testes só nas narrações do turno do mestre dos graus com ficha (respostas a perguntas nunca pedem teste).
-    const checks = usesChecks(context.campaign.rigor) && args.task.kind !== "answer"
+    const checks = usesChecks(context.campaign.rigor) && narrating
     // Combate narrativo (Maddox 6): ferramentas só nas narrações dos graus com combate registrado.
-    const tactical = usesTacticalCombat(context.campaign.rigor) && args.task.kind !== "answer"
-    const combat = (usesCombat(context.campaign.rigor) || tactical) && args.task.kind !== "answer"
+    const tactical = usesTacticalCombat(context.campaign.rigor) && narrating
+    const combat = (usesCombat(context.campaign.rigor) || tactical) && narrating
     // Imagens nas cenas (Maddox 10): só nas narrações; respostas a perguntas não pedem imagem.
-    if (args.task.kind !== "answer") {
+    if (narrating) {
         const { narratorSceneImageContext } = await import("./scene-images")
         promptContext.sceneImages = await narratorSceneImageContext(context.campaign, args.turnNumber)
     }
     const sceneImages = Boolean(promptContext.sceneImages?.situations.length)
     // DND-51: leitura e correção da ficha só na resposta a uma pergunta dos graus com ficha.
-    const sheetFix = args.task.kind === "answer" && Boolean(args.task.sheetFix)
+    const sheetFix = (task.kind === "answer" && Boolean(task.sheetFix)) || task.kind === "rest-exchange"
+    // DND-58: o descanso só é iniciado nas narrações dos graus com ficha.
+    const rest = narrating && MADDOX_SHEET_RIGORS.includes(context.campaign.rigor)
 
     if (model.provider === "opencode") {
         const [{ ensureMaddoxMcp }, { ensureMaddoxSession }, { createMaddoxTurnToken }, { streamAi }] = await Promise.all([import("./opencode-mcp"), import("./opencode-sessions"), import("./master-turn-token"), import("@/lib/ai/stream")])
         await ensureMaddoxMcp(settings)
         const sessionId = await ensureMaddoxSession({ campaignId: args.campaignId, purpose: "narrator", agent: model.agent, model: model.model, variant: model.variant, title: `Maddox · narrador · ${context.campaign.name}` })
         const turnToken = createMaddoxTurnToken({ campaignId: args.campaignId, jobId: args.jobId, turnNumber: args.turnNumber })
-        const instructions = buildNarratorInstructions(promptContext, { kind: "mcp", server: MADDOX_MCP_SERVER_NAME, turnToken, checks, combat, tactical, sceneImages, actionOptions, opexNpcs, sheetFix, progression })
+        const instructions = buildNarratorInstructions(promptContext, { kind: "mcp", server: MADDOX_MCP_SERVER_NAME, turnToken, checks, combat, tactical, sceneImages, actionOptions, opexNpcs, sheetFix, progression, rest })
         for await (const event of streamAi({
             provider: "opencode",
             model: model.model,
@@ -487,7 +494,7 @@ async function generate(args: GenerateArgs, sink: MaddoxMasterSink): Promise<str
         }
     } else {
         failure = await generateWithTools(
-            { model, instructions: buildNarratorInstructions(promptContext, { kind: "ai-sdk" }), userText, campaignId, turnNumber: args.turnNumber, jobId: args.jobId, checks, combat, tactical, sceneImages, actionOptions, opexNpcs, sheetFix, progression, signal: args.signal },
+            { model, instructions: buildNarratorInstructions(promptContext, { kind: "ai-sdk" }), userText, campaignId, turnNumber: args.turnNumber, jobId: args.jobId, checks, combat, tactical, sceneImages, actionOptions, opexNpcs, sheetFix, progression, rest, signal: args.signal },
             stream,
             sink,
         )
@@ -521,6 +528,7 @@ interface ToolGeneration {
     opexNpcs: boolean
     sheetFix: boolean
     progression: string[]
+    rest: boolean
     signal?: AbortSignal
 }
 
@@ -542,7 +550,7 @@ async function generateWithTools(input: ToolGeneration, stream: ReturnType<typeo
             model: prepared.model,
             instructions: input.instructions,
             messages: [{ role: "user", content: input.userText }],
-            tools: await buildMaddoxAiTools({ campaignId: input.campaignId, turnNumber: input.turnNumber, jobId: input.jobId }, { checks: input.checks, combat: input.combat, tactical: input.tactical, sceneImages: input.sceneImages, actionOptions: input.actionOptions, opexNpcs: input.opexNpcs, sheetFix: input.sheetFix, progression: input.progression }),
+            tools: await buildMaddoxAiTools({ campaignId: input.campaignId, turnNumber: input.turnNumber, jobId: input.jobId }, { checks: input.checks, combat: input.combat, tactical: input.tactical, sceneImages: input.sceneImages, actionOptions: input.actionOptions, opexNpcs: input.opexNpcs, sheetFix: input.sheetFix, progression: input.progression, rest: input.rest }),
             stopWhen: stepCountIs(MADDOX_NARRATOR_MAX_STEPS),
             abortSignal: input.signal,
             providerOptions: prepared.providerOptions,
@@ -690,5 +698,21 @@ export const aiMaddoxMaster: MaddoxMaster = {
         } finally {
             runs.closeQuestionRun(context.jobId)
         }
+    },
+    async restExchange(context: MaddoxRestExchangeContext, sink) {
+        // DND-58: a execução da troca (ferramentas da ficha presas ao personagem e à lista das trocas) é aberta por quem
+        // chama (`runRestExchange`); aqui só a geração.
+        return generate(
+            {
+                campaignId: context.campaignId,
+                jobId: context.jobId,
+                turnNumber: context.turnNumber,
+                task: { kind: "rest-exchange", turnNumber: context.turnNumber, characterName: context.characterName, restType: context.restType, request: context.request, thread: context.thread.map(({ role, characterName, content }) => ({ role, characterName, content })), sheetFix: true },
+                excludeIds: new Set([context.requestId, ...context.thread.map((entry) => entry.id)]),
+                title: `Maddox · trocas do descanso · turno ${context.turnNumber}`,
+                signal: context.signal,
+            },
+            sink,
+        )
     },
 }

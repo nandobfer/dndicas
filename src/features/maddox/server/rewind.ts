@@ -315,6 +315,8 @@ async function afterTableMoved(campaign: CampaignDoc, combatActor: boolean): Pro
     await notifyJournalChanged(id).catch(() => undefined)
     if (combatActor) void import("./tactical-actions").then(({ evaluateCombatAbsence }) => evaluateCombatAbsence(campaign._id)).catch(() => undefined)
     void import("./combat-prep").then(({ scheduleCombatPreps }) => scheduleCombatPreps(campaign._id)).catch(() => undefined)
+    // Descanso aberto no retrato (DND-58): as preparações que ainda não tinham acontecido voltam à fila.
+    void import("./rest").then(({ scheduleRestPreps }) => scheduleRestPreps(campaign._id)).catch(() => undefined)
 }
 
 async function notice(campaignId: Types.ObjectId, turnNumber: number, event: "goto" | "resume", originTurn: number) {

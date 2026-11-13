@@ -156,8 +156,10 @@ export async function submitCombatAction(campaignId: string, input: MaddoxCombat
     if (option.resolution === "attack") {
         // DND-49: prévia do modo (o rolador já mostra os dois d20 com o motivo); a rolagem recalcula e é a que vale.
         const preview = attackMode({ attacker: actor.state, target: targets[0]!.state, ranged: Boolean(option.attack!.ranged), helped: Boolean(actor.state.flags.helped), targetKey: targets[0]!.key })
-        const attackParts = [...(option.attack!.bonusParts ?? monsterAttackParts(option.attack!.bonus)), ...exhaustionParts(exhaustionPenalty(actor.state))]
-        steps.push(newStep({ kind: "attack", targetKey: targets[0]!.key, targetName: targets[0]!.name, dice: d20Expression(option.attack!.bonus + exhaustionPenalty(actor.state)), mode: preview.mode, modeReasons: preview.reasons, modifierParts: attackParts }))
+        // DND-58: a exaustão do personagem vem da ficha.
+        const exhaustion = exhaustionPenalty(actor.state) + (await (await import("./combat-sheet")).characterExhaustionPenalty(actor.state.sheetId))
+        const attackParts = [...(option.attack!.bonusParts ?? monsterAttackParts(option.attack!.bonus)), ...exhaustionParts(exhaustion)]
+        steps.push(newStep({ kind: "attack", targetKey: targets[0]!.key, targetName: targets[0]!.name, dice: d20Expression(option.attack!.bonus + exhaustion), mode: preview.mode, modeReasons: preview.reasons, modifierParts: attackParts }))
         // O dano já fica no card: rolado só se o ataque acertar (o erro o marca como pulado).
         if (option.attack!.damage && option.attack!.damage !== "0") steps.push(newStep({ kind: "damage", targetKey: targets[0]!.key, targetName: targets[0]!.name, dice: option.attack!.damage, damageType: option.attack!.damageType, ...(option.attack!.damageParts?.length ? { modifierParts: option.attack!.damageParts } : {}) }))
     }
@@ -863,7 +865,7 @@ async function performClaimedRoll(campaign: CampaignDoc, message: MessageDoc, re
             } else if (request.kind === "death-save" && me?.kind === "character") {
                 const hp = await sheetHp(me.state)
                 if (hp) {
-                    const result = deathSave(d20, hp.deathSaves)
+                    const result = deathSave(d20, hp.deathSaves, roll.total - d20)
                     hp.deathSaves = { success: result.success, failure: result.failure }
                     if (result.revived) {
                         characterHealing(me.state, hp, 1)
@@ -875,8 +877,9 @@ async function performClaimedRoll(campaign: CampaignDoc, message: MessageDoc, re
                         me.state.stable = true
                         hp.deathSaves = { success: 0, failure: 0 }
                         outcome = "três sucessos: está estável"
-                    } else outcome = `${d20 >= 10 ? "sucesso" : d20 === 1 ? "1 natural: duas falhas" : "falha"} (${result.success} sucesso(s), ${result.failure} falha(s))`
-                    success = d20 >= 10
+                    } else outcome = `${d20 !== 1 && roll.total >= 10 ? "sucesso" : d20 === 1 ? "1 natural: duas falhas" : "falha"} (${result.success} sucesso(s), ${result.failure} falha(s))`
+                    // Mesmo critério do `deathSave`: o 20 natural sempre passa, o 1 sempre falha, e o total (com a exaustão) decide o 10.
+                    success = d20 === 20 || (d20 !== 1 && roll.total >= 10)
                     hpWrites.push({ state: me.state, hp })
                 }
                 endsTurn = true

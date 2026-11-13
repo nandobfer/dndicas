@@ -1222,8 +1222,8 @@ mantido em destaque, e o rolador já vem no modo certo.
 
 **PV fora do combate.** Ferramenta do narrador `update_character_hit_points` (`server/hit-points.ts`, regra pura em `hit-points-ops.ts`),
 nos graus `MADDOX_SHEET_RIGORS`, recusada com combate tático ativo (usar `apply_effect`): `curar` (`dados` que o servidor rola ou `valor`),
-`definir`, `estabilizar`, `acordar` (estabilizado → 1 PV), `descanso-curto` (`dadosDeVida`, cada dado + modificador de Constituição) e
-`descanso-longo` (PV máximos, PV temporários e testes contra a morte zerados; os dados de vida gastos não mudam). Motivo obrigatório; personagem
+`definir`, `estabilizar` e `acordar` (estabilizado → 1 PV). O descanso NÃO passa mais por aqui: desde a DND-58 ele é a ferramenta
+`start_rest` (seção "Descanso curto e longo (DND-58)"). Motivo obrigatório; personagem
 morto recusa; PV limitado ao máximo. Grava na ficha (auditoria `FichaPersonagem`, `origin: "narrator-hit-points"`, tempo real) e põe na
 mesa a mensagem `kind: "hit-points"` ("PV de X: 0 → 1 (motivo)", na transcrição como "ficha"). A instrução `MADDOX_HIT_POINTS_RULE` do
 narrador manda chamar a ferramenta antes de narrar alguém a 0 PV acordando, agindo ou se recuperando.
@@ -1756,8 +1756,32 @@ Remover usa `removeMember` (a mesma confirmação) e chama `onOpexRemoved` (arqu
 - Retrato: o fluxo da DND-31; "Gerar retrato de novo" do dono em `POST …/opex/[memberId]/portrait`.
 
 **Decisões** (`server/opex-player.ts`, `server/opex-prompt.ts` puro): geração efêmera com JSON validado por Zod e uma nova tentativa,
-teto `MADDOX_OPEX_GENERATION_TIMEOUT_MS`. Instruções = configuração + papel de jogador + memórias dos 3 canais + campanha + personagem
-(ficha) + prompt base. Consumo: `maddox-opex-interview`, `maddox-opex-turn`, `maddox-opex-combat`.
+teto `MADDOX_OPEX_GENERATION_TIMEOUT_MS`. Instruções (`buildOpexInstructions`, as mesmas na mesa, no combate, nas reações e na
+entrevista) = configuração + papel de jogador + **quem está na mesa** + **orientações do dono** + regra de memórias (só na mesa) +
+memórias (canais Jogadores e individual) + campanha + personagem (ficha) + prompt base. Consumo: `maddox-opex-interview`,
+`maddox-opex-turn`, `maddox-opex-combat`.
+
+**Orientações do dono e protagonismo (DND-57).** As memórias globais do Personagem Opex chegavam ao prompt, mas o Opex se via como
+"o jogador" e a transcrição não dizia quem era humano: "deixe os jogadores conduzirem" o incluía. Elas também ficavam no meio do bloco
+"Memórias", abaixo das memórias do próprio Opex, que caíam em PROJECT_RULES. Correção, sem regra fixa nova sobre holofote (o
+comportamento vem só das memórias do dono):
+- `## Quem está na mesa` (`opexTableSection`): membros `joined` com personagem nomeado (`loadOpexTableRoster`, `opex-player.ts`),
+  `— personagem de jogador humano` ou `— Personagem Opex`, com `(você)` só no próprio; diz que, nas orientações do dono,
+  "jogadores" e "protagonistas" são os personagens dos humanos. Sem humano: "Não há personagem de jogador humano nesta mesa". Personagem
+  ainda sem nome aparece como "(o seu personagem, ainda em criação)".
+- `## Orientações do dono para todo Personagem Opex` (`ownerGuidanceSection`): só o contexto do canal global
+  (`OpexPromptContext.ownerGuidance`), separado do bloco `## Memórias (campanha e as suas)`, declarando que **prevalece** sobre a
+  personalidade, o prompt base e as memórias do personagem. O título "Memórias" do Engramind sai e os subtítulos são rebaixados
+  (`nestedContext`). Sem memórias globais, a seção não aparece.
+- Turno da mesa: `opexTableTask({ ownerGuidance })` repete as orientações em texto integral (`### Lembre: orientações do dono…`) logo
+  antes de `Responda só com:`.
+- Transcrição do Opex (`opexTranscript`): perguntas, declarações e "não fez nada" levam `Nome (Personagem Opex)` ou
+  `Nome (jogador humano)` (`markedCharacterName`); linha de quem saiu da campanha fica sem marca; as declarações ocultas (DND-36)
+  continuam fora. A transcrição e as declarações do narrador não mudam.
+- Categoria das memórias: cada item de `memorias` leva `categoria` (`SENTIMENTO`, `PLANO`, `OPINIAO`, `RELACAO`, `FATO`, `EVENTO`,
+  `OUTRO`, explicadas em `MADDOX_OPEX_MEMORY_CATEGORY_RULE`, também na regra do NPC Opex; categorias de regra proibidas). O schema
+  aceita qualquer valor e `opexMemoriesOf` normaliza (`opexMemoryCategoryOf`): ausente, de regra ou desconhecida = `OUTRO`, sem
+  invalidar a decisão. Gravação e reclassificação das antigas: `aicontext/modules/engramind.md` › Categorias.
 
 **Mesa** (`server/opex-table.ts`): `driveOpex` roda depois de cada `publishGameChanged` (single-flight por campanha):
 - turno fora do combate: em `evaluateTurn`, quando os humanos presentes terminam (com ao menos uma ação humana), o primeiro Opex
@@ -1827,7 +1851,7 @@ do mesmo passo também reaproveitam e a vaga no teto é reservada na hora) e tem
 Prompt do narrador: `[NPC Opex]` no bloco dos NPCs e a seção "NPCs Opex" na tarefa das narrações (`opexNpcsTaskSection`).
 
 **Agente** (`opex-prompt.ts`, `opex-player.ts`): instruções da seção Personagem Opex + `MADDOX_OPEX_NPC_ROLE_RULE` (papel de NPC) +
-regra de memórias + memórias dos 2 canais + campanha + nome e descrição pública (as notas do mestre só pela memória inicial).
+regra de memórias (com `categoria`, DND-57) + memórias dos 2 canais + campanha + nome e descrição pública (as notas do mestre só pela memória inicial).
 Consumo: `maddox-opex-npc` e `maddox-opex-npc-combat`.
 
 **Combate tático**: no bloco `npc` não retomado de um combatente ligado a NPC Opex vivo, `consultTacticalOpexNpc` (`narrator.ts`)
@@ -2134,13 +2158,76 @@ Graus com ficha (`MADDOX_SHEET_RIGORS`) escolhem na criação o modo `progressio
 - A ficha de campanha só sobe com a subida pendente (ver `aicontext/modules/character-sheets.md`); a trava de nível e XP fica dentro de `patchSheet`/`patchSheetWithAccess` (`assertCampaignPatchAllowed`, erro `CampaignSheetPatchError` → 409), então vale também para o Owlbear e para o `update_sheet` do Agente Opex. Perfix: reutiliza `maddox.play`.
 - Subida do Opex interrompida: o degrau guarda `decidingAt`; `autoLevelUps` trata `deciding` sem execução neste processo (reinício) como `pending` e decide de novo, ou marca `failed` para o dono se o Opex saiu da mesa.
 - Testes: `tests/backend/maddox/level-progression.test.ts` mocka `server/level-up-ai`, `server/settings` e `decideOpex`/`loadOpexModel` de `opex-player`; `tests/backend/character-sheets/level-up.test.ts` cobre o motor.
+## Descanso curto e longo (DND-58)
+
+O descanso é conduzido só pelo Maddox (sem botão de jogador ou dono) e acontece **numa narração só**: a ferramenta já recebe o
+desfecho. Regra pura em `rest-rules.ts` (tabela de recuperação, dados de vida, trecho do catálogo) e `exhaustion-rules.ts`; Zod em
+`rest-schemas.ts`; servidor em `server/rest.ts` (+ `rest-interpret.ts`, `rest-prep-ai.ts`); tela em `components/game/rest/RestCard.tsx`,
+`rest-view.ts` e `hooks/useMaddoxRest.ts`.
+
+- **`start_rest`** (`tipo` curto|longo, `personagens?` — vazio = o grupo ativo com ficha, sem mortos —, `desfecho` concluido|interrompido,
+  `interrupcao` obrigatória se interrompido, `descricao`): só graus `MADDOX_SHEET_RIGORS`, só na narração (`meta.kind === "narration"`, fora
+  dos blocos do combate tático), uma por narração. Recusa: combate tático ativo, descanso `running` aberto, personagem desconhecido, morto
+  ou com exaustão 6. Fica em rascunho no job (`addDraftRest`/`takeDraftRest` em `game-live.ts`) e vira a mensagem `kind: "rest"` LOGO
+  ABAIXO da narração gravada (`restMessageDoc`); se a geração falha, nada fica. Um `start_combat` na mesma narração interrompe o descanso
+  ("Um combate começou."). Interrompido: nenhuma ficha muda. Auditoria `CampanhaMaddox` (`depois.rest`).
+- **Mensagem `kind: "rest"`** (`rest` Mixed: tipo, status `interrupted|running|closed`, um registro por personagem com `prep`,
+  `hitDice`, `exchange`, `answeredBy`, `doneReason`). Está em `MUTABLE_KINDS` do retrato do turno (a volta a um turno repõe o balão junto
+  das fichas) e é apagada pelo reinício. As partes são gravadas pelo driver (`MaddoxCampaignMessageModel.collection`) com `arrayFilters`:
+  o cast do Mongoose sobre o `Mixed` perdia a condição do personagem.
+- **Preparação da ficha** (job serial `rest-prep` por personagem, `scheduleRestPreps`, também retomado no `GET …/game` e depois da volta
+  a um turno): troca condicional `pending → running`; o **plano com valores absolutos** é gravado (`applying`) ANTES de escrever a ficha
+  e reaplicado sem somar; `ready` com o resumo `recovered`/`notRecovered`. O Maddox só é chamado (`reviewRestRecovery`, ferramentas de
+  catálogo como na DND-49) quando há carga com origem gasta ou, no curto, espaços gastos; `interpretRestPrep` só aceita decisão com
+  `source {ref, quote}` lido NESTA execução, da origem da carga (ou da classe/subclasse para os espaços do curto) e com trecho que fale do
+  descanso (`quoteMentionsRest`). Carga manual (sem `source`) nunca volta; sem descrição, não volta com o motivo. Falha: uma nova
+  tentativa automática; na segunda, `failed` e o dono escolhe "Tentar de novo" ou "Seguir sem" (`skipRestPrep`: aplica a parte da
+  regra com cargas e espaços do curto como "não foi possível consultar o catálogo agora"). O motivo técnico só vai ao dono.
+- **Tabela**: longo = PV máximos, PV temporários zerados, metade dos dados de vida (mínimo 1), todos os espaços, testes contra a morte
+  zerados, exaustão −1, cargas pelo catálogo; magias preparadas ficam. Curto = só cargas/espaços confirmados no catálogo (Magia de
+  Pacto). Dados de vida: a ficha do Maddox grava só o tipo (`"d8"`) e o total é o nível (`hitDicePool`); multiclasse fora do escopo.
+- **Dados de vida (curto)**: `POST …/game/rests/[restId]/characters/[characterId]/hit-dice/{roll,decline}`. Um dado por vez (`1dX` +
+  Constituição, cura mínima 0, PV até o máximo), gravado na entrada por troca condicional do tamanho de `rolls` (duas rolagens
+  simultâneas → 409) antes da ficha; linha `hit-points` e auditoria `origin: "rest-hit-die"`; stream `rest-rolled`
+  (`{messageId}:{characterId}` no mapa de replays). Fecha sozinho no PV máximo ou sem dados.
+- **Trocas** (`POST …/exchange` com `{ text }`, `…/exchange/finish` com `{ nothing }`): o pedido vira `kind: "rest-request"` e um job
+  `rest-exchange` chama `MaddoxMaster.restExchange` (tarefa `rest-exchange`, regras `MADDOX_REST_EXCHANGE_TASK_RULES`: consultar a
+  classe no catálogo, aplicar só o que a regra permite, recusar com motivo, PERGUNTAR sem aplicar quando ambíguo). Abre `openQuestionRun`
+  preso ao personagem (`askerIsOwner: false`) com `allowedChangeTypes = MADDOX_REST_EXCHANGE_CHANGE_TYPES` e o título "Trocas de X
+  depois do descanso longo:"; as trocas só abrem com `prep.status === "ready"` (servidor `REST_PREP_PENDING`, `can.exchange` e o
+  Opex): a preparação grava `resourceCharges`/`spellSlots` inteiros. A resposta é `kind: "answer"` com `replyToId` no pedido. A parte só fecha em "Concluir trocas" ou
+  "Nada a trocar" (até `MADDOX_REST_EXCHANGE_REQUESTS_MAX` pedidos).
+- **Turno**: `restBlocksTurn` (em `evaluateTurn`, antes de qualquer declaração) segura a vez dos jogadores enquanto um personagem
+  online (ou Opex) tem parte aberta; offline (presença do Pusher) conclui sem rolar nem trocar (`doneReason: "offline"`); quem sai
+  conclui (`left`); quem entra depois não é esperado. Fechar (`running → closed`) audita e reavalia o turno. Faixa "Descanso —
+  aguardando …" (`restBannerText`) e assento "Descansando". O narrador recebe o resumo `[descanso]` (`restTranscriptLine`).
+- **Personagem Opex**: `autoRestOpex` (no `driveOpex`) decide com `opexRestTask`/`opexRestSchema` (`dadosDeVida`, `trocas`); o servidor
+  rola um a um e a troca roda INLINE no job do Opex (um job não espera outro); esclarecimento do Maddox → até 2 respostas; se o Maddox falhar ao avaliar a troca, a parte não fecha e vai ao dono. Falha →
+  `answeredBy: "owner"`: o dono vê os controles ("responda por ele") e só mexe naquela ficha.
+
+### Exaustão (DND-58)
+
+Campo `exhaustion` (0–6) da ficha (linha "Exaustão" no card de dados de vida, editável; também na lista do reinício). Ferramenta
+`update_character_exhaustion` (`personagem`, `variacao` ≠ 0, `motivo`; narração e "Pergunte ao mestre"): grava na ficha (auditoria
+`origin: "narrator-exhaustion"`), linha `sheet-change` "Exaustão de X: 1 → 2 (motivo)" e, no nível 6, o personagem fica `dead`
+("Morreu de exaustão.") e sai do combate tático. O 6 marcado direto na ficha tem o mesmo efeito: o PATCH da ficha chama
+`applySheetExhaustionDeath` (import sob demanda em `character-sheets-service.ts`). `apply_effect` com a condição exaustão num personagem jogador passa pela ficha.
+Penalidade −2 × nível (parcela "Exaustão") em todo d20: `checkModifier` (perícia, atributo, resistência), iniciativa, salvaguarda,
+concentração, teste contra a morte (`deathSave(d20, …, penalidade)`: o natural decide 1/20, o total decide o 10) e ataque de
+oportunidade; no combate, o nível vem da ficha (`exhaustionOfSheet`).
 
 ## Testes
+
+Descanso e exaustão (DND-58): `tests/backend/maddox/rest-rules.test.ts` (tabela, dados de vida, trecho do catálogo, exaustão, teste
+contra a morte), `rest-interpret.test.ts` (fonte do catálogo da preparação), `rest.test.ts` (fluxo completo com mestre falso: balão,
+dados de vida um a um, turno travado, offline, longo uma vez só, falha → dono, interrompido, recusas do `start_rest`, trocas pela lista
+fechada, Opex e dono por ele, exaustão até a morte; mocka `rest-prep-ai`, `opex-player` e o motor de dados) e
+`tests/frontend/maddox/maddox-rest.test.tsx` (balão).
 
 `tests/backend/maddox/*` (configuração, roteiros, avatar, sessões, rotas, `campaigns.test.ts` com MongoDB em
 memória, `campaign-routes.test.ts`, `grant-maddox-play.test.ts`; Personagens Opex: `opex-interview.test.ts`,
 `opex-table.test.ts`, `opex-combat.test.ts`, `opex-prompt.test.ts`, `grant-maddox-opex.test.ts`; NPCs Opex: `opex-npc-tools.test.ts`,
-`opex-npc-combat.test.ts`, `opex-npc-routes.test.ts` e `tests/backend/engramind/opex-npcs.test.ts`) e `tests/frontend/maddox/*`
+`opex-npc-combat.test.ts`, `opex-npc-routes.test.ts` e `tests/backend/engramind/opex-npcs.test.ts`; orientações do dono, mesa e categorias (DND-57): `opex-prompt.test.ts`, `opex-table.test.ts` e `tests/backend/engramind/opex-memory-reclassify.test.ts`) e `tests/frontend/maddox/*`
 (`maddox-tab.test.tsx`, `maddox-campaigns.test.tsx`, `maddox-member-avatar.test.tsx`, `maddox-campaigns-realtime.test.tsx`, `maddox-opex.test.tsx`, `maddox-opex-npc.test.tsx`; happy-dom).
 Reiniciar campanha (DND-50): `campaign-reset.test.ts` (reinício completo — o que apaga e o que preserva —, só o dono, fases aceitas,
 duas vezes seguidas, limpeza interrompida retomada, Engramind fora com início recusado e rotina, narração em andamento interrompida

@@ -59,7 +59,7 @@ vi.mock("@/features/maddox/server/opencode-sessions", () => ({ ensureMaddoxSessi
 vi.mock("@/features/ai/server/image-generator", () => ({ generateAndStoreDndImage }))
 vi.mock("@/features/mcp/server/catalog-entity-service", () => ({ searchCatalogEntities: vi.fn(async () => ({ items: [], limit: 10, offset: 0 })) }))
 vi.mock("@/features/engramind/server/opex-characters", () => ({
-    opexCharacterMemoryBlock: vi.fn(async () => ""),
+    opexCharacterMemoryBlock: vi.fn(async () => ({ guidance: "", memories: "" })),
     saveOpexCharacterMemories: vi.fn(async () => ({ saved: 0, pending: 0 })),
     provisionOpexCharacterAgent,
     retireOpexCharacterAgent,

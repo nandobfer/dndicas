@@ -1,5 +1,5 @@
 import { engramindCodeOf, type EngramindClient } from "@engramind/client/server"
-import { CAMPAIGN_CATEGORY_LIST, CATEGORY_KEY_PATTERN, type CategoryDef } from "../constants"
+import { ENGRAMIND_CATEGORY_LIST, CATEGORY_KEY_PATTERN, OPEX_MEMORY_FALLBACK_CATEGORY, type CategoryDef } from "../constants"
 import { engramindAppClient } from "./client"
 import { engramindLog, messageOf } from "./shared"
 
@@ -57,7 +57,7 @@ export async function createCategory(client: EngramindClient, def: CategoryDef):
 }
 
 /** Garante as categorias (só cria as que faltam). */
-export async function ensureCategories(defs: readonly CategoryDef[] = CAMPAIGN_CATEGORY_LIST, client?: EngramindClient | null): Promise<CategoryOutcome[]> {
+export async function ensureCategories(defs: readonly CategoryDef[] = ENGRAMIND_CATEGORY_LIST, client?: EngramindClient | null): Promise<CategoryOutcome[]> {
     const api = client ?? (await engramindAppClient())
     if (!api) return defs.map((def) => ({ key: def.key, status: "error" as const, message: "Engramind não configurado" }))
     invalidateCategoryCache()
@@ -70,4 +70,26 @@ export async function ensureCategories(defs: readonly CategoryDef[] = CAMPAIGN_C
     }
     invalidateCategoryCache()
     return outcomes
+}
+
+/**
+ * `POST /v1/memories` que não se perde por categoria (DND-57): `CATEGORY_NOT_FOUND` (categoria removida ou ainda não
+ * criada) grava de novo como OUTRO e, sem OUTRO, na categoria padrão da rede.
+ */
+export async function postWithCategoryFallback(client: EngramindClient, body: Record<string, unknown>): Promise<unknown> {
+    try {
+        return await client.call("POST", "/v1/memories", { body })
+    } catch (error) {
+        if (engramindCodeOf(error) !== "CATEGORY_NOT_FOUND" || body.category === undefined) throw error
+        invalidateCategoryCache()
+        const rest = Object.fromEntries(Object.entries(body).filter(([key]) => key !== "category"))
+        if (body.category !== OPEX_MEMORY_FALLBACK_CATEGORY) {
+            try {
+                return await client.call("POST", "/v1/memories", { body: { ...rest, category: OPEX_MEMORY_FALLBACK_CATEGORY } })
+            } catch (retryError) {
+                if (engramindCodeOf(retryError) !== "CATEGORY_NOT_FOUND") throw retryError
+            }
+        }
+        return client.call("POST", "/v1/memories", { body: rest })
+    }
 }

@@ -502,6 +502,8 @@ export async function applyEffect(campaignId: Types.ObjectId, jobId: string, tur
     if (input.condicao) {
         const key = conditionKeyOf(input.condicao)
         if (!key) throw new TacticalToolError(`Condição "${input.condicao}" desconhecida. Condições: ${MADDOX_CONDITIONS.map((item) => MADDOX_CONDITION_LABELS[item]).join(", ")}.`)
+        // DND-58: a exaustão de um personagem jogador mora na ficha (nível 0–6), nunca como condição do combate.
+        if (key === "exhaustion" && target.kind === "character") throw new TacticalToolError("A exaustão de um personagem jogador fica na ficha: use update_character_exhaustion (com o motivo).")
         if (input.remover) {
             target.state.conditions = target.state.conditions.filter((condition) => condition.key !== key)
             parts.push(`${target.name} não está mais ${MADDOX_CONDITION_LABELS[key]}`)

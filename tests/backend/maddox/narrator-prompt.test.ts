@@ -174,7 +174,7 @@ describe("fichas e testes no prompt (Maddox 5)", () => {
     })
 
     it("no MCP, a lista de ferramentas só inclui request_check quando os testes valem", () => {
-        expect(buildNarratorInstructions(context({ rigor: "fiel-dnd" }), { kind: "mcp", server: "dndicas-maddox", turnToken: "t", checks: true })).toContain("update_character_state, update_character_hit_points, resolve_reminder, request_check, promover_npc_opex, desfazer_npc_opex, gravar_memoria_npc_opex, search_catalog, get_catalog_entity)")
+        expect(buildNarratorInstructions(context({ rigor: "fiel-dnd" }), { kind: "mcp", server: "dndicas-maddox", turnToken: "t", checks: true })).toContain("update_character_state, update_character_hit_points, update_character_exhaustion, resolve_reminder, request_check, promover_npc_opex, desfazer_npc_opex, gravar_memoria_npc_opex, search_catalog, get_catalog_entity)")
         expect(buildNarratorInstructions(context(), { kind: "mcp", server: "dndicas-maddox", turnToken: "t", checks: false })).not.toContain("request_check")
     })
 
@@ -232,7 +232,7 @@ describe("catálogo do DnDicas no narrador", () => {
     })
 
     it("no MCP, a lista de ferramentas inclui as de catálogo também sem testes", () => {
-        expect(buildNarratorInstructions(context(), { kind: "mcp", server: "dndicas-maddox", turnToken: "t", checks: false })).toContain("update_character_state, update_character_hit_points, resolve_reminder, promover_npc_opex, desfazer_npc_opex, gravar_memoria_npc_opex, search_catalog, get_catalog_entity)")
+        expect(buildNarratorInstructions(context(), { kind: "mcp", server: "dndicas-maddox", turnToken: "t", checks: false })).toContain("update_character_state, update_character_hit_points, update_character_exhaustion, resolve_reminder, promover_npc_opex, desfazer_npc_opex, gravar_memoria_npc_opex, search_catalog, get_catalog_entity)")
     })
 })
 
@@ -508,5 +508,24 @@ describe("NPCs Opex no prompt do narrador (DND-27)", () => {
         const tactical = { phase: "running" as const, queue: ["Klarg"], next: "Kael", enemiesDown: false, charactersDown: false, block }
         expect(tacticalTaskLines(tactical).join("\n")).toContain("O NPC Opex Klarg decidiu: Cimitarra em Kael. Execute exatamente essa ação com `monster_action` e narre a partir dela.")
         expect(tacticalTaskLines({ ...tactical, block: { ...block, resumed: true } }).join("\n")).not.toContain("decidiu")
+    })
+})
+
+describe("DND-58 — descanso e exaustão no narrador", () => {
+    it("graus com ficha recebem a regra do descanso e da exaustão; o MCP lista start_rest só com `rest`", async () => {
+        const { MADDOX_REST_RULE, MADDOX_REST_EXCHANGE_TASK_RULES, narratorTaskText: taskText } = await import("@/features/maddox/server/narrator-prompt")
+        const sheet = buildNarratorInstructions(context({ rigor: "equilibrado" }), { kind: "ai-sdk" })
+        expect(sheet).toContain(MADDOX_REST_RULE)
+        expect(sheet).toContain("Nunca use `update_character_hit_points` para descansar")
+        expect(sheet).toContain("update_character_exhaustion")
+        expect(buildNarratorInstructions(context({ rigor: "narrativo" }), { kind: "ai-sdk" })).not.toContain(MADDOX_REST_RULE)
+        expect(buildNarratorInstructions(context({ rigor: "fiel-dnd" }), { kind: "mcp", server: "dndicas-maddox", turnToken: "t", rest: true })).toContain(", start_rest")
+        expect(buildNarratorInstructions(context({ rigor: "fiel-dnd" }), { kind: "mcp", server: "dndicas-maddox", turnToken: "t" })).not.toContain(", start_rest")
+        const exchange = taskText({ kind: "rest-exchange", turnNumber: 4, characterName: "Lyra", restType: "long", request: "Troco Escudo por Mísseis.", thread: [{ role: "player", characterName: "Lyra", content: "antes" }, { role: "maddox", characterName: null, content: "qual?" }] })
+        expect(exchange).toContain("# Trocas depois do descanso longo (turno 4)")
+        expect(exchange).toContain("**Lyra** pede: Troco Escudo por Mísseis.")
+        expect(exchange).toContain("- Maddox: qual?")
+        expect(exchange).toContain(MADDOX_REST_EXCHANGE_TASK_RULES)
+        expect(MADDOX_REST_EXCHANGE_TASK_RULES).toContain("PERGUNTE e não aplique nada")
     })
 })
