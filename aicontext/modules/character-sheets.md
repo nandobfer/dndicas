@@ -34,8 +34,16 @@ A ficha guarda `weaponMasteries: [{ catalogItemId, mastery }]` (chaves `nick | v
 armas do catálogo cuja maestria o personagem usa, no limite da classe. Quem grava é o Agente Maddox (consolidação da entrevista e
 preparação do combate, com fonte no catálogo); não há edição no editor da ficha. Detalhes em `aicontext/modules/maddox.md` (seção DND-49).
 
-### Fluxo de subir nível no cabeçalho
-A ficha mostra a tabela de progressão da classe abaixo do escudo de Classe de Armadura, preservando o mesmo popover com `ClassProgressionTable`. Em modo editável, abaixo de XP aparece o botão `Subir de nível`, destacado com a cor `colors.rarity.uncommon`; no nível 20 ele fica indisponível.
+### Fluxo de subir nível no cabeçalho (servidor, DND-56)
+A ficha mostra a tabela de progressão da classe abaixo do escudo de Classe de Armadura (popover com `ClassProgressionTable`). Em modo editável, abaixo de XP aparece o botão `Subir de nível` (cor `colors.rarity.uncommon`), indisponível no nível 20. A XP é numérica (`experience: Number`, migração `sheet-experience-number` converte o texto antigo) e o cabeçalho mostra quanto falta para o próximo nível pela tabela do D&D 2024 (`XP_BY_LEVEL`/`xpToNextLevel` em `utils/sheet-rules.ts`).
+
+A subida é feita pelo motor do servidor em `src/features/character-sheets/level-up/`, usado igualmente pelo wizard e pelo Personagem Opex do Maddox:
+
+- `level-up-options.ts` (`buildLevelUpOptions`): opções do próximo nível pelo catálogo — dado de vida e média (`ceil(lados/2)+1`… conforme `averageHpGain`), subclasse no nível em que a classe a oferece (o traço de subclasse do catálogo, não o nível 3 fixo), talento ou melhoria de atributo pelo nível em que a classe dá o traço (`featSlots`), traços novos da classe/subclasse/raça, magias e truques pela `progressionTable` (quantidade nova, círculo máximo, lista da classe sem as conhecidas), espaços e recursos que mudam. A troca de uma magia conhecida só aparece quando o resolvedor (Maddox, `server/spell-swap.ts`, cacheado por classe em `maddox_spell_swap_rules`) lê permissão nos traços de conjuração.
+- `level-up-apply.ts` (`applyLevelUp`): valida as escolhas (`level-up-schemas.ts`, mensagens em pt-BR por `LevelUpError`) e grava nível, PV máximo (o PV atual não muda; CON maior pela melhoria sobe também os níveis anteriores), subclasse (menção + `subclassRef`), talento em `featuresNotes` com os atributos, traços nas notas, magias/truques (`CharacterSpell`, ataque automático de truque de dano), espaços e cargas. Auditoria `FichaPersonagem` e `publishSheetPatched`. O dado da rolagem vem da tela; para o Opex, é rolado no servidor.
+- `level-up-service.ts`: `GET|POST /api/character-sheets/[id]/level-up` (e a mesma rota no Owlbear). Ficha de campanha Maddox com nível só sobe com a subida pendente da campanha (`campaign.stepId`); o PATCH da ficha recusa `level` (e `experience` no modo Experiência) com `campaignPatchRefusal`. Ficha fora de campanha sobe livre.
+
+O wizard (`components/level-up/level-up-wizard.tsx`) só junta escolhas (`level-up-form.ts`) e mostra o erro do servidor. Etapas: PV (média ou rolagem com `HpDicePanel`), subclasse, talento/melhoria (+2 ou +1/+1 com teto), traços (cards `TraitPreview`), magias e truques (com a troca opcional), recursos e espaços. `LevelUpBanner` + `useAutoOpenLevelUp` (uma vez por subida, `sessionStorage`) ficam na ficha e na mesa do Maddox.
 
 ### Configuração de Classe de Armadura
 O escudo de Classe de Armadura no cabeçalho exibe uma engrenagem no lugar do antigo input direto de bônus. A engrenagem abre um modal glass com o campo `Bônus de CA`, que continua persistindo em `armorClassBonus` e somando ao cálculo em todos os cenários, além das opções de `Defesa sem Armadura`.

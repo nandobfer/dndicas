@@ -154,7 +154,7 @@ describe("Diário da campanha (Maddox 9) — tela", () => {
         expect(screen.getByTestId("journal-setting")).toHaveTextContent("Um reino coberto de brumas.")
 
         const tabs = screen.getAllByRole("tab")
-        expect(tabs.map((tab) => tab.textContent)).toEqual(["Histórico", "Imagens", "NPCs2", "Locais1", "Missões2", "Anotações1", "Grupo2"])
+        expect(tabs.map((tab) => tab.textContent)).toEqual(["Histórico", "Imagens", "NPCs2", "Locais1", "Missões2", "Anotações1", "Capítulos", "Grupo2"])
         const active = screen.getByRole("tab", { selected: true })
         expect(active).toHaveTextContent("Histórico")
         expect(active.className).toContain("aria-selected:bg-primary")
