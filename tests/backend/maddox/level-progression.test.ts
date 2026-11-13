@@ -404,6 +404,53 @@ describe("Personagem Opex e a ficha da campanha", () => {
         expect((await campaignOf(t.campaignId)).levelUps!.find((step) => String(step._id) === String(opexStep._id))!.status).toBe("done")
     })
 
+    const failOpex = async (t: Table) => {
+        await levels.declareGroupLevelUp(t.campaignId, { reason: "r", trigger: "combat-end", offMilestone: false, turnNumber: 5 })
+        const opexStep = (await campaignOf(t.campaignId)).levelUps!.find((step) => step.kind === "opex")!
+        await runOpexLevelUp(t.campaignId, opexStep._id)
+        return (await campaignOf(t.campaignId)).levelUps!.find((step) => String(step._id) === String(opexStep._id))!
+    }
+
+    it("erro técnico de qualquer Error nunca vai ao card: só o texto genérico", async () => {
+        const t = await table()
+        opex.decide.mockRejectedValue(new TypeError("Cannot read properties of undefined (reading 'x') — provedor"))
+        const failed = await failOpex(t)
+        expect(failed).toMatchObject({ status: "failed", error: MADDOX_LEVEL_UP_OPEX_FAILURE.generic })
+        expect(failed.errorDetail).toContain("Cannot read properties")
+    })
+
+    it("erro de domínio (Agente Maddox indisponível) chega ao dono com o texto do domínio", async () => {
+        const t = await table()
+        const { DomainError } = await import("@/lib/api/route")
+        opex.decide.mockRejectedValue(new DomainError(409, "O \"Agente Maddox\" não está disponível. Fale com um administrador.", "MADDOX_UNAVAILABLE"))
+        const failed = await failOpex(t)
+        expect(failed).toMatchObject({ status: "failed", error: "O \"Agente Maddox\" não está disponível. Fale com um administrador." })
+        const forOwner = await levels.viewerLevelUps(await campaignOf(t.campaignId), { memberId: String(t.members[0]!.memberId), isOwner: true })
+        expect(forOwner.find((step) => step.characterName === failed.characterName)!.error).toBe("O \"Agente Maddox\" não está disponível. Fale com um administrador.")
+    })
+
+    it("escolha recusada duas vezes pelas regras (422): o motivo da validação vai ao dono", async () => {
+        const t = await table()
+        const asi = new Types.ObjectId()
+        await mongoose.connection.collection("traits").insertOne({ _id: asi, name: "Aumento no Valor de Atributo", description: "Talento.", status: "active" })
+        await mongoose.connection.collection("characterclasses").updateMany({}, { $push: { traits: { level: 2, description: mention(asi, "Aumento no Valor de Atributo") } } as never })
+        opex.decide.mockResolvedValue({ pv: "media", truques: [], magias: [], talento: { id: "inexistente", atributos: {} } })
+        const failed = await failOpex(t)
+        expect(failed).toMatchObject({ status: "failed", error: MADDOX_LEVEL_UP_OPEX_FAILURE.invalidChoice("Escolha um talento para confirmar o nível 2.") })
+        expect(opex.decide).toHaveBeenCalledTimes(2)
+        expect(opex.decide).toHaveBeenLastCalledWith(expect.objectContaining({ prompt: expect.stringContaining("Escolha um talento para confirmar o nível 2.") }))
+    })
+
+    it("Personagem Opex que perdeu a ficha depois da declaração: motivo amigável para o dono", async () => {
+        const t = await table()
+        await levels.declareGroupLevelUp(t.campaignId, { reason: "r", trigger: "combat-end", offMilestone: false, turnNumber: 5 })
+        const step = (await campaignOf(t.campaignId)).levelUps!.find((item) => String(item.characterId) === String(t.members[1]!.characterId))!
+        await MaddoxCharacterModel.collection.updateOne({ _id: t.members[1]!.characterId }, { $set: { sheetId: null } })
+        await runOpexLevelUp(t.campaignId, step._id)
+        expect((await campaignOf(t.campaignId)).levelUps!.find((item) => String(item._id) === String(step._id))).toMatchObject({ status: "failed", error: MADDOX_LEVEL_UP_OPEX_FAILURE.noSheet })
+        expect(opex.decide).not.toHaveBeenCalled()
+    })
+
     it("ficha fora do nível do degrau: o motivo em linguagem de mesa vai ao dono", async () => {
         const t = await table()
         await levels.declareGroupLevelUp(t.campaignId, { reason: "r", trigger: "combat-end", offMilestone: false, turnNumber: 5 })
