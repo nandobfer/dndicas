@@ -237,6 +237,20 @@ describe("aplicar a subida", () => {
         expect(sheetPusher.publishSheetPatched).toHaveBeenCalled()
     })
 
+    it("traços entram um por parágrafo, sem repetir o que a ficha já cita (sem DOM, no servidor)", async () => {
+        const f = await fixture()
+        const known = ["luz", "raio", "maos", "escudo", "misseis", "sono", "armadura"] as const
+        const notes = `<p>Anotações do jogador.</p>${mention(f.traits.conj, "Conjuração")}`
+        const fresh = await wizardSheet(f, 1, [...known], { classFeatures: notes })
+        await applyLevelUp(fresh, { targetLevel: 2, hp: { method: "average" }, spells: [String(f.spells.detectar)] }, { userId: "dono", by: "player" })
+        expect((await CharacterSheet.findById(fresh).lean())!.classFeatures).toBe(`${notes}${mention(f.traits.sabio, "Erudito")}`)
+
+        const already = await wizardSheet(f, 1, [...known], { classFeatures: `${notes}${mention(f.traits.sabio, "Erudito")}` })
+        await applyLevelUp(already, { targetLevel: 2, hp: { method: "average" }, spells: [String(f.spells.detectar)] }, { userId: "dono", by: "player" })
+        const html = (await CharacterSheet.findById(already).lean())!.classFeatures as string
+        expect(html.split(`data-id="${String(f.traits.sabio)}"`)).toHaveLength(2)
+    })
+
     it("recusa quantidade errada, magia fora da lista e nível que não é o próximo", async () => {
         const f = await fixture()
         const id = await wizardSheet(f, 1, ["luz", "raio", "maos", "escudo", "misseis", "sono", "armadura"])

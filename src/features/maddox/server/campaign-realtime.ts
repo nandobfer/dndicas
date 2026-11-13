@@ -4,10 +4,12 @@ import { MADDOX_CAMPAIGN_CHANGED_EVENT, MADDOX_INTERVIEW_CHANGED_EVENT, MADDOX_O
 
 /**
  * Avisa, no canal de cada usuário (`private-maddox-u-{userId}`), que a campanha mudou. Payload mínimo:
- * a tela recarrega a lista e a campanha. Nunca lança (falha de tempo real só é logada).
+ * a tela recarrega a lista e a campanha. Nunca lança (falha de tempo real só é logada). Ids sintéticos de Personagem
+ * Opex (`opex:<memberId>`) ficam de fora: o Pusher recusa o nome do canal e derrubaria o lote inteiro (os humanos
+ * também deixariam de receber).
  */
 export async function notifyCampaignChanged(campaignId: string, userIds: string[]): Promise<void> {
-    const channels = [...new Set(userIds.filter(Boolean))].map(maddoxUserChannel)
+    const channels = [...new Set(userIds.filter((id) => Boolean(id) && !id.startsWith(MADDOX_OPEX_USER_PREFIX)))].map(maddoxUserChannel)
     await publishToChannels(channels, MADDOX_CAMPAIGN_CHANGED_EVENT, { campaignId })
 }
 

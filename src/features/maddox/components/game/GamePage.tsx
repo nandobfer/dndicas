@@ -133,7 +133,7 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
     const combatAdjust = useRequestCombatAdjustment(state.campaignId)
     const combatReact = useDecideReaction(state.campaignId)
     const [asking, setAsking] = useState(false)
-    const levelUps = useGameLevelUps(state.me.levelUps)
+    const levelUps = useGameLevelUps(state.campaignId, state.me.levelUps)
     const [combatInvalid, setCombatInvalid] = useState<string | null>(null)
     const tactical = state.combat?.tactical ?? null
     const skip = useSkipMaddoxPlayer(state.campaignId)
@@ -323,6 +323,8 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
                         }}
                         actionOptions={optionsView ? { view: optionsView, busy: send.isPending, onPick: (option) => onSend({ kind: "declaration", content: option }) } : null}
                         onLevelUp={(step) => levelUps.open(step)}
+                        onRetryLevelUp={levelUps.retry}
+                        retryingLevelUpId={levelUps.retryingId}
                     />
                     {levelUps.dialog}
                     {tactical && state.me.combat ? (

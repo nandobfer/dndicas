@@ -1,7 +1,7 @@
 "use client"
 
 import { motion } from "framer-motion"
-import { BookMarked, Sparkles, TrendingUp } from "lucide-react"
+import { BookMarked, Loader2, RotateCcw, Sparkles, TrendingUp } from "lucide-react"
 import { rarityColors } from "@/lib/config/colors"
 import { MADDOX_LEVEL_UP_TEXT } from "../../constants"
 import type { MaddoxGameMessageDto, MaddoxLevelUpStepDto } from "../../game-types"
@@ -40,7 +40,7 @@ export function gainLines(step: MaddoxLevelUpStepDto): string[] {
     return lines
 }
 
-export function LevelUpCard({ message, onComplete }: { message: MaddoxGameMessageDto; onComplete?: (step: MaddoxLevelUpStepDto) => void }) {
+export function LevelUpCard({ message, onComplete, onRetry, retryingId = null }: { message: MaddoxGameMessageDto; onComplete?: (step: MaddoxLevelUpStepDto) => void; onRetry?: (step: MaddoxLevelUpStepDto) => void; retryingId?: string | null }) {
     const card = message.levelUp
     if (!card) return null
     return (
@@ -72,10 +72,25 @@ export function LevelUpCard({ message, onComplete }: { message: MaddoxGameMessag
                                     </ul>
                                 )}
                                 {step.error && <p className="mt-1 text-xs text-amber-200">{step.error}</p>}
-                                {step.canComplete && onComplete && (
-                                    <button type="button" onClick={() => onComplete(step)} className="mt-2 rounded-lg border border-emerald-300/40 bg-emerald-500/20 px-3 py-1 text-xs font-black uppercase tracking-[0.18em] text-emerald-50 hover:bg-emerald-500/30">
-                                        {MADDOX_LEVEL_UP_TEXT.banner}
-                                    </button>
+                                {((step.canComplete && onComplete) || (step.canRetry && onRetry)) && (
+                                    <div className="mt-2 flex flex-wrap gap-2">
+                                        {step.canComplete && onComplete && (
+                                            <button type="button" onClick={() => onComplete(step)} className="rounded-lg border border-emerald-300/40 bg-emerald-500/20 px-3 py-1 text-xs font-black uppercase tracking-[0.18em] text-emerald-50 hover:bg-emerald-500/30">
+                                                {MADDOX_LEVEL_UP_TEXT.banner}
+                                            </button>
+                                        )}
+                                        {step.canRetry && onRetry && (
+                                            <button
+                                                type="button"
+                                                onClick={() => onRetry(step)}
+                                                disabled={retryingId === step.id}
+                                                className="inline-flex items-center gap-1 rounded-lg border border-white/20 bg-white/[0.06] px-3 py-1 text-xs font-black uppercase tracking-[0.18em] text-white/80 hover:bg-white/10 disabled:opacity-50"
+                                            >
+                                                {retryingId === step.id ? <Loader2 className="h-3 w-3 animate-spin" aria-hidden /> : <RotateCcw className="h-3 w-3" aria-hidden />}
+                                                {MADDOX_LEVEL_UP_TEXT.retry}
+                                            </button>
+                                        )}
+                                    </div>
                                 )}
                             </li>
                         )

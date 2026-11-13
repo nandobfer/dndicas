@@ -43,3 +43,6 @@ export type MaddoxRewindInput = z.infer<typeof maddoxRewindSchema>
 
 /** "Voltar ao turno atual (N)": sem campos. */
 export const maddoxResumeTurnSchema = z.strictObject({}, { error: "A retomada não aceita campos." })
+
+/** "Tentar de novo" da subida de nível do Personagem Opex (DND-56): sem corpo. */
+export const levelUpRetryBodySchema = z.strictObject({}, { error: "Esta ação não aceita dados no corpo." })

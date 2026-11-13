@@ -452,7 +452,7 @@ export async function notifyJournalChanged(campaignId: string): Promise<void> {
     try {
         if (!Types.ObjectId.isValid(campaignId)) return
         await dbConnect()
-        const members = await MaddoxCampaignMemberModel.find({ campaignId: new Types.ObjectId(campaignId), status: "joined" }).select("userId").lean<{ userId: string }[]>()
+        const members = await MaddoxCampaignMemberModel.find({ campaignId: new Types.ObjectId(campaignId), status: "joined", kind: { $ne: "opex" } }).select("userId").lean<{ userId: string }[]>()
         const { notifyCampaignChanged } = await import("@/features/maddox/server/campaign-realtime")
         await notifyCampaignChanged(campaignId, members.map((member) => member.userId))
     } catch (error) {

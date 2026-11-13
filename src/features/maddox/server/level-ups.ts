@@ -407,6 +407,7 @@ export function levelUpStepDto(step: IMaddoxLevelUp, viewer: LevelUpViewer, acti
         error: step.status === "failed" && step.kind === "opex" ? (viewer.isOwner ? (step.error ?? MADDOX_LEVEL_UP_FAILED_MESSAGE) : MADDOX_LEVEL_UP_FAILED_MESSAGE) : null,
         mine,
         canComplete,
+        canRetry: viewer.isOwner && step.kind === "opex" && step.status === "failed" && actionable.has(String(step._id)),
         sheetId: sheetIds.get(String(step.characterId)) ?? null,
     }
 }

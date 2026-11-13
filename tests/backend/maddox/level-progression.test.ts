@@ -45,7 +45,8 @@ const { findMaddoxTool, runMaddoxTool } = await import("@/features/maddox/server
 const { milestoneOnEvent } = await import("@/features/maddox/server/progression-actions")
 const runs = await import("@/features/maddox/server/question-runs")
 const { grantCombatExperience } = await import("@/features/maddox/server/combat-experience")
-const { runOpexLevelUp } = await import("@/features/maddox/server/level-up-opex")
+const { runOpexLevelUp, retryOpexLevelUp } = await import("@/features/maddox/server/level-up-opex")
+const { MADDOX_LEVEL_UP_OPEX_FAILURE } = await import("@/features/maddox/constants")
 const { applySheetLevelUp, campaignPatchRefusal, getSheetLevelUp } = await import("@/features/character-sheets/level-up/level-up-service")
 
 const { patchSheet, patchSheetWithAccess } = await import("@/features/character-sheets/api/character-sheets-service")
@@ -381,24 +382,69 @@ describe("Personagem Opex e a ficha da campanha", () => {
         expect(opex.decide).toHaveBeenCalledWith(expect.objectContaining({ prompt: expect.stringContaining("Surto de Ação") }))
     })
 
-    it("falha depois da nova tentativa: fica para o dono, com o motivo só para ele", async () => {
+    it("falha depois da nova tentativa: fica para o dono com o motivo amigável; o erro técnico só no registro", async () => {
         const t = await table()
         await levels.declareGroupLevelUp(t.campaignId, { reason: "r", trigger: "combat-end", offMilestone: false, turnNumber: 5 })
         const opexStep = (await campaignOf(t.campaignId)).levelUps!.find((step) => step.kind === "opex")!
         opex.decide.mockRejectedValue(new Error("MARCADOR-PROVEDOR"))
         await runOpexLevelUp(t.campaignId, opexStep._id)
         const campaign = await campaignOf(t.campaignId)
-        expect(campaign.levelUps!.find((step) => String(step._id) === String(opexStep._id))).toMatchObject({ status: "failed", error: expect.stringContaining("MARCADOR-PROVEDOR") })
+        expect(campaign.levelUps!.find((step) => String(step._id) === String(opexStep._id))).toMatchObject({ status: "failed", error: MADDOX_LEVEL_UP_OPEX_FAILURE.generic, errorDetail: "MARCADOR-PROVEDOR" })
         const forOwner = await levels.viewerLevelUps(campaign, { memberId: String(t.members[0]!.memberId), isOwner: true })
-        expect(forOwner.map((step) => [step.characterName, step.canComplete])).toEqual([["Nala", true], ["Uther", true]])
-        expect(forOwner.find((step) => step.characterName === "Uther")!.error).toContain("MARCADOR-PROVEDOR")
+        expect(forOwner.map((step) => [step.characterName, step.canComplete, step.canRetry])).toEqual([["Nala", true, false], ["Uther", true, true]])
+        expect(forOwner.find((step) => step.characterName === "Uther")!.error).toBe(MADDOX_LEVEL_UP_OPEX_FAILURE.generic)
+        expect(JSON.stringify(forOwner)).not.toContain("MARCADOR")
         const lookups = await levels.levelUpLookups(campaign)
         const forPlayer = levels.levelUpStepDto(campaign.levelUps!.find((step) => String(step._id) === String(opexStep._id))!, { memberId: "outro", isOwner: false }, lookups.actionable, lookups.sheetIds)
         expect(forPlayer.error).not.toContain("MARCADOR")
         expect(forPlayer.canComplete).toBe(false)
+        expect(forPlayer.canRetry).toBe(false)
         // O dono conclui no wizard da ficha do Opex (ele é o dono da ficha).
         await applySheetLevelUp(String(t.members[1]!.sheetId), { userId: t.owner, checkOwner: true }, { targetLevel: 2, hp: { method: "average" } })
         expect((await campaignOf(t.campaignId)).levelUps!.find((step) => String(step._id) === String(opexStep._id))!.status).toBe("done")
+    })
+
+    it("ficha fora do nível do degrau: o motivo em linguagem de mesa vai ao dono", async () => {
+        const t = await table()
+        await levels.declareGroupLevelUp(t.campaignId, { reason: "r", trigger: "combat-end", offMilestone: false, turnNumber: 5 })
+        const opexStep = (await campaignOf(t.campaignId)).levelUps!.find((step) => step.kind === "opex")!
+        await CharacterSheet.collection.updateOne({ _id: t.members[1]!.sheetId }, { $set: { level: 3 } })
+        await runOpexLevelUp(t.campaignId, opexStep._id)
+        const failed = (await campaignOf(t.campaignId)).levelUps!.find((step) => String(step._id) === String(opexStep._id))!
+        expect(failed).toMatchObject({ status: "failed", error: MADDOX_LEVEL_UP_OPEX_FAILURE.levelMismatch(3, 2) })
+    })
+
+    it("\"Tentar de novo\" do dono: o degrau volta a pendente e o Opex decide e conclui", async () => {
+        const t = await table()
+        await levels.declareGroupLevelUp(t.campaignId, { reason: "r", trigger: "combat-end", offMilestone: false, turnNumber: 5 })
+        const opexStep = (await campaignOf(t.campaignId)).levelUps!.find((step) => step.kind === "opex")!
+        opex.decide.mockRejectedValueOnce(new Error("Attempted to call appendMentionsToHtml() from the server"))
+        await runOpexLevelUp(t.campaignId, opexStep._id)
+        expect((await campaignOf(t.campaignId)).levelUps!.find((step) => String(step._id) === String(opexStep._id))!.status).toBe("failed")
+
+        await expect(retryOpexLevelUp(String(t.campaignId), String(opexStep._id), "player-x")).rejects.toMatchObject({ status: 404 })
+        await MaddoxCampaignMemberModel.collection.insertOne({ campaignId: t.campaignId, userId: "player-x", kind: "human", role: "player", status: "joined" })
+        await expect(retryOpexLevelUp(String(t.campaignId), String(opexStep._id), "player-x")).rejects.toMatchObject({ status: 403 })
+        const nala = (await campaignOf(t.campaignId)).levelUps!.find((step) => step.kind === "human")!
+        await expect(retryOpexLevelUp(String(t.campaignId), String(nala._id), t.owner)).rejects.toMatchObject({ status: 404 })
+
+        const state = await retryOpexLevelUp(String(t.campaignId), String(opexStep._id), t.owner)
+        expect(state.campaignId).toBe(String(t.campaignId))
+        await waitForOpexIdle()
+        const done = (await campaignOf(t.campaignId)).levelUps!.find((step) => String(step._id) === String(opexStep._id))!
+        expect(done).toMatchObject({ status: "done", doneBy: "opex", error: null, errorDetail: null })
+        expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({ userId: t.owner, depois: expect.objectContaining({ opex: "retry" }) }))
+        await expect(retryOpexLevelUp(String(t.campaignId), String(opexStep._id), t.owner)).rejects.toMatchObject({ status: 409 })
+    })
+
+    it("\"Tentar de novo\" com o Personagem Opex fora da mesa: recusa e o degrau fica para o wizard", async () => {
+        const t = await table()
+        await levels.declareGroupLevelUp(t.campaignId, { reason: "r", trigger: "combat-end", offMilestone: false, turnNumber: 5 })
+        const opexStep = (await campaignOf(t.campaignId)).levelUps!.find((step) => step.kind === "opex")!
+        await MaddoxCampaignModel.collection.updateOne({ _id: t.campaignId, "levelUps._id": opexStep._id }, { $set: { "levelUps.$.status": "failed" } })
+        await MaddoxCampaignMemberModel.collection.updateOne({ _id: opexStep.memberId }, { $set: { status: "left" } })
+        await expect(retryOpexLevelUp(String(t.campaignId), String(opexStep._id), t.owner)).rejects.toMatchObject({ status: 409 })
+        expect((await campaignOf(t.campaignId)).levelUps!.find((step) => String(step._id) === String(opexStep._id))!.status).toBe("failed")
     })
 
     it("ficha de campanha só sobe com a subida pendente; nível e XP (modo Experiência) não mudam pelo PATCH", async () => {
@@ -500,7 +546,7 @@ describe("subida do Opex interrompida (F2)", () => {
         const step = await deciding(t)
         await autoLevelUps(await campaignOf(t.campaignId), new Map())
         const campaign = await campaignOf(t.campaignId)
-        expect(campaign.levelUps!.find((item) => String(item._id) === String(step._id))).toMatchObject({ status: "failed", error: expect.stringContaining("interrompida") })
+        expect(campaign.levelUps!.find((item) => String(item._id) === String(step._id))).toMatchObject({ status: "failed", error: MADDOX_LEVEL_UP_OPEX_FAILURE.interrupted })
         const forOwner = await levels.viewerLevelUps(campaign, { memberId: String(t.members[0]!.memberId), isOwner: true })
         expect(forOwner.find((item) => item.characterName === step.characterName)).toMatchObject({ canComplete: true })
         expect(opex.decide).not.toHaveBeenCalled()

@@ -197,8 +197,10 @@ export interface IMaddoxLevelUp {
     status: MaddoxLevelUpStatus
     /** Ganhos aplicados na ficha (`LevelUpGains`). */
     gains: Record<string, unknown> | null
-    /** Motivo da falha do Opex (só o dono vê). */
+    /** Motivo da falha do Opex em linguagem de mesa (só o dono vê). */
     error: string | null
+    /** Erro técnico da falha (log e diagnóstico; nunca vai ao DTO). */
+    errorDetail?: string | null
     /** Card "Subida de nível" do chat. */
     messageId: Types.ObjectId | null
     /** O Maddox já narrou a subida (modo Experiência). */
@@ -338,6 +340,7 @@ const MaddoxCampaignSchema = new Schema<IMaddoxCampaign>(
                         status: { type: String, enum: MADDOX_LEVEL_UP_STATUSES, default: "pending" },
                         gains: { type: Schema.Types.Mixed, default: null },
                         error: { type: String, default: null },
+                        errorDetail: { type: String, default: null },
                         messageId: { type: Schema.Types.ObjectId, default: null },
                         narrated: { type: Boolean, default: false },
                         createdAt: { type: Date, default: Date.now },

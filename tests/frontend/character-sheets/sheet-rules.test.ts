@@ -1,10 +1,11 @@
 /** @vitest-environment happy-dom */
 import { describe, expect, it } from "vitest"
-import { extractMentionsFromHtml, buildMentionHtml as buildFromMentionSync } from "@/features/character-sheets/utils/mention-sync"
+import { appendMentionsToHtml, extractMentionsFromHtml, buildMentionHtml as buildFromMentionSync } from "@/features/character-sheets/utils/mention-sync"
 import { getLevelOneHpMax as levelOneFromHook } from "@/features/character-sheets/hooks/use-sheet-mention-sync"
 import { buildWeaponAttackAutofill as weaponFromAutofill } from "@/features/character-sheets/utils/attack-autofill"
 import { buildBoundResourceCharge as chargeFromResources } from "@/features/character-sheets/utils/resource-charges"
 import {
+    appendMentionParagraphs,
     averageHpGain,
     buildBoundResourceCharge,
     buildMentionHtml,
@@ -73,5 +74,29 @@ describe("sheet-rules (servidor) x ficha (navegador)", () => {
         const source = { progressionTable: { spellSlots: { 3: { cantrips: 3, preparedSpells: 6, slots: { 1: 4, 2: 2 } } } } } as never
         expect(mapSpellSlotsForLevel(3, source)).toEqual({ "1": { total: 4, used: 0 }, "2": { total: 2, used: 0 } })
         expect(mapSpellSlotsForLevel(1, source)).toEqual({})
+    })
+})
+
+describe("appendMentionParagraphs (servidor) x appendMentionsToHtml (navegador)", () => {
+    const erudito = { id: "t1", entityType: "Habilidade", label: "Erudito" }
+    const surto = { id: "t2", entityType: "Habilidade", label: "Surto & Ação" }
+
+    it("acrescenta uma menção por parágrafo e não repete o que o campo já cita", () => {
+        const base = `<p>Notas.</p><p>${buildMentionHtml(erudito)}</p>`
+        expect(appendMentionParagraphs(base, [erudito, surto, surto])).toBe(`${base}<p>${buildMentionHtml(surto)}</p>`)
+        expect(appendMentionParagraphs(base, [erudito])).toBe(base)
+        expect(appendMentionParagraphs("<p></p>", [erudito])).toBe(`<p>${buildMentionHtml(erudito)}</p>`)
+        expect(appendMentionParagraphs(null, [])).toBe("")
+    })
+
+    it("o navegador lê o mesmo resultado (mesmas menções, uma por parágrafo)", () => {
+        const base = `<p>Notas.</p><p>${buildMentionHtml(erudito)}</p>`
+        const server = appendMentionParagraphs(base, [erudito, surto])
+        const browser = appendMentionsToHtml(base, [erudito, surto])
+        expect(extractMentionsFromHtml(server)).toEqual(extractMentionsFromHtml(browser))
+        const paragraphs = (html: string) => new DOMParser().parseFromString(html, "text/html").body.querySelectorAll("p").length
+        expect(paragraphs(server)).toBe(paragraphs(browser))
+        // Depois da subida, o sync do navegador não acha nada novo para acrescentar.
+        expect(extractMentionsFromHtml(appendMentionsToHtml(server, [erudito, surto]))).toEqual(extractMentionsFromHtml(server))
     })
 })
