@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest"
 import {
     getLevelOneHpMax,
+    resolveSyncedSpellcastingAttribute,
     selectSpellcastingAttributeSource,
     selectSpellSlotSource,
+    syncSpellcastingAttribute,
 } from "@/features/character-sheets/hooks/use-sheet-mention-sync"
 import type { CharacterClass } from "@/features/classes/types/classes.types"
 import type { ResolvedSubclass } from "@/features/character-sheets/utils/mention-sync"
-import { mapSpellSlotsForLevel } from "@/features/character-sheets/utils/mention-sync"
+import { mapCatalogAttributeToSheetAttribute, mapSpellSlotsForLevel } from "@/features/character-sheets/utils/mention-sync"
 import { getAvailableSpellSlotLevels } from "@/features/character-sheets/utils/spell-slots"
 
 describe("getLevelOneHpMax", () => {
@@ -146,5 +148,76 @@ describe("getAvailableSpellSlotLevels", () => {
             "2": { total: 0, used: 0 },
             "9": { total: 0, used: 0 },
         })).toEqual(["1", "3"])
+    })
+})
+
+describe("atributo de conjuração sincronizado", () => {
+    it("mantém a escolha manual do Ladino com Iniciado em Magia ao reabrir a ficha", () => {
+        const rogue = { name: "Ladino", spellcasting: false } as CharacterClass
+        const catalog = mapCatalogAttributeToSheetAttribute(selectSpellcastingAttributeSource([], [rogue])?.spellcastingAttribute)
+
+        expect(catalog).toBeNull()
+        expect(resolveSyncedSpellcastingAttribute({ current: "intelligence", catalog, syncContributed: null })).toBe("intelligence")
+    })
+
+    it("deixa o campo vazio quando o personagem não tem nenhuma conjuração", () => {
+        expect(resolveSyncedSpellcastingAttribute({ current: null, catalog: null, syncContributed: null })).toBeNull()
+    })
+
+    it("preenche pelo catálogo quando a classe é conjuradora e o campo está vazio", () => {
+        expect(resolveSyncedSpellcastingAttribute({ current: null, catalog: "intelligence", syncContributed: null })).toBe("intelligence")
+    })
+
+    it("mantém a escolha manual do jogador mesmo com classe conjuradora", () => {
+        expect(resolveSyncedSpellcastingAttribute({ current: "wisdom", catalog: "intelligence", syncContributed: null })).toBe("wisdom")
+    })
+
+    it("acompanha a classe nova quando o valor foi preenchido automaticamente nesta sessão", () => {
+        expect(resolveSyncedSpellcastingAttribute({ current: "intelligence", catalog: "wisdom", syncContributed: "intelligence" })).toBe("wisdom")
+    })
+
+    it("mantém a escolha manual feita depois de um preenchimento automático", () => {
+        expect(resolveSyncedSpellcastingAttribute({ current: "charisma", catalog: "wisdom", syncContributed: "intelligence" })).toBe("charisma")
+    })
+
+    it("não apaga o valor preenchido automaticamente quando a classe conjuradora sai", () => {
+        expect(resolveSyncedSpellcastingAttribute({ current: "intelligence", catalog: null, syncContributed: "intelligence" })).toBe("intelligence")
+    })
+})
+
+describe("registro do atributo preenchido automaticamente", () => {
+    type Round = { value: string | null; syncContributed: string | null }
+    const round = (state: Round, catalog: string | null) =>
+        syncSpellcastingAttribute({ current: state.value, catalog, syncContributed: state.syncContributed })
+
+    it("registra o preenchimento automático e acompanha a troca de classe", () => {
+        const filled = round({ value: null, syncContributed: null }, "intelligence")
+        expect(filled).toEqual({ value: "intelligence", syncContributed: "intelligence" })
+
+        expect(round(filled, "wisdom")).toEqual({ value: "wisdom", syncContributed: "wisdom" })
+    })
+
+    it("limpa o registro após a escolha manual e preserva a escolha na troca de classe", () => {
+        const filled = round({ value: null, syncContributed: null }, "intelligence")
+        const manual = round({ ...filled, value: "charisma" }, "intelligence")
+        expect(manual).toEqual({ value: "charisma", syncContributed: null })
+
+        expect(round(manual, "wisdom")).toEqual({ value: "charisma", syncContributed: null })
+    })
+
+    it("ao reabrir a ficha, não trata o valor salvo como preenchimento automático", () => {
+        const reopened = round({ value: "intelligence", syncContributed: null }, "wisdom")
+        expect(reopened).toEqual({ value: "intelligence", syncContributed: null })
+    })
+
+    it("mantém o registro enquanto o valor automático segue o catálogo", () => {
+        expect(round({ value: "intelligence", syncContributed: "intelligence" }, "intelligence")).toEqual({
+            value: "intelligence",
+            syncContributed: "intelligence",
+        })
+    })
+
+    it("não registra nada quando não há conjuração", () => {
+        expect(round({ value: null, syncContributed: null }, null)).toEqual({ value: null, syncContributed: null })
     })
 })
