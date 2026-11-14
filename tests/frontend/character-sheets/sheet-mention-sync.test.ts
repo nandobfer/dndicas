@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest"
 import {
     getLevelOneHpMax,
+    resolveSyncedSpellcastingAttribute,
     selectSpellcastingAttributeSource,
     selectSpellSlotSource,
 } from "@/features/character-sheets/hooks/use-sheet-mention-sync"
 import type { CharacterClass } from "@/features/classes/types/classes.types"
 import type { ResolvedSubclass } from "@/features/character-sheets/utils/mention-sync"
-import { mapSpellSlotsForLevel } from "@/features/character-sheets/utils/mention-sync"
+import { mapCatalogAttributeToSheetAttribute, mapSpellSlotsForLevel } from "@/features/character-sheets/utils/mention-sync"
 import { getAvailableSpellSlotLevels } from "@/features/character-sheets/utils/spell-slots"
 
 describe("getLevelOneHpMax", () => {
@@ -146,5 +147,39 @@ describe("getAvailableSpellSlotLevels", () => {
             "2": { total: 0, used: 0 },
             "9": { total: 0, used: 0 },
         })).toEqual(["1", "3"])
+    })
+})
+
+describe("atributo de conjuração sincronizado", () => {
+    it("mantém a escolha manual do Ladino com Iniciado em Magia ao reabrir a ficha", () => {
+        const rogue = { name: "Ladino", spellcasting: false } as CharacterClass
+        const catalog = mapCatalogAttributeToSheetAttribute(selectSpellcastingAttributeSource([], [rogue])?.spellcastingAttribute)
+
+        expect(catalog).toBeNull()
+        expect(resolveSyncedSpellcastingAttribute({ current: "intelligence", catalog, syncContributed: null })).toBe("intelligence")
+    })
+
+    it("deixa o campo vazio quando o personagem não tem nenhuma conjuração", () => {
+        expect(resolveSyncedSpellcastingAttribute({ current: null, catalog: null, syncContributed: null })).toBeNull()
+    })
+
+    it("preenche pelo catálogo quando a classe é conjuradora e o campo está vazio", () => {
+        expect(resolveSyncedSpellcastingAttribute({ current: null, catalog: "intelligence", syncContributed: null })).toBe("intelligence")
+    })
+
+    it("mantém a escolha manual do jogador mesmo com classe conjuradora", () => {
+        expect(resolveSyncedSpellcastingAttribute({ current: "wisdom", catalog: "intelligence", syncContributed: null })).toBe("wisdom")
+    })
+
+    it("acompanha a classe nova quando o valor foi preenchido automaticamente nesta sessão", () => {
+        expect(resolveSyncedSpellcastingAttribute({ current: "intelligence", catalog: "wisdom", syncContributed: "intelligence" })).toBe("wisdom")
+    })
+
+    it("mantém a escolha manual feita depois de um preenchimento automático", () => {
+        expect(resolveSyncedSpellcastingAttribute({ current: "charisma", catalog: "wisdom", syncContributed: "intelligence" })).toBe("charisma")
+    })
+
+    it("não apaga o valor preenchido automaticamente quando a classe conjuradora sai", () => {
+        expect(resolveSyncedSpellcastingAttribute({ current: "intelligence", catalog: null, syncContributed: "intelligence" })).toBe("intelligence")
     })
 })

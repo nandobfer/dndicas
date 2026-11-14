@@ -161,6 +161,7 @@ export function useSheetMentionSync({ sheet, form, isReadOnly = false }: UseShee
     const syncContributedSavingThrowsRef = useRef<Set<AttributeType>>(new Set())
     const syncContributedArmorRef = useRef<Set<keyof ArmorTraining>>(new Set())
     const syncContributedSkillsRef = useRef<Set<SkillName>>(new Set())
+    const syncContributedSpellcastingAttributeRef = useRef<string | null>(null)
 
     useEffect(() => {
         patchFieldsRef.current = patchFields
@@ -348,7 +349,17 @@ export function useSheetMentionSync({ sheet, form, isReadOnly = false }: UseShee
                 assignIfChanged(patch, "savingThrows", nextSavingThrows as PatchSheetBody["savingThrows"], currentSavingThrowsRef.current)
             }
 
-            assignIfChanged(patch, "spellcastingAttribute", nextSpellcastingAttribute, currentSpellcastingAttribute)
+            const syncedSpellcastingAttribute = resolveSyncedSpellcastingAttribute({
+                current: currentSpellcastingAttribute,
+                catalog: nextSpellcastingAttribute,
+                syncContributed: syncContributedSpellcastingAttributeRef.current,
+            })
+            if (syncedSpellcastingAttribute !== currentSpellcastingAttribute) {
+                syncContributedSpellcastingAttributeRef.current = syncedSpellcastingAttribute
+            } else if (currentSpellcastingAttribute !== syncContributedSpellcastingAttributeRef.current) {
+                syncContributedSpellcastingAttributeRef.current = null
+            }
+            assignIfChanged(patch, "spellcastingAttribute", syncedSpellcastingAttribute, currentSpellcastingAttribute)
             assignIfChanged(patch, "spellSlots", nextSpellSlots, currentSpellSlots)
             assignIfChanged(patch, "resourceCharges", nextResourceCharges, resourceCharges)
 
@@ -550,6 +561,23 @@ export function selectSpellcastingAttributeSource(activeSubclasses: ResolvedSubc
     const winningSubclass = activeSubclasses.find((subclass) => !!subclass.entity.spellcastingAttribute)
     const winningClass = activeClasses.find((characterClass) => !!characterClass.spellcastingAttribute)
     return winningSubclass?.entity ?? winningClass ?? null
+}
+
+/**
+ * Decide o atributo de conjuração depois da sincronização sem apagar a escolha do jogador:
+ * preenche pelo catálogo só com o campo vazio, nunca troca um valor por `null` e só acompanha
+ * a classe nova quando o valor atual foi preenchido automaticamente nesta sessão.
+ */
+export function resolveSyncedSpellcastingAttribute(input: {
+    current: string | null
+    catalog: string | null
+    syncContributed: string | null
+}): string | null {
+    const { current, catalog, syncContributed } = input
+    if (!current) return catalog
+    if (!catalog) return current
+    if (syncContributed && current === syncContributed) return catalog
+    return current
 }
 
 export function selectSpellSlotSource(activeSubclasses: ResolvedSubclass[], activeClasses: CharacterClass[]): SpellcastingSource | null {
