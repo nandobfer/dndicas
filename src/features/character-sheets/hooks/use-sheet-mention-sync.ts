@@ -349,17 +349,13 @@ export function useSheetMentionSync({ sheet, form, isReadOnly = false }: UseShee
                 assignIfChanged(patch, "savingThrows", nextSavingThrows as PatchSheetBody["savingThrows"], currentSavingThrowsRef.current)
             }
 
-            const syncedSpellcastingAttribute = resolveSyncedSpellcastingAttribute({
+            const spellcastingAttributeSync = syncSpellcastingAttribute({
                 current: currentSpellcastingAttribute,
                 catalog: nextSpellcastingAttribute,
                 syncContributed: syncContributedSpellcastingAttributeRef.current,
             })
-            if (syncedSpellcastingAttribute !== currentSpellcastingAttribute) {
-                syncContributedSpellcastingAttributeRef.current = syncedSpellcastingAttribute
-            } else if (currentSpellcastingAttribute !== syncContributedSpellcastingAttributeRef.current) {
-                syncContributedSpellcastingAttributeRef.current = null
-            }
-            assignIfChanged(patch, "spellcastingAttribute", syncedSpellcastingAttribute, currentSpellcastingAttribute)
+            syncContributedSpellcastingAttributeRef.current = spellcastingAttributeSync.syncContributed
+            assignIfChanged(patch, "spellcastingAttribute", spellcastingAttributeSync.value, currentSpellcastingAttribute)
             assignIfChanged(patch, "spellSlots", nextSpellSlots, currentSpellSlots)
             assignIfChanged(patch, "resourceCharges", nextResourceCharges, resourceCharges)
 
@@ -578,6 +574,20 @@ export function resolveSyncedSpellcastingAttribute(input: {
     if (!catalog) return current
     if (syncContributed && current === syncContributed) return catalog
     return current
+}
+
+/**
+ * Uma rodada da sincronização: o valor a gravar e o que fica registrado como preenchido
+ * automaticamente. Uma escolha manual (valor atual diferente do registrado) limpa o registro.
+ */
+export function syncSpellcastingAttribute(input: {
+    current: string | null
+    catalog: string | null
+    syncContributed: string | null
+}): { value: string | null; syncContributed: string | null } {
+    const value = resolveSyncedSpellcastingAttribute(input)
+    if (value !== input.current) return { value, syncContributed: value }
+    return { value, syncContributed: input.current === input.syncContributed ? input.syncContributed : null }
 }
 
 export function selectSpellSlotSource(activeSubclasses: ResolvedSubclass[], activeClasses: CharacterClass[]): SpellcastingSource | null {
