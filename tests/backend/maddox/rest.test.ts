@@ -326,6 +326,22 @@ describe("DND-58 — descanso longo: recuperação pela tabela e pelo catálogo,
         expect((await game.getGameState(t.id, t.player)).turn.restWaiting).toEqual([])
     })
 
+    it("DND-66: o descanso longo concluído (commitPrep) tira os bônus de CA \"até o descanso\"; o permanente fica", { timeout: 30_000 }, async () => {
+        const bonus = (id: string, name: string, kind: string) => ({ id, name, value: 1, origin: "spell", duration: { kind }, addedBy: "maddox" })
+        const t = await table({ player: { armorClassBonuses: [bonus("a", "Armadura Arcana", "long-rest"), bonus("b", "Bênção curta", "short-rest"), bonus("c", "Anel de Proteção", "permanent")] } })
+        await restTurn(t, { tipo: "longo", desfecho: "concluido", descricao: "Noite na estalagem." })
+        expect(((await sheetOf(t.lyra.sheetId))!.armorClassBonuses as { name: string }[]).map((item) => item.name)).toEqual(["Anel de Proteção"])
+        const lines = (await MaddoxCampaignMessageModel.find({ campaignId: t.id, kind: "sheet-change" }).lean()).map((line) => line.content)
+        expect(lines).toContain("CA de Lyra: 14 → 12 (Armadura Arcana +1 terminou: descanso concluído; Bênção curta +1 terminou: descanso concluído)")
+    })
+
+    it("DND-66: o descanso curto concluído tira só o bônus \"até o descanso curto\"", { timeout: 30_000 }, async () => {
+        const bonus = (id: string, name: string, kind: string) => ({ id, name, value: 1, origin: "spell", duration: { kind }, addedBy: "maddox" })
+        const t = await table({ player: { armorClassBonuses: [bonus("a", "Armadura Arcana", "long-rest"), bonus("b", "Bênção curta", "short-rest")] } })
+        await restTurn(t, { tipo: "curto", desfecho: "concluido", descricao: "Uma hora de pausa." })
+        expect(((await sheetOf(t.lyra.sheetId))!.armorClassBonuses as { name: string }[]).map((item) => item.name)).toEqual(["Armadura Arcana"])
+    })
+
     it("um combate começado na mesma narração interrompe o descanso", async () => {
         const doc = await rest.restMessageDoc(new Types.ObjectId(), 3, 0, { type: "long", outcome: "concluded", description: "Noite.", interruption: null, characters: [{ characterId: String(new Types.ObjectId()), memberId: String(new Types.ObjectId()), userId: "u", sheetId: String(new Types.ObjectId()), name: "Lyra", opex: false }] }, true)
         expect(doc.rest).toMatchObject({ status: "interrupted", interruption: "Um combate começou." })

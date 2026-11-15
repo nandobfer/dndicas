@@ -378,3 +378,34 @@ describe("DND-66 — revisão F4: ligações reais (mesa e fim do combate)", () 
     })
 })
 
+describe("DND-66 — revisão 2 (F4): início do combate pelo caminho real (applyCombatDrafts → applyStart)", () => {
+    const stats = { source: "custom", monsterId: null, ac: 12, hpMax: 7, hp: 7, tempHp: 0, initiativeBonus: 2, dexterity: 15, saves: { strength: 0, dexterity: 2, constitution: 0, intelligence: 0, wisdom: 0, charisma: 0 }, resistances: [], immunities: [], vulnerabilities: [], conditionImmunities: [], actions: [{ name: "Mordida", kind: "attack", bonus: 5, dc: null, ability: null, damage: null, damageType: null, halfOnSave: false, ranged: false, recharge: null, available: true }], multiattack: 1 } as const
+    const seedLeftovers = async (t: Table) => {
+        const old = String(new Types.ObjectId())
+        await CharacterSheet.collection.updateOne(
+            { _id: t.lizwan.sheetId },
+            { $set: { armorClassBonuses: [
+                { id: "old", name: "Escudo da Fé", value: 2, origin: "spell", duration: { kind: "combat", combatId: old }, addedBy: "maddox" },
+                { id: "ring", name: "Anel de Proteção", value: 1, origin: "item", duration: { kind: "permanent" }, addedBy: "player" },
+            ] } },
+        )
+    }
+
+    for (const mode of ["narrativo", "tático"] as const) {
+        it(`combate ${mode} novo: a sobra de um combate antigo sai da ficha; o permanente fica`, { timeout: 20_000 }, async () => {
+            const t = await table()
+            await seedLeftovers(t)
+            expect(await acBonuses.loadArmorClass(String(t.lizwan.sheetId))).toBe(18)
+            const { applyCombatDrafts } = await import("@/features/maddox/server/combat")
+            const rat = { name: "Rato gigante", side: "inimigo" as const, quantity: 1, description: "Um rato.", condition: "", registerNpc: false }
+            await applyCombatDrafts({ _id: t.campaignId, rigor: "fiel-dnd", ownerId: t.owner } as never, 3, [
+                { type: "start", title: "Ratos", location: "Porão", combatants: [rat], ...(mode === "tático" ? { tactical: { surprise: null, combatants: [{ ...rat, stats: structuredClone(stats) as never }] } } : {}) },
+            ])
+            await waitForCampaignIdle(String(t.campaignId))
+            expect(await MaddoxCombatModel.countDocuments({ campaignId: t.campaignId, status: "active" })).toBe(1)
+            expect((await bonusesOf(t.lizwan.sheetId)).map((bonus) => bonus.name)).toEqual(["Anel de Proteção"])
+            expect(await linesOf(t)).toContain("CA de Lizwan: 18 → 16 (Escudo da Fé +2 terminou: o combate dele já terminou)")
+        })
+    }
+})
+
