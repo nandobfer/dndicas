@@ -1416,6 +1416,36 @@ describe("DND-62 — a vez do combate nunca fica sem card", () => {
         expect((await game.getGameState(id, kael.userId)).me.combat!.myTurn).toBe(true)
     })
 
+    it("fim da narração sem vez aberta com o combate em andamento: nunca vira turno genérico; a retomada reabre a vez", async () => {
+        const { id, lyra } = await scene()
+        // Vez do Goblin acabou de passar: a fila do turno 3 do mestre vai direto para a Lyra (bloco do personagem, sem adversário).
+        await MaddoxCombatModel.updateOne({ campaignId: id }, { $set: { "tactical.activeIndex": 1 } })
+        await MaddoxCampaignModel.updateOne({ _id: id }, { $set: { "turn.number": 3, "turn.phase": "master", "turn.combatActor": null, "turn.eligibleMemberIds": [], "turn.generating": null, "turn.failedAt": null, "turn.awaitingChecks": false, "turn.checkRound": 0 } })
+        const refused = vi.spyOn(tactical, "advanceToNextCharacter").mockResolvedValueOnce({ kind: "none" })
+        let refusedCalls = 0
+        try {
+            await game.getGameState(id, lyra.userId)
+            await settleCampaign(id)
+            refusedCalls = refused.mock.calls.length
+        } finally {
+            refused.mockRestore()
+        }
+        expect(refusedCalls).toBeGreaterThan(0)
+        expect(await MaddoxCampaignMessageModel.exists({ campaignId: id, kind: "narration", turnNumber: 3 })).toBeTruthy()
+        let turn = (await MaddoxCampaignModel.findById(id).lean())!.turn
+        expect(turn).toMatchObject({ number: 3, phase: "master", generating: null, combatActor: null })
+        expect(turn.failedAt).toBeInstanceOf(Date)
+
+        // Passado o prazo da nova tentativa, a leitura da mesa refaz o fim da narração (sem narrar de novo) e abre a vez.
+        await MaddoxCampaignModel.updateOne({ _id: id }, { $set: { "turn.failedAt": new Date(Date.now() - 24 * 60 * 60_000) } })
+        await game.getGameState(id, lyra.userId)
+        await settleCampaign(id)
+        turn = (await MaddoxCampaignModel.findById(id).lean())!.turn
+        expect(turn).toMatchObject({ number: 3, phase: "players", combatActor: expect.objectContaining({ actorKey: lyra.actorKey }) })
+        expect(turn.eligibleMemberIds.map(String)).toEqual([lyra.memberId])
+        expect(await MaddoxCampaignMessageModel.countDocuments({ campaignId: id, kind: "narration", turnNumber: 3 })).toBe(1)
+    })
+
     it("sem combate tático em andamento, o turno de jogadores comum fica como está", async () => {
         const { id, kael } = await scene()
         await brokenTurn(id)
