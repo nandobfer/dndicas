@@ -11,6 +11,7 @@ import {
     checkEffectLabel,
     checkEffectSchema,
     effectsForCheck,
+    mentionsSkillChoice,
     normalizeEffectText,
     parseCheckEffectQuote,
     readCheckEffects,
@@ -136,8 +137,11 @@ const QUOTE_MIN_WORDS = 3
 function confirmQuote(entity: Record<string, unknown>, quote: string): ReturnType<typeof parseCheckEffectQuote> {
     const wanted = normalizeEffectText(quote)
     if (!wanted || wanted.split(" ").length < QUOTE_MIN_WORDS) return "o trecho citado é curto demais para confirmar a regra"
-    if (!entityText(entity).includes(wanted)) return "o trecho citado não está no texto do catálogo"
-    return parseCheckEffectQuote(quote)
+    const full = entityText(entity)
+    if (!full.includes(wanted)) return "o trecho citado não está no texto do catálogo"
+    const parsed = parseCheckEffectQuote(quote)
+    // A restrição da perícia vem da entidade inteira: o trecho curto não a solta (DND-69, revisão F1).
+    return typeof parsed === "string" ? parsed : { ...parsed, requiresSkill: parsed.requiresSkill || mentionsSkillChoice(full) }
 }
 
 interface SourceResolution {
@@ -301,12 +305,16 @@ export async function applyCheckEffect(request: ApplyCheckEffectRequest): Promis
         // Mesmo nome = o mesmo efeito, não acumula (a nova conjuração substitui).
         const kept = before.filter((item) => checkEffectKey(item.name) !== checkEffectKey(effect.name))
         if (kept.length >= MADDOX_CHECK_EFFECTS_MAX) return await refuse(`${target.name} já tem ${MADDOX_CHECK_EFFECTS_MAX} efeitos de teste ativos`)
-        if (source.spend) {
-            const spent = await source.spend()
-            if (spent) return await refuse(spent)
-        }
+        // Grava o efeito ANTES de gastar o espaço ou o uso: falha na gravação não gasta nada; falha no gasto desfaz o efeito.
         const list = [...kept, effect]
         if (!(await writeEffects(target.sheetId, sheetRow.checkEffects, list))) throw new CheckEffectError("A ficha mudou agora há pouco: tente outra vez.")
+        if (source.spend) {
+            const spent = await source.spend().catch((error: unknown) => (error instanceof Error ? error.message : String(error)))
+            if (spent) {
+                await revertEffects(target.sheetId, list, sheetRow.checkEffects, effect.id)
+                return await refuse(spent)
+            }
+        }
         // Uma concentração por conjurador: a anterior (em qualquer personagem) termina.
         const ended = effect.concentration ? await endOtherConcentration(campaign, characters, effect) : []
         const line = `Efeito de teste em ${target.name}: ${checkEffectLabel(effect)}${caster._id.equals(target._id) ? "" : `, de ${caster.name}`}${source.spendText ? `; ${source.spendText}` : ""} — ${reason}`
@@ -318,6 +326,17 @@ export async function applyCheckEffect(request: ApplyCheckEffectRequest): Promis
     } catch (error) {
         if (error instanceof CheckEffectError && !String(error.message).includes(" não entrou para ")) return refuse(error.message.replace(/\.$/, ""))
         throw error
+    }
+}
+
+/** Desfaz uma gravação de efeito (o gasto falhou): volta a lista anterior; se a ficha mudou no meio, só tira o efeito novo. */
+async function revertEffects(sheetId: Types.ObjectId, written: MaddoxCheckEffect[], previous: unknown, effectId: string): Promise<void> {
+    try {
+        const CharacterSheet = await sheetModel()
+        const back = await CharacterSheet.collection.updateOne({ _id: sheetId, checkEffects: written }, previous === undefined ? { $unset: { checkEffects: "" } } : { $set: { checkEffects: previous } })
+        if (!back.modifiedCount) await CharacterSheet.collection.updateOne({ _id: sheetId }, { $pull: { checkEffects: { id: effectId } } } as never)
+    } catch (error) {
+        log.warn({ err: error instanceof Error ? error.message : String(error), sheetId: String(sheetId), effectId }, "[maddox] falha ao desfazer o efeito de teste")
     }
 }
 
@@ -389,6 +408,23 @@ export async function endCheckEffect(request: EndCheckEffectRequest): Promise<Ch
 export async function loadCheckEffects(sheetId: Types.ObjectId | string | null | undefined): Promise<MaddoxCheckEffect[]> {
     if (!sheetId || !Types.ObjectId.isValid(String(sheetId))) return []
     return readCheckEffects((await readSheet(new Types.ObjectId(String(sheetId))))?.checkEffects)
+}
+
+/**
+ * Prévia dos testes pedidos na geração, recalculada ao gravar os rascunhos: o efeito registrado depois do `request_check`
+ * (seguindo o aviso) já aparece no card. Falha na leitura mantém a prévia do pedido.
+ */
+export async function refreshDraftCheckEffects<T extends { sheetId: string | null; kind: MaddoxCheckEffectSpec["kind"]; skill: MaddoxCheckEffectSpec["skill"]; effects?: MaddoxCheckEffectEntry[] }>(drafts: readonly T[]): Promise<T[]> {
+    return Promise.all(
+        drafts.map(async (draft) => {
+            try {
+                return { ...draft, effects: await previewCheckEffects(draft.sheetId, { kind: draft.kind, skill: draft.skill }) }
+            } catch (error) {
+                log.warn({ err: error instanceof Error ? error.message : String(error) }, "[maddox] falha ao recalcular a prévia dos efeitos de teste")
+                return draft
+            }
+        }),
+    )
 }
 
 /** Prévia no pedido do teste: o que entra e o que não entra (com o motivo). */
@@ -501,7 +537,8 @@ export async function unregisteredEffectMentions(input: { campaignId: Types.Obje
         const charges = (Array.isArray(sheet?.resourceCharges) ? sheet.resourceCharges : []) as Charge[]
         const names = [...new Set([...spells.map((item) => plain(item.name)), ...charges.map((item) => plain(item.name))].filter((name) => name.length >= 4))]
         const text = ` ${normalizeEffectText([input.reason, ...recent.map((item) => item.content)].join(" \n "))} `
-        const active = new Set(input.active.filter((entry) => entry.status !== "skipped").map((entry) => checkEffectKey(entry.name)))
+        // Todo efeito registrado conta, inclusive o que não vale neste teste (ele já aparece em `efeitosQueNaoEntram`).
+        const active = new Set(input.active.map((entry) => checkEffectKey(entry.name)))
         return names.filter((name) => text.includes(` ${normalizeEffectText(name)} `) && !active.has(checkEffectKey(name)))
     } catch (error) {
         log.warn({ err: error instanceof Error ? error.message : String(error) }, "[maddox] falha ao procurar efeitos citados")

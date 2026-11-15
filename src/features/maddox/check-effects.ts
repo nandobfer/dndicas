@@ -123,8 +123,15 @@ export function parseCheckEffectQuote(quote: string): ParsedCheckEffect | string
         kinds.add("skill")
     }
     if (!kinds.size) return "o trecho do catálogo não diz em que teste (atributo, perícia ou resistência) o dado entra"
-    const requiresSkill = /\bpericia (escolhida|a sua escolha|que escolher)\b|\bescolhe uma pericia\b/.test(text)
-    return { dice: first!, kinds: ALL_KINDS.filter((kind) => kinds.has(kind)), requiresSkill }
+    return { dice: first!, kinds: ALL_KINDS.filter((kind) => kinds.has(kind)), requiresSkill: mentionsSkillChoice(quote) }
+}
+
+/**
+ * O texto manda escolher uma perícia (Orientação). O servidor aplica no texto INTEIRO da entidade do catálogo, não só no
+ * trecho citado: um trecho curto ("adiciona 1d4 a qualquer teste de atributo") não pode soltar a restrição da perícia.
+ */
+export function mentionsSkillChoice(value: string): boolean {
+    return /\bpericia (escolhida|a sua escolha|que escolher)\b|\bescolhe uma pericia\b/.test(normalizeEffectText(value))
 }
 
 const KIND_SCOPE: Record<MaddoxCheckKind, string> = { skill: "testes de perícia", ability: "testes de atributo", save: "testes de resistência" }

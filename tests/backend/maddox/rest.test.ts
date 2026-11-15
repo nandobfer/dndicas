@@ -335,6 +335,15 @@ describe("DND-58 — descanso longo: recuperação pela tabela e pelo catálogo,
         expect(lines).toContain("CA de Lyra: 14 → 12 (Armadura Arcana +1 terminou: descanso concluído; Bênção curta +1 terminou: descanso concluído)")
     })
 
+    it("DND-69: o descanso concluído (commitPrep) encerra os efeitos de teste (Orientação)", { timeout: 30_000 }, async () => {
+        const effect = { id: "e1", name: "Orientação", dice: { count: 1, die: "d4" }, kinds: ["skill", "ability"], skill: "Sobrevivência", singleUse: false, concentration: true, casterCharacterId: "x", casterName: "Lyra", duration: "Concentração, até 1 minuto", source: { kind: "spell", ref: "Magia:x", quote: "adiciona 1d4" }, campaignId: "x", turnNumber: 1, createdAt: "2026-11-15T00:00:00.000Z" }
+        const t = await table({ player: { checkEffects: [effect] } })
+        await restTurn(t, { tipo: "curto", desfecho: "concluido", descricao: "Uma hora de pausa." })
+        expect((await sheetOf(t.lyra.sheetId))!.checkEffects).toEqual([])
+        const lines = (await MaddoxCampaignMessageModel.find({ campaignId: t.id, kind: "sheet-change" }).lean()).map((line) => line.content)
+        expect(lines).toContain("Efeito de teste de Lyra: Orientação terminou — descanso concluído")
+    })
+
     it("DND-66: o descanso curto concluído tira só o bônus \"até o descanso curto\"", { timeout: 30_000 }, async () => {
         const bonus = (id: string, name: string, kind: string) => ({ id, name, value: 1, origin: "spell", duration: { kind }, addedBy: "maddox" })
         const t = await table({ player: { armorClassBonuses: [bonus("a", "Armadura Arcana", "long-rest"), bonus("b", "Bênção curta", "short-rest")] } })

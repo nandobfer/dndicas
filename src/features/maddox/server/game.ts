@@ -190,7 +190,8 @@ async function runMasterTurn(campaignId: Types.ObjectId, token: string, turnNumb
             if (!isActiveMaddoxJob(String(campaignId), jobId)) throw new GenerationInterruptedError()
             // Os testes pedidos nesta geração só viram mensagens agora, logo abaixo da narração (ordem dos `_id`).
             const { draftCheckMessage } = await import("./game-checks")
-            const drafts = takeDraftChecks(String(campaignId), jobId)
+            // DND-69: a prévia dos efeitos de teste é relida da ficha (efeito registrado depois do pedido já aparece no card).
+            const drafts = await (await import("./check-effects")).refreshDraftCheckEffects(takeDraftChecks(String(campaignId), jobId))
             // Sugestões de ação (DND-30): só valem quando a narração abre o turno dos jogadores; com testes pedidos, o turno do
             // mestre continua e elas são descartadas.
             const draftOptions = takeDraftActionOptions(String(campaignId), jobId)

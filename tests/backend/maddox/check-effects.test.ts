@@ -9,11 +9,16 @@ import { MongoMemoryServer } from "mongodb-memory-server"
  */
 
 const serverDice: number[][] = []
+const failRoll = { next: false }
 vi.mock("@/features/dice-roller/server/dice-engine", async (importOriginal) => {
     const actual = await importOriginal<typeof import("@/features/dice-roller/server/dice-engine")>()
     return {
         ...actual,
         rollDice: (input: Parameters<typeof actual.rollDice>[0], options: Parameters<typeof actual.rollDice>[1] = {}) => {
+            if (failRoll.next) {
+                failRoll.next = false
+                throw new Error("motor de dados fora do ar")
+            }
             const values = serverDice.shift() ?? []
             let index = 0
             return actual.rollDice(input, { ...options, randomInt: options.randomInt ?? ((min: number, max: number) => values[index++] ?? Math.floor((min + max - 1) / 2)) })
@@ -41,6 +46,8 @@ const { findMaddoxTool, runMaddoxTool } = await import("@/features/maddox/server
 const effects = await import("@/features/maddox/server/check-effects")
 const checks = await import("@/features/maddox/server/game-checks")
 const { enqueueMaddoxJob, waitForCampaignIdle, takeDraftChecks } = await import("@/features/maddox/server/game-live")
+const tactical = await import("@/features/maddox/server/tactical-combat")
+const { freshEconomy } = await import("@/features/maddox/combat-rules")
 const runs = await import("@/features/maddox/server/question-runs")
 const { readCheckEffects } = await import("@/features/maddox/check-effects")
 
@@ -62,6 +69,7 @@ beforeEach(async () => {
     campaignMemoriesStore.reset()
     recordAudit.mockClear()
     serverDice.length = 0
+    failRoll.next = false
 })
 
 const GUIDANCE_TEXT = "<p>Você toca uma criatura voluntária e escolhe uma perícia.</p><p>Até que a magia termine, a criatura adiciona 1d4 a qualquer teste de atributo usando a perícia escolhida.</p>"
@@ -168,6 +176,84 @@ describe("DND-69 — Orientação entra no teste", () => {
     })
 })
 
+describe("DND-69 — a perícia escolhida vem da entidade do catálogo (revisão F1)", () => {
+    it("trecho curto da Orientação (sem 'perícia escolhida') com a perícia: o efeito fica restrito a ela", async () => {
+        const t = await table()
+        await guidance(t, { trecho: "a criatura adiciona 1d4 a qualquer teste de atributo" })
+        expect((await effectsOf(t.lizwan.sheetId))[0]).toMatchObject({ skill: "Sobrevivência" })
+        const checkId = await pendingCheck(t, { skill: "Furtividade", ability: "dexterity" })
+        serverDice.push([10])
+        const { roll } = await checks.rollCheck(String(t.campaignId), checkId, t.player)
+        expect(roll.terms).toHaveLength(1)
+    })
+
+    it("trecho curto sem a perícia é recusado (não vira bônus em todo teste)", async () => {
+        const t = await table()
+        await expect(guidance(t, { trecho: "a criatura adiciona 1d4 a qualquer teste de atributo", pericia: undefined })).rejects.toThrow(/informe a perícia/)
+        expect(await effectsOf(t.lizwan.sheetId)).toHaveLength(0)
+    })
+})
+
+describe("DND-69 — gasto e uso único não se perdem em falha (revisão F3)", () => {
+    it("rolagem que falha no motor devolve o uso único à ficha e o teste continua pendente", async () => {
+        const t = await table()
+        const trait = new Types.ObjectId()
+        await Trait.collection.insertOne({ _id: trait, name: "Inspiração de Bardo", description: "<p>Uma vez nos próximos 10 minutos, a criatura pode rolar 1d6 e adicionar o número rolado a um teste de D20 que fizer.</p>", status: "active" })
+        await CharacterSheet.collection.updateOne({ _id: t.ravel.sheetId }, { $set: { resourceCharges: [{ id: "c1", name: "Inspiração de Bardo", total: 1, used: 0, source: { kind: "class-feature", entityType: "Habilidade", entityId: String(trait) } }] } })
+        await tool("apply_check_effect", t, { personagem: "Lizwan", conjurador: "Ravel", fonte: { tipo: "recurso", nome: "Inspiração de Bardo" }, trecho: "pode rolar 1d6 e adicionar o número rolado a um teste de D20", motivo: "Ravel canta" })
+        const checkId = await pendingCheck(t, { skill: "Sobrevivência" })
+        failRoll.next = true
+        await expect(checks.rollCheck(String(t.campaignId), checkId, t.player)).rejects.toThrow("motor de dados fora do ar")
+        expect((await effectsOf(t.lizwan.sheetId)).map((item) => item.name)).toEqual(["Inspiração de Bardo"])
+        expect((await MaddoxCampaignMessageModel.findById(checkId).lean())!.check!.status).toBe("pending")
+        serverDice.push([8, 5])
+        const { roll } = await checks.rollCheck(String(t.campaignId), checkId, t.player)
+        expect(roll.terms[1]).toMatchObject({ dice: "d6", results: [5] })
+        expect(await effectsOf(t.lizwan.sheetId)).toHaveLength(0)
+    })
+
+    it("gasto recusado depois da gravação desfaz o efeito (nada fica gravado sem o espaço gasto)", async () => {
+        const t = await table()
+        const blessing = new Types.ObjectId()
+        await Spell.collection.insertOne({ _id: blessing, name: "Favor de Teste", description: "<p>O alvo adiciona 1d4 a suas salvaguardas até a magia terminar.</p>", circle: 1, component: ["Verbal"], range: "9 metros", duration: "1 minuto", status: "active" })
+        await CharacterSpell.collection.insertOne({ sheetId: t.ravel.sheetId, catalogSpellId: blessing, name: "Favor de Teste", circle: 1, prepared: true, components: [], createdAt: new Date() })
+        await guidance(t)
+        await expect(tool("apply_check_effect", t, { personagem: "Lizwan", conjurador: "Ravel", fonte: { tipo: "magia", nome: "Favor de Teste" }, trecho: "o alvo adiciona 1d4 a suas salvaguardas", motivo: "bênção" })).rejects.toThrow(/não tem espaço de magia/)
+        // A Orientação que já estava fica; o efeito recusado não.
+        expect((await effectsOf(t.lizwan.sheetId)).map((item) => item.name)).toEqual(["Orientação"])
+    })
+})
+
+describe("DND-69 — combate tático encerra a concentração de quem conjurou (saveTactical)", () => {
+    it("trocar a concentração ou cair encerra o efeito; gravar sem mudança não", async () => {
+        const t = await table()
+        await guidance(t)
+        const actor = (id: Types.ObjectId, name: string, sheetId: Types.ObjectId) => ({ actorKey: `pc:${id}`, characterId: String(id), memberId: String(new Types.ObjectId()), userId: String(new Types.ObjectId()), name, sheetId: String(sheetId), conditions: [], flags: {}, economy: freshEconomy(), concentration: null, stable: false, dead: false, hpZero: false, left: false, ready: null })
+        await mongoose.connection.collection("maddox_combats").insertOne({
+            campaignId: t.campaignId,
+            status: "active",
+            mode: "tactical",
+            title: "Emboscada",
+            location: "Estrada",
+            startedTurn: 27,
+            endedTurn: null,
+            masterTurns: 0,
+            combatants: [],
+            rev: 0,
+            tactical: { mode: "tactical", phase: "running", round: 1, activeIndex: 0, order: [], characters: [actor(t.lizwan.characterId, "Lizwan", t.lizwan.sheetId), actor(t.ravel.characterId, "Ravel", t.ravel.sheetId)], surprise: null, staleEndNarrations: 0, queue: [], nextKey: null, queueTurn: 0, block: null, acted: [] },
+            createdAt: new Date(),
+            updatedAt: new Date(),
+        })
+        await tactical.mutateTactical(t.campaignId, () => undefined)
+        expect(await effectsOf(t.lizwan.sheetId)).toHaveLength(1)
+        await tactical.mutateTactical(t.campaignId, (combat) => {
+            combat.tactical.characters.find((state) => state.name === "Lizwan")!.concentration = { spell: "Bênção", sinceRound: 1 }
+        })
+        expect(await effectsOf(t.lizwan.sheetId)).toHaveLength(0)
+        expect((await sheetLines(t)).at(-1)).toContain("Orientação terminou — a concentração de quem conjurou terminou")
+    })
+})
+
 describe("DND-69 — recusas com motivo (nunca em silêncio)", () => {
     it("magia fora da ficha, trecho fora do catálogo, sem a perícia escolhida e alcance Pessoal em outro alvo", async () => {
         const t = await table()
@@ -188,6 +274,7 @@ describe("DND-69 — recusas com motivo (nunca em silêncio)", () => {
         await CharacterSpell.collection.insertOne({ sheetId: t.ravel.sheetId, catalogSpellId: blessing, name: "Favor Divino de Teste", circle: 1, prepared: true, components: [], createdAt: new Date() })
         const input = { personagem: "Lizwan", conjurador: "Ravel", fonte: { tipo: "magia", nome: "Favor Divino de Teste" }, trecho: "o alvo adiciona 1d4 a suas salvaguardas", motivo: "bênção" }
         await expect(tool("apply_check_effect", t, input)).rejects.toThrow(/não tem espaço de magia de círculo 1 livre/)
+        expect(await effectsOf(t.lizwan.sheetId)).toHaveLength(0)
         await CharacterSheet.collection.updateOne({ _id: t.ravel.sheetId }, { $set: { "spellSlots.1": { total: 2, used: 0 } } })
         await tool("apply_check_effect", t, input)
         const ravel = (await CharacterSheet.collection.findOne({ _id: t.ravel.sheetId })) as { spellSlots: Record<string, { used: number }> } | null
@@ -272,6 +359,23 @@ describe("DND-69 — request_check mostra os efeitos e avisa o que foi citado se
         // Um teste por personagem: o segundo pedido é recusado, mas a prévia do primeiro ficou no rascunho.
         expect(results[1]).toMatchObject({ error: expect.stringContaining("Já existe um teste") })
         expect(drafts).toHaveLength(1)
+    })
+
+    it("efeito registrado que não vale neste teste: aparece em efeitosQueNaoEntram, sem o aviso de 'não registrado' (revisão F5)", async () => {
+        const t = await table()
+        await guidance(t)
+        const results: Record<string, unknown>[] = []
+        void enqueueMaddoxJob(
+            String(t.campaignId),
+            "test",
+            async ({ jobId }) => {
+                results.push((await tool("request_check", t, { personagem: "Lizwan", tipo: "pericia", pericia: "Furtividade", cd: 12, motivo: "Esgueirar-se ainda sob a Orientação" }, jobId)) as Record<string, unknown>)
+            },
+            { kind: "narration", turnNumber: 27, round: 0 },
+        )
+        await waitForCampaignIdle(String(t.campaignId))
+        expect(results[0]).toMatchObject({ efeitosQueNaoEntram: ["Orientação: vale só em testes de Sobrevivência"] })
+        expect(results[0]!.aviso).toBeUndefined()
     })
 
     it("com o efeito já registrado, o pedido traz a prévia e não avisa", async () => {

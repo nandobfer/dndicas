@@ -86,25 +86,32 @@ export async function rollCheck(campaignId: string, checkId: string, userId: str
     const [{ rollGeneralDice }, { resolveGeneralDiceTarget }, checkEffects] = await Promise.all([import("@/features/dice-roller/server/dice-roll-service"), import("@/features/dice-roller/server/dice-target"), import("./check-effects")])
     // DND-69: efeitos de teste ativos na ficha (Orientação +1d4) entram como dados próprios, depois do d20.
     const effects = await checkEffects.takeCheckEffectsForRoll(check.sheetId ?? null, spec, readCheckEffectEntries(check.effects))
-    const roll = await rollGeneralDice(
-        {
-            terms: [{ dice: "d20", quantity: 1 }, ...effects.applied.map((effect) => ({ dice: effect.dice.die, quantity: effect.dice.count }))],
-            modifier: modifier.value,
-            modifierParts: partsFromCalc(modifier.parts),
-            mode: check.mode,
-            label: checkTitle(spec),
-            source: "sheet",
-        },
-        resolveGeneralDiceTarget({ userId: message.userId })!,
-    )
-    const effectEntries = [...effects.applied.map((effect, index) => checkEffectEntry(effect, "applied", { results: roll.terms[index + 1]?.results ?? [] })), ...effects.skipped]
-    const saved = await MaddoxCampaignMessageModel.updateOne(
-        { _id: message._id, "check.status": "pending" },
-        { $set: { "check.status": "rolled", "check.roll": roll, "check.modifierParts": modifier.parts, "check.effects": effectEntries, "check.rolledBy": userId, "check.rolledAt": new Date() } },
-    )
-    if (saved.modifiedCount === 0) {
-        if (check.sheetId) await checkEffects.restoreConsumedCheckEffects(check.sheetId, effects.consumed)
-        throw new DomainError(409, "Este teste já foi rolado.", "CHECK_ALREADY_ROLLED")
+    // Os de uso único já saíram da ficha: qualquer falha antes de gravar o teste os devolve (o teste continua pendente).
+    const restore = () => (check.sheetId && effects.consumed.length ? checkEffects.restoreConsumedCheckEffects(check.sheetId, effects.consumed) : Promise.resolve())
+    let roll: Awaited<ReturnType<typeof rollGeneralDice>>
+    let effectEntries: ReturnType<typeof checkEffectEntry>[]
+    try {
+        roll = await rollGeneralDice(
+            {
+                terms: [{ dice: "d20", quantity: 1 }, ...effects.applied.map((effect) => ({ dice: effect.dice.die, quantity: effect.dice.count }))],
+                modifier: modifier.value,
+                modifierParts: partsFromCalc(modifier.parts),
+                mode: check.mode,
+                label: checkTitle(spec),
+                source: "sheet",
+            },
+            resolveGeneralDiceTarget({ userId: message.userId })!,
+        )
+        const rolled = roll
+        effectEntries = [...effects.applied.map((effect, index) => checkEffectEntry(effect, "applied", { results: rolled.terms[index + 1]?.results ?? [] })), ...effects.skipped]
+        const saved = await MaddoxCampaignMessageModel.updateOne(
+            { _id: message._id, "check.status": "pending" },
+            { $set: { "check.status": "rolled", "check.roll": roll, "check.modifierParts": modifier.parts, "check.effects": effectEntries, "check.rolledBy": userId, "check.rolledAt": new Date() } },
+        )
+        if (saved.modifiedCount === 0) throw new DomainError(409, "Este teste já foi rolado.", "CHECK_ALREADY_ROLLED")
+    } catch (error) {
+        await restore()
+        throw error
     }
     log.info({ campaignId, turnNumber: message.turnNumber, round: check.round, checkId, total: roll.total, byOwner: !isTarget, effects: effectEntries.map((entry) => ({ name: entry.name, status: entry.status, reason: entry.reason })) }, "[maddox] Teste rolado")
     if (!isTarget) {

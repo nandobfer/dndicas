@@ -2307,8 +2307,9 @@ permissão nova (`maddox.play` e ser membro cobrem a rolagem; as ferramentas sã
   estar preparada e gasta o espaço do círculo base, `spellSlots.N.used`); recurso = `resourceCharges` com `source.entityId`
   (Habilidade, Talento ou Item) e uso sobrando (gasta 1; o efeito é de uso único). O `trecho` precisa estar no texto normalizado da
   entidade (≥ 3 palavras) e dele saem o dado (`NdX`, d4–d12, um só) e o tipo de teste: "teste de atributo/perícia" ⇒ atributo e
-  perícia; "salvaguarda"/"teste de resistência" ⇒ resistência; "teste de D20" ⇒ os três; "perícia escolhida" ⇒ `pericia`
-  obrigatória (o efeito vale só nela). Dados que subtraem ou reduzem dano (Perdição, Resistência) são recusados. Concentração vem dos
+  perícia; "salvaguarda"/"teste de resistência" ⇒ resistência; "teste de D20" ⇒ os três. "Perícia escolhida" no texto INTEIRO
+  da entidade (`mentionsSkillChoice`, não só no trecho) ⇒ `pericia` obrigatória (o efeito vale só nela): trecho curto não solta
+  a restrição. O efeito é gravado antes do gasto do espaço ou uso; se o gasto falhar, a gravação é desfeita. Dados que subtraem ou reduzem dano (Perdição, Resistência) são recusados. Concentração vem dos
   componentes/duração do catálogo; alcance "Pessoal" exige alvo = conjurador. Mesmo nome substitui (não acumula).
 - **Duração (decisão do dono):** fora do combate não há relógio: o efeito vale até o Maddox encerrar (`end_check_effect`; o resumo da
   ficha de cada turno mostra "Efeitos de teste ativos: … duração no catálogo: …"), até um descanso concluído (`restCheckEffects` no
@@ -2317,11 +2318,14 @@ permissão nova (`maddox.play` e ser membro cobrem a rolagem; as ferramentas sã
   conjurou morre, sai ou passa a se concentrar em outra magia.
 - **No teste** (só os do `request_check` nesta etapa; salvaguarda pedida por adversário, concentração, Esconder-se e iniciativa do
   combate tático ficam para depois): o `request_check` devolve `efeitos` (o que entra), `efeitosQueNaoEntram` (com o motivo) e grava a
-  prévia em `check.effects` (`status: "expected"`). Sem trava (decisão do dono): quando a declaração, o lembrete ou a pergunta recente
+  prévia em `check.effects` (`status: "expected"`), recalculada da ficha ao gravar os rascunhos (`refreshDraftCheckEffects` em
+  `game.ts`): o efeito registrado depois do pedido já aparece no card. Sem trava (decisão do dono): quando a declaração, o lembrete ou a pergunta recente
   do personagem (turno atual e anterior) ou o motivo citam pelo nome uma magia/recurso da ficha sem efeito ativo, o retorno traz um
-  `aviso` mandando registrar (vale até a rolagem) ou narrar que não funcionou. Na rolagem (`rollCheck`), o servidor relê os efeitos
+  `aviso` mandando registrar (vale até a rolagem) ou narrar que não funcionou. Efeito registrado que só não vale neste teste não
+  gera aviso (ele já vem em `efeitosQueNaoEntram`). Na rolagem (`rollCheck`), o servidor relê os efeitos
   (`takeCheckEffectsForRoll`): os que entram viram termos próprios depois do d20 (`d20 + 1d4`; vantagem/desvantagem seguem no d20
-  principal), os de uso único saem da ficha com troca condicional (rolagem que perde a corrida devolve), e `check.effects` grava cada
+  principal), os de uso único saem da ficha com troca condicional (rolagem que perde a corrida ou falha no motor/gravação os
+  devolve, e o teste continua pendente), e `check.effects` grava cada
   um como `applied` (com `results`) ou `skipped` com o motivo ("vale só em testes de Sobrevivência", "o efeito terminou antes da
   rolagem", "o efeito já foi usado em outro teste"). A linha do narrador (`checkResultLine`) traz "Orientação +1d4: 3" e "Não
   entraram: …".
