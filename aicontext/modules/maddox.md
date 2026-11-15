@@ -2263,6 +2263,12 @@ podia lançar a XP.
 - **Prompt** (`progressionRule`, modo Experiência): XP automática só para monstros do catálogo; fera/animal/bloco próprio continua
   valendo XP e o mestre estima pela tabela de XP por ND; nunca dizer que não pode conceder XP nem inventar condição para ela.
 - Reparo do caso real: sem migração — o combate queimado é pendência legada e o dono pede no "Pergunte ao mestre".
+- **Robustez (revisão 1)**: o claim automático grava `experienceProcessedAt` junto com `experienceGranted`; legado é só o combate
+  sem esse campo (o combate em processamento nunca vira pendência, sem corrida com a XP oficial). Pendência sem participante com
+  ficha concluída fica fora da tarefa (`pendingCombatExperience` filtra pelo `partyOf`); citá-la recusa com o motivo. Em
+  `resolveCombatExperience`, falha antes de somar fichas reabre a pendência; falha depois (`onSheetUpdated` de `grantExperience`)
+  mantém o combate resolvido com o total parcial e `partial: true` (log de erro), para não duplicar XP. A ligação na tarefa é
+  `taskTakesPendingCombatXp` (`narrator-prompt.ts`), coberta em `narrator-campaign.test.ts` (narração, resposta, Marco, bloco `npc`).
 - Testes: bloco DND-70 de `tests/backend/maddox/level-progression.test.ts` e o de `tests/frontend/maddox/level-up-cards.test.tsx`.
 
 ## Bônus de CA nomeados e CA no card "Na mesa" (DND-66)

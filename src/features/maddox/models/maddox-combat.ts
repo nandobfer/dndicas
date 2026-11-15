@@ -77,6 +77,8 @@ export interface IMaddoxCombat {
     milestoneEvaluated?: boolean
     /** A etapa automática da XP dos monstros (DND-56, modo Experiência) já rodou (claim de idempotência; não garante XP). */
     experienceGranted?: boolean
+    /** DND-70: quando a etapa automática (código novo) fez o claim; combate sem o campo e com `experienceGranted` é legado. */
+    experienceProcessedAt?: Date | null
     /** DND-70: adversários derrotados sem ND do catálogo; a XP deles espera a estimativa do mestre (`grant_experience` com `combate`). */
     experiencePending?: IMaddoxCombatExperiencePending | null
     /** DND-70: a concessão do mestre que liquidou a XP pendente (uma vez por combate). */
@@ -105,6 +107,8 @@ export interface IMaddoxCombatExperienceResolved {
     total: number
     messageId: Types.ObjectId | null
     at: Date
+    /** A gravação falhou depois de somar parte das fichas (o combate fica resolvido para não duplicar XP). */
+    partial?: boolean
 }
 
 const CombatantSchema = new Schema<IMaddoxCombatant>(
@@ -160,6 +164,7 @@ const MaddoxCombatSchema = new Schema<IMaddoxCombat>(
         effectsApplied: { type: Boolean, default: false },
         milestoneEvaluated: { type: Boolean, default: false },
         experienceGranted: { type: Boolean, default: false },
+        experienceProcessedAt: { type: Date, default: null },
         experiencePending: { type: Schema.Types.Mixed, default: null },
         experienceResolved: { type: Schema.Types.Mixed, default: null },
         mode: { type: String, enum: ["narrative", "tactical"], default: "narrative" },

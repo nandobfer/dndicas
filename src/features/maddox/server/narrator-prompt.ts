@@ -389,6 +389,16 @@ export function progressionRule(progression: NarratorPromptContext["progression"
     return lines.join("\n")
 }
 
+/**
+ * DND-70: a XP pendente de combate entra na tarefa da narração (menos no bloco de um adversário do combate tático) e da
+ * resposta do "Pergunte ao mestre", só no modo Experiência.
+ */
+export function taskTakesPendingCombatXp(mode: MaddoxProgressionMode | null, task: { kind: string; tactical?: { block?: { kind: string } | null } | null }): boolean {
+    if (mode !== "experiencia") return false
+    if (task.kind === "answer") return true
+    return (task.kind === "narration" || task.kind === "continuation") && task.tactical?.block?.kind !== "npc"
+}
+
 /** Orientações da tarefa sobre a progressão (marco pendente e subidas por XP a narrar). */
 export function progressionTaskLines(input: {
     milestone: { trigger: MaddoxMilestoneTrigger; reason: string } | null

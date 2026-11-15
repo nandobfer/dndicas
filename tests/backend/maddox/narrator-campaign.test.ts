@@ -83,7 +83,7 @@ vi.mock("ai", () => ({
 
 vi.mock("@/features/engramind/server/campaign-memories", async () => (await import("../../helpers/campaign-memories-mock")).campaignMemoriesModule)
 const { campaignMemoriesStore } = await import("../../helpers/campaign-memories-mock")
-const { MaddoxCampaignMemberModel, MaddoxCampaignMessageModel, MaddoxCampaignModel, MaddoxCharacterModel, MaddoxNpcModel } = await import("@/features/maddox/models")
+const { MaddoxCampaignMemberModel, MaddoxCampaignMessageModel, MaddoxCampaignModel, MaddoxCharacterModel, MaddoxCombatModel, MaddoxNpcModel } = await import("@/features/maddox/models")
 const campaigns = await import("@/features/maddox/server/campaigns")
 const game = await import("@/features/maddox/server/game")
 const { subscribeGameLive, waitForCampaignIdle } = await import("@/features/maddox/server/game-live")
@@ -102,7 +102,7 @@ async function giveCharacter(campaignId: string, userId: string, name: string, p
     await MaddoxCampaignMemberModel.updateOne({ _id: member!._id }, { $set: { characterId: character._id } })
 }
 
-async function narrativeTable(options: Partial<Pick<CreateMaddoxCampaignInput, "rigor" | "combatDifficulty">> = {}) {
+async function narrativeTable(options: Partial<Pick<CreateMaddoxCampaignInput, "rigor" | "combatDifficulty" | "progression">> = {}) {
     const owner = await seedUser("dono")
     const created = await campaigns.createCampaign({ name: "Brumas do Norte", rigor: "narrativo", ...options }, owner)
     await MaddoxCampaignModel.updateOne({ _id: created.id }, { $set: { "scenarioInterview.status": "done", setting: "## Universo\nUm porto envolto em névoa.", openingSituation: "O farol do porto se apagou." } })
@@ -140,6 +140,8 @@ beforeEach(async () => {
         MaddoxCharacterModel.deleteMany({}),
         MaddoxCampaignMessageModel.deleteMany({}),
         MaddoxNpcModel.deleteMany({}),
+        MaddoxCombatModel.deleteMany({}),
+        mongoose.connection.collection("charactersheets").deleteMany({}),
     ])
     calls.length = 0
     script.length = 0
@@ -285,6 +287,72 @@ describe("Maddox 4 — campanha narrativa de ponta a ponta", () => {
         await game.startCampaign(id, owner)
         await waitForCampaignIdle(id)
         expect(calls[0]!.userText).not.toContain("Dificuldade dos combates")
+    })
+
+    describe("DND-70: XP pendente de combate na tarefa do mestre", () => {
+        /** Fichas concluídas para os dois personagens e um combate tático encerrado com a fera fora do catálogo pendente. */
+        async function pendingBeast(id: string) {
+            const characters = await MaddoxCharacterModel.find({ campaignId: id }).lean()
+            for (const character of characters) {
+                const sheetId = new mongoose.Types.ObjectId()
+                await mongoose.connection.collection("charactersheets").insertOne({ _id: sheetId, slug: `f-${String(sheetId)}`, userId: character.userId, name: character.name, level: 1, experience: 0, createdAt: new Date(), updatedAt: new Date() })
+                await MaddoxCharacterModel.updateOne({ _id: character._id }, { $set: { sheetId } })
+            }
+            const combatId = new mongoose.Types.ObjectId()
+            await MaddoxCombatModel.collection.insertOne({
+                _id: combatId,
+                campaignId: new mongoose.Types.ObjectId(id),
+                status: "ended",
+                mode: "tactical",
+                title: "A besta da estrada sul",
+                combatants: [{ name: "A besta da estrada sul", nameKey: "a besta da estrada sul", side: "inimigo", quantity: 1, outcome: "morto", tactical: { defeated: true, stats: { source: "custom", monsterId: null } } }],
+                tactical: { characters: characters.map((character) => ({ characterId: String(character._id), name: character.name, left: false })) },
+                experienceGranted: true,
+                experienceProcessedAt: new Date(),
+                experiencePending: { adversaries: [{ name: "A besta da estrada sul", quantity: 1 }], turnNumber: 1, at: new Date() },
+                experienceResolved: null,
+            })
+            return String(combatId)
+        }
+
+        it("modo Experiência: a narração e a resposta recebem o combate pendente, com o id, e a resposta oferece grant_experience", async () => {
+            const { id, owner, player } = await narrativeTable({ rigor: "rigoroso", progression: "experiencia" })
+            const combatId = await pendingBeast(id)
+            script.push([{ text: "Abertura." }], [{ text: "A XP da fera sai agora." }])
+            await game.startCampaign(id, owner)
+            await waitForCampaignIdle(id)
+            expect(calls[0]!.userText).toContain('XP PENDENTE do combate "A besta da estrada sul"')
+            expect(calls[0]!.userText).toContain(combatId)
+            await game.submitGameAction(id, { kind: "question", content: "por que não nos deu experiência após o combate?" }, player)
+            await waitForCampaignIdle(id)
+            expect(calls[1]!.userText).toContain('XP PENDENTE do combate "A besta da estrada sul"')
+            expect(calls[1]!.userText).toContain(combatId)
+            expect(calls[1]!.userText).toContain("conceda agora e explique a estimativa")
+            expect(calls[1]!.toolNames).toContain("grant_experience")
+        })
+
+        it("modo Marco: nem a narração nem a resposta recebem a pendência", async () => {
+            const { id, owner, player } = await narrativeTable({ rigor: "rigoroso", progression: "marco" })
+            await pendingBeast(id)
+            script.push([{ text: "Abertura." }], [{ text: "Resposta." }])
+            await game.startCampaign(id, owner)
+            await waitForCampaignIdle(id)
+            await game.submitGameAction(id, { kind: "question", content: "e a experiência?" }, player)
+            await waitForCampaignIdle(id)
+            expect(calls[0]!.userText).not.toContain("XP PENDENTE")
+            expect(calls[1]!.userText).not.toContain("XP PENDENTE")
+            expect(calls[1]!.toolNames).not.toContain("grant_experience")
+        })
+
+        it("só narração (fora do bloco de adversário do combate tático) e resposta, no modo Experiência", async () => {
+            const { taskTakesPendingCombatXp } = await import("@/features/maddox/server/narrator-prompt")
+            expect(taskTakesPendingCombatXp("experiencia", { kind: "narration" })).toBe(true)
+            expect(taskTakesPendingCombatXp("experiencia", { kind: "continuation", tactical: { block: { kind: "character" } } })).toBe(true)
+            expect(taskTakesPendingCombatXp("experiencia", { kind: "narration", tactical: { block: { kind: "npc" } } })).toBe(false)
+            expect(taskTakesPendingCombatXp("experiencia", { kind: "answer" })).toBe(true)
+            expect(taskTakesPendingCombatXp("marco", { kind: "answer" })).toBe(false)
+            expect(taskTakesPendingCombatXp(null, { kind: "narration" })).toBe(false)
+        })
     })
 
     it("ferramenta com entrada inválida volta ao modelo como erro e a narração continua", async () => {

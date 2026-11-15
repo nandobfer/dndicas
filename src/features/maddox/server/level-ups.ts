@@ -250,6 +250,8 @@ export interface GrantExperienceOptions {
     estimated?: boolean
     /** DND-70: quem pediu a concessão no "Pergunte ao mestre" (auditoria). */
     requestedBy?: string | null
+    /** DND-70: avisado a cada ficha que recebeu a XP (quem chama sabe se uma falha veio depois de gravar). */
+    onSheetUpdated?: (characterId: Types.ObjectId, amount: number) => void
 }
 
 export async function grantExperience(campaignId: Types.ObjectId, entries: readonly ExperienceEntry[], reason: string, source: "combat" | "grant", turnNumber: number, options: GrantExperienceOptions = {}): Promise<{ total: number; levelUps: number; messageId: Types.ObjectId | null }> {
@@ -267,6 +269,7 @@ export async function grantExperience(campaignId: Types.ObjectId, entries: reado
         const incremented = await CharacterSheet.collection.findOneAndUpdate({ _id: member.sheetId, experience: { $type: "number" } }, { $inc: { experience: amount } }, { returnDocument: "after" })
         const total = incremented ? experienceValue(incremented.experience) : member.experience + amount
         if (!incremented) await CharacterSheet.collection.updateOne({ _id: member.sheetId }, { $set: { experience: total } })
+        options.onSheetUpdated?.(member.characterId, amount)
         lines.push({ characterId: member.characterId, characterName: member.characterName, amount, total })
         const level = levelForXp(total)
         if (level > Math.max(member.level ?? 1, topStep(campaign, member.characterId))) reached.push({ member, level })

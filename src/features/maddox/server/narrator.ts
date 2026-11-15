@@ -430,7 +430,8 @@ async function generate(args: GenerateArgs, sink: MaddoxMasterSink): Promise<str
     const progression = progressionToolNames({ mode: progressionMode, answer: args.task.kind === "answer" })
     let progressionText: string | null = null
     // DND-70: XP pendente de combate (adversário fora do catálogo) vai na tarefa da narração e da resposta.
-    const pendingCombatXp = progressionMode === "experiencia" && ((narrating && task.tactical?.block?.kind !== "npc") || args.task.kind === "answer") ? await (await import("./combat-experience")).pendingCombatExperience(campaignId) : []
+    const { taskTakesPendingCombatXp } = await import("./narrator-prompt")
+    const pendingCombatXp = taskTakesPendingCombatXp(progressionMode, task) ? await (await import("./combat-experience")).pendingCombatExperience(campaignId) : []
     if (args.task.kind === "answer" && pendingCombatXp.length) {
         const { progressionTaskLines } = await import("./narrator-prompt")
         progressionText = progressionTaskLines({ milestone: null, levelUps: [], pendingCombatXp, answer: true })

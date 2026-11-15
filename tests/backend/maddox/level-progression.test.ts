@@ -510,6 +510,63 @@ describe("DND-70: XP de adversário fora do catálogo e XP no Pergunte ao mestre
         await expect(pendingCombatExperience(t.campaignId)).resolves.toEqual([])
     })
 
+    it("pendência sem participante com ficha concluída não fica na tarefa para sempre e a recusa explica o motivo", async () => {
+        const t = await table({ mode: "experiencia", rigor: "rigoroso" })
+        const gone = await beastCombat(t, { experienceGranted: true, tactical: { characters: t.members.slice(0, 2).map((member) => ({ characterId: String(member.characterId), name: member.name, left: true })) } })
+        const notReady = await beastCombat(t, { title: "Lobos", experienceGranted: true, tactical: { characters: [{ characterId: String(t.members[2]!.characterId), name: t.members[2]!.name, left: false }] } })
+        await MaddoxCharacterModel.updateOne({ _id: t.members[2]!.characterId }, { $set: { "interview.status": "in-progress" } })
+        const { pendingCombatExperience } = await import("@/features/maddox/server/combat-experience")
+        await expect(pendingCombatExperience(t.campaignId)).resolves.toEqual([])
+        await expect(answer(t, (jobId) => runMaddoxTool(tool("grant_experience"), { campaignId: t.campaignId, turnNumber: 5, jobId }, { personagens: ["grupo"], valor: 50, motivo: "x", combate: String(notReady._id) }), 0, true)).rejects.toThrow('Nenhum participante do combate "Lobos" tem ficha concluída')
+        expect(String(gone._id)).not.toBe(String(notReady._id))
+    })
+
+    it("combate em processamento pela etapa automática nunca parece legado (sem corrida com a XP oficial)", async () => {
+        const t = await table({ mode: "experiencia", rigor: "rigoroso" })
+        const goblin = new Types.ObjectId()
+        await mongoose.connection.collection("monsters").insertOne({ _id: goblin, name: "Goblin", challengeRating: "1/4", status: "active" })
+        const combat = await beastCombat(t, { title: "Goblins", combatants: [{ name: "Goblin", nameKey: "goblin", side: "inimigo", quantity: 2, outcome: "morto", tactical: { defeated: true, stats: { source: "catalog", monsterId: String(goblin) } } }] })
+        const { pendingCombatExperience } = await import("@/features/maddox/server/combat-experience")
+        // A pendência é lida enquanto a XP oficial ainda está sendo gravada (claim feito, card ainda não).
+        const spy = vi.spyOn(levels, "grantExperience")
+        let during: unknown = null
+        const create = MaddoxCampaignMessageModel.create.bind(MaddoxCampaignMessageModel)
+        const createSpy = vi.spyOn(MaddoxCampaignMessageModel, "create").mockImplementationOnce((async (...args: Parameters<typeof create>) => {
+            during = await pendingCombatExperience(t.campaignId)
+            return create(...args)
+        }) as never)
+        await expect(grantCombatExperience(t.campaignId, (await MaddoxCombatModel.findById(combat._id).lean())!, 5)).resolves.toEqual({ granted: 100, pending: [] })
+        createSpy.mockRestore()
+        spy.mockRestore()
+        expect(during).toEqual([])
+        expect((await MaddoxCombatModel.findById(combat._id).lean())!.experienceProcessedAt).toBeInstanceOf(Date)
+        await expect(pendingCombatExperience(t.campaignId)).resolves.toEqual([])
+    })
+
+    it("falha depois de somar fichas mantém o combate resolvido (não duplica); falha antes de somar reabre a pendência", async () => {
+        const t = await table({ mode: "experiencia", rigor: "rigoroso" })
+        const combat = await beastCombat(t)
+        await grantCombatExperience(t.campaignId, (await MaddoxCombatModel.findById(combat._id).lean())!, 34)
+        const { pendingCombatExperience } = await import("@/features/maddox/server/combat-experience")
+        // Antes de qualquer ficha: a pendência volta e o mestre pode tentar de novo.
+        const incSpy = vi.spyOn(CharacterSheet.collection, "findOneAndUpdate").mockRejectedValueOnce(new Error("banco fora do ar"))
+        await answer(t, (jobId) => runMaddoxTool(tool("grant_experience"), { campaignId: t.campaignId, turnNumber: 5, jobId }, { personagens: ["grupo"], valor: 50, motivo: "Fera ND 1/2.", combate: String(combat._id) }), 0, true)
+        incSpy.mockRestore()
+        expect((await MaddoxCombatModel.findById(combat._id).lean())!.experienceResolved ?? null).toBeNull()
+        expect(await xpOf(t.members[0]!)).toBe(0)
+        await expect(pendingCombatExperience(t.campaignId)).resolves.toHaveLength(1)
+        // Depois de somar as fichas (o card falha): o combate fica resolvido com o total parcial e sai das pendências.
+        const createSpy = vi.spyOn(MaddoxCampaignMessageModel, "create").mockRejectedValueOnce(new Error("card falhou") as never)
+        await answer(t, (jobId) => runMaddoxTool(tool("grant_experience"), { campaignId: t.campaignId, turnNumber: 5, jobId }, { personagens: ["grupo"], valor: 50, motivo: "Fera ND 1/2.", combate: String(combat._id) }), 0, true)
+        createSpy.mockRestore()
+        expect(await xpOf(t.members[0]!)).toBe(50)
+        expect(await xpOf(t.members[1]!)).toBe(50)
+        expect((await MaddoxCombatModel.findById(combat._id).lean())!.experienceResolved).toMatchObject({ by: "master", amount: 50, total: 100, partial: true })
+        await expect(pendingCombatExperience(t.campaignId)).resolves.toEqual([])
+        await expect(answer(t, (jobId) => runMaddoxTool(tool("grant_experience"), { campaignId: t.campaignId, turnNumber: 5, jobId }, { personagens: ["grupo"], valor: 50, motivo: "x", combate: String(combat._id) }), 0, true)).rejects.toThrow("já foi concedida")
+        expect(await xpOf(t.members[0]!)).toBe(50)
+    })
+
     it("regra do narrador: fera fora do catálogo vale XP e nunca \"não posso conceder\"", async () => {
         const { progressionRule } = await import("@/features/maddox/server/narrator-prompt")
         const rule = progressionRule({ mode: "experiencia", level: 1 })
