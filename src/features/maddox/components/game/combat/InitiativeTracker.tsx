@@ -6,10 +6,11 @@ import { AlertTriangle, Brain, Check, Clock, HeartPulse, ListOrdered, Loader2, S
 import { cn } from "@/core/utils"
 import { rarityColors } from "@/lib/config/colors"
 import { HP_BAND_LABELS } from "../../../combat-rules"
-import type { MaddoxCombatPrepSlotDto, MaddoxTacticalCombatDto, MaddoxTacticalSlotDto } from "../../../game-types"
+import type { MaddoxCombatPrepSlotDto, MaddoxTacticalCombatDto } from "../../../game-types"
 import { MemberAvatar, OpexChip, RarityChip } from "../../campaigns/campaign-visuals"
 import { COMBAT_COLOR } from "../GameCombatCard"
 import { HP_BAND_COLORS, hpColor } from "./combat-visuals"
+import { HpBar } from "./HpBar"
 
 const PREP_LABELS: Record<MaddoxCombatPrepSlotDto["status"], string> = { waiting: "Aguardando", preparing: "Preparando…", asking: "Pergunta ao jogador", ready: "Pronto", failed: "Falhou" }
 const PREP_COLORS: Record<MaddoxCombatPrepSlotDto["status"], string> = { waiting: rarityColors.common, preparing: rarityColors.legendary, asking: rarityColors.rare, ready: rarityColors.uncommon, failed: rarityColors.artifact }
@@ -23,25 +24,6 @@ export function PrepSeal({ prep }: { prep: MaddoxCombatPrepSlotDto }) {
                 <Icon className={cn("h-3 w-3", prep.status === "preparing" && "animate-spin")} aria-hidden /> {PREP_LABELS[prep.status]}
             </RarityChip>
         </span>
-    )
-}
-
-type SlotHp = NonNullable<MaddoxTacticalSlotDto["hp"]>
-
-const hpPercent = (hp: SlotHp) => (hp.max ? Math.max(0, Math.min(100, (hp.current / hp.max) * 100)) : 0)
-
-/** Barra e números de PV (personagens; combatentes do mestre quando a campanha mostra o PV do lado, DND-53). */
-function HpBar({ hp }: { hp: SlotHp }) {
-    return (
-        <div className="flex items-center gap-2" data-testid="initiative-hp">
-            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10">
-                <div className="h-full rounded-full transition-all" style={{ width: `${hpPercent(hp)}%`, background: hpColor(hp.current, hp.max) }} />
-            </div>
-            <span className="text-[11px] font-semibold text-white/80">
-                {hp.current}/{hp.max}
-                {hp.temp ? ` +${hp.temp}` : ""}
-            </span>
-        </div>
     )
 }
 
@@ -110,7 +92,7 @@ export function InitiativeTracker({ combat, title, color, compact = false }: { c
                                 </p>
                                 {slot.prep && <PrepSeal prep={slot.prep} />}
                                 {slot.hp ? (
-                                    <HpBar hp={slot.hp} />
+                                    <HpBar hp={slot.hp} name={slot.name} />
                                 ) : slot.band ? (
                                     <span className="text-[11px] font-semibold" style={{ color: HP_BAND_COLORS[slot.band] }} data-testid="initiative-band">
                                         {HP_BAND_LABELS[slot.band]}

@@ -247,7 +247,7 @@ function CampaignView({ campaign, userId }: { campaign: MaddoxCampaignDetailDto;
                                                 {member.userId === userId ? " · você" : ""}
                                             </p>
                                         )}
-                                        <XpBar xp={member.character?.xp} color={color} />
+                                        <XpBar xp={member.character?.xp} color={color} className="mt-1" />
                                         {member.kind === "opex" && member.opex && <OpexStatusLine member={member} campaignId={campaign.id} isOwner={isOwner} open={campaign.inviteOpen} retrying={opexActions.retryInterview.isPending} onRetry={() => opexActions.retryInterview.mutate(member.id)} />}
                                     </div>
                                     {member.character && <InterviewChip status={member.character.interviewStatus} />}

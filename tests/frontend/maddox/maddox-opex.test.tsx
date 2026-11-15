@@ -265,10 +265,13 @@ describe("vez do Personagem Opex no chat (DND-45)", () => {
         const view = render(<TurnPanel state={gameState(actor())} presence={presence} color="#3b82f6" skipping={false} onSkip={vi.fn()} />)
         const opexSeat = screen.getByTestId("seat-m9")
         for (const label of ["Agindo…", "Aguardando", "Parado: aguardando o dono", "Declarou"]) expect(opexSeat).not.toHaveTextContent(label)
+        // DND-63: sem bolinha de situação e sem a linha "Personagem Opex" (fica só o chip ao lado do nome).
+        expect(within(opexSeat).queryByTestId("seat-status")).toBeNull()
+        expect(opexSeat).not.toHaveTextContent("Personagem Opex")
         expect(within(opexSeat).getByRole("button", { name: "Pular a vez de Tork" })).toBeInTheDocument()
-        expect(screen.getByTestId("seat-m1")).toHaveTextContent("Aguardando")
+        expect(within(screen.getByTestId("seat-m1")).getByTestId("seat-status")).toHaveAccessibleName("Aguardando")
         view.rerender(<TurnPanel state={gameState(actor({ failed: true, error: "x" }))} presence={presence} color="#3b82f6" skipping={false} onSkip={vi.fn()} />)
-        expect(screen.getByTestId("seat-m9")).not.toHaveTextContent("Parado")
+        expect(within(screen.getByTestId("seat-m9")).queryByTestId("seat-status")).toBeNull()
     })
 })
 

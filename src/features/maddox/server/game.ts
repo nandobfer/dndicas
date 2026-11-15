@@ -21,7 +21,6 @@ import {
     MADDOX_MASTER_RETRY_MS,
     MADDOX_COMBAT_FORCE_END_AFTER,
     MADDOX_TACTICAL_COMBAT_RIGORS,
-    MADDOX_SHEET_RIGORS,
     MADDOX_OPEX_FAILED_MESSAGE,
     MADDOX_OPEX_LABEL,
     type MaddoxTurnPhase,
@@ -50,6 +49,7 @@ import { getMaddoxMaster, type MaddoxMasterDeclaration } from "./game-master"
 import { beginLive, enqueueMaddoxJob, hasPendingReview, isActiveMaddoxJob, isCampaignBusy, maddoxJobSignal, takeDraftActionOptions, takeDraftChecks, takeDraftCombat, takeDraftImages, takeDraftOpexNpcFailures, takeDraftRest } from "./game-live"
 import { onlineUserIds } from "./game-presence"
 import { isOpexMember, isOpexUserId, realUserIds } from "./opex-members"
+import { hasLevels } from "./progression-mode"
 
 /**
  * Mesa e motor de turnos das Campanhas Maddox (Maddox 3). SOMENTE servidor; `userId` é o usuário EFETIVO.
@@ -1276,12 +1276,20 @@ export async function getGameState(campaignId: string, userId: string): Promise<
     const { loadXpProgress } = await import("./experience-progress")
     const xpByCharacter = await loadXpProgress(campaign, members.flatMap(({ character }) => (character ? [{ _id: character._id, sheetId: character.sheetId ?? null, ready: isMemberReadyToPlay(character) }] : [])))
     // DND-66: CA de cada personagem (graus com ficha), com os bônus nomeados no tooltip do card "Na mesa".
-    const armorClasses = MADDOX_SHEET_RIGORS.includes(campaign.rigor)
-        ? await (await import("./armor-class-bonuses")).loadArmorClassSummaries(members.map(({ character }) => (character?.sheetId ? String(character.sheetId) : null)).filter((id): id is string => Boolean(id))).catch((error: unknown) => {
-              log.warn({ err: error instanceof Error ? error.message : String(error), campaignId: String(campaign._id) }, "[maddox] CA da mesa indisponível")
-              return null
-          })
-        : null
+    // DND-63: PV da ficha no mesmo card, dentro e fora do combate (o grupo vê o PV dos personagens).
+    const seatSheetIds = members.map(({ character }) => (character?.sheetId ? String(character.sheetId) : null)).filter((id): id is string => Boolean(id))
+    const withSheets = hasLevels(campaign.rigor)
+    const seatLoadFailed = (what: string) => (error: unknown) => {
+        log.warn({ err: error instanceof Error ? error.message : String(error), campaignId: String(campaign._id) }, `[maddox] ${what} da mesa indisponível`)
+        return null
+    }
+    const [armorClasses, hitPoints] = withSheets
+        ? await Promise.all([
+              import("./armor-class-bonuses").then((module) => module.loadArmorClassSummaries(seatSheetIds)).catch(seatLoadFailed("CA")),
+              import("./seat-hit-points").then((module) => module.loadHitPointsSummaries(seatSheetIds)).catch(seatLoadFailed("PV")),
+          ])
+        : [null, null]
+    const participantHitPoints = (character: CharacterDoc | null): MaddoxGameParticipantDto["hp"] => (character?.sheetId && hitPoints ? hitPoints.get(String(character.sheetId)) : undefined)
     const participantArmorClass = (character: CharacterDoc | null): MaddoxGameParticipantDto["armorClass"] => {
         const calc = character?.sheetId && armorClasses ? armorClasses.get(String(character.sheetId)) : undefined
         if (!character || !calc) return undefined
@@ -1305,6 +1313,10 @@ export async function getGameState(campaignId: string, userId: string): Promise<
             ...(() => {
                 const armorClass = participantArmorClass(character)
                 return armorClass ? { armorClass } : {}
+            })(),
+            ...(() => {
+                const hp = participantHitPoints(character)
+                return hp ? { hp } : {}
             })(),
         }))
         .sort((a, b) => (a.role === "owner" ? 0 : a.opex ? 2 : 1) - (b.role === "owner" ? 0 : b.opex ? 2 : 1))

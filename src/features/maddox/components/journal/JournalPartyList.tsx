@@ -35,7 +35,7 @@ export function JournalPartyList({ campaignId, color, myMemberId }: { campaignId
                                 <p className="flex items-center gap-1 text-xs text-white/60">
                                     <UserRound className="h-3 w-3" aria-hidden /> {whose}
                                 </p>
-                                <XpBar xp={member.xp} color={color} />
+                                <XpBar xp={member.xp} color={color} className="mt-1" />
                             </div>
                         </header>
                         <section className="space-y-1 rounded-lg border border-white/10 bg-white/[0.03] p-3" data-testid="journal-member-state">
