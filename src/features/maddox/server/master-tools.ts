@@ -48,6 +48,7 @@ import {
     MADDOX_PROGRESSION_TOOL_NAMES,
     MADDOX_EXHAUSTION_TOOL_NAME,
     MADDOX_ARMOR_CLASS_TOOL_NAMES,
+    MADDOX_CHECK_EFFECT_TOOL_NAMES,
     MADDOX_AC_DURATIONS,
     MADDOX_AC_ORIGINS,
     playerArmorClassRefusal,
@@ -547,6 +548,54 @@ export const MADDOX_MASTER_TOOLS: readonly MaddoxMasterTool[] = [
         },
     }),
     define({
+        name: MADDOX_CHECK_EFFECT_TOOL_NAMES.apply,
+        description: [
+            "Registra NA FICHA um EFEITO DE TESTE: magia (Orientação: +1d4 em testes de atributo da perícia escolhida) ou recurso de classe com usos (Inspiração de Bardo) que soma um dado aos testes pedidos com request_check. Sem esta ferramenta o dado NÃO entra: o teste sai só com a ficha.",
+            "O servidor confere a ficha de quem usa (a magia na lista de magias e ligada ao catálogo, preparada se for de círculo 1+, com espaço livre; o recurso com uso sobrando), gasta o espaço ou o uso e lê o dado e o tipo de teste do `trecho` do catálogo (leia a entidade com get_catalog_entity e copie a frase literal do dado).",
+            "Vale até você encerrar com end_check_effect, até um descanso, até outra concentração de quem conjurou ou, no recurso, até o primeiro teste. Recusa volta com o motivo e aparece na mesa: então narre que não funcionou. Chame ANTES do request_check (também vale depois, até a rolagem).",
+        ].join(" "),
+        readOnly: false,
+        input: z.object({
+            personagem: z.string().min(1).describe("Personagem jogador que recebe o efeito"),
+            conjurador: z.string().optional().describe("Quem conjura ou usa o recurso (padrão: o próprio personagem)"),
+            fonte: z.object({ tipo: z.enum(["magia", "recurso"]).describe("magia (da lista de magias) ou recurso (de classe, com usos)"), nome: z.string().min(1).max(120).describe("Nome como está na ficha (ex.: Orientação)") }),
+            pericia: z.enum(MADDOX_SKILLS as [string, ...string[]]).optional().describe("Perícia escolhida, quando o catálogo manda escolher (Orientação)"),
+            trecho: z.string().min(1).max(600).describe("Frase literal do catálogo com o dado e o tipo de teste (ex.: \"adiciona 1d4 a qualquer teste de atributo usando a perícia escolhida\")"),
+            motivo: z.string().min(1).describe("O que acontece na cena, curto (os jogadores leem)"),
+        }),
+        async execute(context, input) {
+            return checkEffectCall(context, input.conjurador?.trim() || input.personagem, (tools, run) =>
+                tools.applyCheckEffect({
+                    campaignId: context.campaignId,
+                    turnNumber: context.turnNumber,
+                    origin: run ? "question" : "narrator",
+                    requestedBy: run?.askerUserId ?? null,
+                    characterName: input.personagem,
+                    casterName: input.conjurador ?? null,
+                    source: { kind: input.fonte.tipo === "magia" ? "spell" : "resource", name: input.fonte.nome },
+                    skill: input.pericia ?? null,
+                    quote: input.trecho,
+                    reason: clip(input.motivo, MADDOX_TOOL_NAME_MAX * 2),
+                }),
+            )
+        },
+    }),
+    define({
+        name: MADDOX_CHECK_EFFECT_TOOL_NAMES.end,
+        description: "Encerra pelo nome um efeito de teste da ficha de um personagem jogador (a magia terminou: concentração perdida, o minuto passou, a cena acabou). Nome que não existe devolve erro com os efeitos ativos e nada muda. Descanso e outra concentração de quem conjurou encerram sozinhos.",
+        readOnly: false,
+        input: z.object({
+            personagem: z.string().min(1).describe("Personagem jogador que tem o efeito"),
+            nome: z.string().min(1).max(80).describe("Nome do efeito (ex.: Orientação)"),
+            motivo: z.string().min(1).describe("Por que termina, curto (os jogadores leem)"),
+        }),
+        async execute(context, input) {
+            return checkEffectCall(context, input.personagem, (tools, run) =>
+                tools.endCheckEffect({ campaignId: context.campaignId, turnNumber: context.turnNumber, origin: run ? "question" : "narrator", requestedBy: run?.askerUserId ?? null, characterName: input.personagem, name: input.nome, reason: clip(input.motivo, MADDOX_TOOL_NAME_MAX * 2) }),
+            )
+        },
+    }),
+    define({
         name: MADDOX_COINS_TOOL_NAME,
         description: [
             "Soma ou subtrai MOEDAS na ficha de um personagem jogador (graus com ficha): pagamento, compra, troca, recompensa ou achado fora do fim de combate. O saldo atual está em \"Moedas\" na ficha. Siglas: po (ouro), pp (prata), pe (electrum), pc (cobre), pl (platina).",
@@ -610,7 +659,7 @@ export const MADDOX_MASTER_TOOLS: readonly MaddoxMasterTool[] = [
         name: "request_check",
         description: [
             "Pede um teste de perícia, atributo ou resistência para UM personagem jogador. Use quando o resultado de uma tentativa for incerto e relevante.",
-            "O jogador rola o d20 com os modificadores da ficha dele; o resultado chega na próxima mensagem. Peça antes de escrever;",
+            `O jogador rola o d20 com os modificadores da ficha dele e os efeitos de teste ativos gravados na ficha (Orientação +1d4: só com \`${MADDOX_CHECK_EFFECT_TOOL_NAMES.apply}\`); o resultado chega na próxima mensagem. Peça antes de escrever;`,
             "depois, narre até o momento da tentativa e PARE: não decida o resultado nem pergunte o que os jogadores fazem. Um teste por personagem a cada narração.",
         ].join(" "),
         readOnly: false,
@@ -647,6 +696,10 @@ export const MADDOX_MASTER_TOOLS: readonly MaddoxMasterTool[] = [
             if (jobDraftChecks(String(context.campaignId), context.jobId!).some((check) => check.memberId === String(member._id))) throw new MaddoxToolError(`Já existe um teste pedido para ${target.name} nesta narração: um teste por personagem.`)
 
             const mode = input.modo === "vantagem" ? "advantage" : input.modo === "desvantagem" ? "disadvantage" : "normal"
+            // DND-69: efeitos de teste da ficha (prévia; a rolagem confere de novo) e magias/recursos citados sem efeito.
+            const checkEffects = await import("./check-effects")
+            const effects = await checkEffects.previewCheckEffects(String(target.sheetId), { kind, skill })
+            const mentioned = await checkEffects.unregisteredEffectMentions({ campaignId: new Types.ObjectId(String(context.campaignId)), turnNumber: context.turnNumber, characterId: String(target._id), sheetId: String(target.sheetId), reason: input.motivo, active: effects })
             // Só o teto de PROTEÇÃO corta o motivo (avisado no retorno); o tamanho curto é orientação da descrição.
             const fit = fitter()
             const added = addDraftCheck(String(context.campaignId), context.jobId!, {
@@ -661,13 +714,23 @@ export const MADDOX_MASTER_TOOLS: readonly MaddoxMasterTool[] = [
                 dc: input.cd,
                 mode,
                 reason: fit.fit("motivo", input.motivo),
+                effects,
             })
             if (!added) throw new MaddoxToolError("Esta narração já terminou.")
             const title = checkTitle({ kind, ability, skill })
+            const inEffect = effects.filter((entry) => entry.status === "expected")
+            const outEffect = effects.filter((entry) => entry.status === "skipped")
             return {
                 requested: true,
-                check: `${title} para ${target.name}, CD ${input.cd}${mode === "normal" ? "" : mode === "advantage" ? ", com vantagem" : ", com desvantagem"}`,
+                check: `${title} para ${target.name}, CD ${input.cd}${mode === "normal" ? "" : mode === "advantage" ? ", com vantagem" : ", com desvantagem"}${inEffect.length ? ` + ${inEffect.map((entry) => `${entry.dice} (${entry.name})`).join(" + ")}` : ""}`,
                 note: "Narre até o momento da tentativa e pare, sem decidir o resultado nem perguntar o que os jogadores fazem. O resultado da rolagem chega na próxima mensagem.",
+                ...(inEffect.length ? { efeitos: inEffect.map((entry) => `${entry.name}: +${entry.dice} entra neste teste`) } : {}),
+                ...(outEffect.length ? { efeitosQueNaoEntram: outEffect.map((entry) => `${entry.name}: ${entry.reason}`) } : {}),
+                ...(mentioned.length
+                    ? {
+                          aviso: `${mentioned.join(", ")} aparece na declaração, no lembrete ou no motivo de ${target.name}, mas não há efeito de teste ativo com esse nome: este teste sai sem ele. Se o personagem usou de fato, chame \`${MADDOX_CHECK_EFFECT_TOOL_NAMES.apply}\` agora (o efeito entra até a rolagem); se não pode usar, diga isso na narração em vez de narrar o uso.`,
+                      }
+                    : {}),
                 ...fit.notice(),
             }
         },
@@ -1420,6 +1483,30 @@ async function armorClassCall(
         return { saved: true, ...state, nota: "Gravado na ficha: a CA acima já vale nas próximas jogadas de ataque. Diga só o que o retorno mostra." }
     } catch (error) {
         if (error instanceof tools.ArmorClassBonusError) throw new MaddoxToolError(error.message)
+        throw error
+    }
+}
+
+/**
+ * DND-69: efeitos de teste. No "Pergunte ao mestre" (e no lembrete) de quem não é o dono, só o próprio personagem usa a
+ * magia ou o recurso (`conjurador`).
+ */
+async function checkEffectCall(
+    context: MaddoxToolContext,
+    actorName: string,
+    work: (tools: typeof import("./check-effects"), run: import("./question-runs").QuestionRun | null) => Promise<import("./check-effects").CheckEffectState>,
+): Promise<Record<string, unknown>> {
+    const [tools, { questionRun }] = await Promise.all([import("./check-effects"), import("./question-runs")])
+    const run = questionRun(context.jobId) ?? null
+    if (run && !run.askerIsOwner) {
+        const own = run.askerCharacterId ? await MaddoxCharacterModel.findById(run.askerCharacterId).select("name").lean<{ name: string }>() : null
+        if (!own || keyOf(own.name) !== keyOf(actorName)) throw new MaddoxToolError("Quem perguntou só pode usar magias e recursos do próprio personagem.")
+    }
+    try {
+        const state = await work(tools, run)
+        return { saved: true, ...state, nota: "Gravado na ficha: o dado entra sozinho nos testes compatíveis pedidos com request_check. Diga só o que o retorno mostra." }
+    } catch (error) {
+        if (error instanceof tools.CheckEffectError) throw new MaddoxToolError(error.message)
         throw error
     }
 }

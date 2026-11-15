@@ -13,7 +13,8 @@ import { CRITICAL_STAGE_CONFIG, CriticalHighlight, criticalBoxShadow } from "@/f
 import { DiceResultTooltip } from "@/features/dice-roller/components/dice-result-tooltip"
 import { getDiceCriticalState } from "@/features/dice-roller/critical-state"
 import { partsFromCalc } from "@/features/dice-roller/dice-breakdown"
-import type { DiceRollPreset, DiceRollResponse } from "@/features/dice-roller/types"
+import type { DiceRollPreset, DiceRollResponse, DiceTerm } from "@/features/dice-roller/types"
+import { entryDice, entryTotal, type MaddoxCheckEffectEntry } from "../../check-effects"
 import { checkKindLabel, checkModeLabel, checkModifier, checkTitle, signed } from "../../check-modifier"
 import { MADDOX_CHECK_DIE_HIDE_MS, messageAvatarContext } from "../../constants"
 import type { MaddoxGameMessageDto } from "../../game-types"
@@ -31,6 +32,17 @@ export const CHECK_PART_CLASSES: Record<CalcPart["color"], string> = {
     bonus: "bg-green-500/20 text-green-300 border border-green-500/30",
     base: "bg-white/10 text-white/60 border border-white/20",
     manual: "bg-orange-500/20 text-orange-300 border border-orange-500/30",
+}
+
+/** Chip dos efeitos de teste (dado extra), fora das cores dos atributos. */
+const CHECK_EFFECT_CLASS = "bg-fuchsia-500/20 text-fuchsia-200 border border-fuchsia-500/30"
+
+/** d20 + os dados dos efeitos que entram (prévia ou rolados). */
+function checkEffectTerms(effects: readonly MaddoxCheckEffectEntry[]): DiceTerm[] {
+    return [{ dice: "d20", quantity: 1 }, ...effects.flatMap((entry) => {
+        const dice = entryDice(entry)
+        return dice ? [{ dice: dice.die, quantity: dice.count }] : []
+    })]
 }
 
 interface Props {
@@ -72,7 +84,16 @@ export function GameCheckCard({ message, mine, color, replay, onRoll }: Props) {
     const animated = Boolean(localRoll) || Boolean(replay)
     const resultRoll = animated ? settledRoll : (check.roll ?? null)
     const presetModifier = frozenModifier ?? (pendingMine ? (preview?.value ?? 0) : (replay ?? check.roll)?.modifier ?? 0)
-    const preset = useMemo<DiceRollPreset>(() => ({ label: title, terms: [{ dice: "d20", quantity: 1 }], modifier: presetModifier, mode: check.mode, source: "sheet" }), [title, presetModifier, check.mode])
+    // DND-69: efeitos de teste (Orientação +1d4) entram como dados próprios depois do d20; os que não entram mostram o motivo.
+    const effects = check.effects ?? []
+    const activeEffects = effects.filter((entry) => entry.status !== "skipped")
+    const skippedEffects = effects.filter((entry) => entry.status === "skipped")
+    const effectTerms = useMemo(() => checkEffectTerms(activeEffects), [activeEffects.map((entry) => entry.dice).join("+")]) // eslint-disable-line react-hooks/exhaustive-deps
+    const [frozenTerms, setFrozenTerms] = useState<DiceTerm[] | null>(null)
+    const replayTerms = useMemo<DiceTerm[] | null>(() => (replay && !pendingMine && !localRoll ? replay.terms.map((term) => ({ dice: term.dice, quantity: term.quantity })) : null), [replay, pendingMine, localRoll])
+    const presetTerms = frozenTerms ?? replayTerms ?? effectTerms
+    const presetKey = presetTerms.map((term) => `${term.quantity}${term.dice}`).join("+")
+    const preset = useMemo<DiceRollPreset>(() => ({ label: title, terms: presetTerms, modifier: presetModifier, mode: check.mode, source: "sheet" }), [title, presetKey, presetModifier, check.mode]) // eslint-disable-line react-hooks/exhaustive-deps
     // A prévia do modificador depende da ficha: "Rolar" espera ela carregar.
     const sheetLoading = pendingMine && !localRoll && !sheet.data && !sheet.isError
 
@@ -119,17 +140,27 @@ export function GameCheckCard({ message, mine, color, replay, onRoll }: Props) {
                             {check.reason && <p className="text-xs text-white/70">{check.reason}</p>}
                             <div className="flex flex-wrap items-center gap-1.5 pt-0.5" data-testid="check-modifiers">
                                 <span className="rounded-md border border-white/20 bg-white/10 px-1.5 py-0.5 text-[11px] font-semibold text-white/80">d20</span>
+                                {activeEffects.map((entry) => (
+                                    <span key={entry.id} className={cn("rounded-md px-1.5 py-0.5 text-[11px] font-semibold", CHECK_EFFECT_CLASS)} data-testid="check-effect-chip">
+                                        {entry.name} +{entry.dice}
+                                    </span>
+                                ))}
                                 {parts.map((part, index) => (
                                     <span key={`${part.label}-${index}`} className={cn("rounded-md px-1.5 py-0.5 text-[11px] font-semibold", CHECK_PART_CLASSES[part.color])}>
                                         {part.label} {part.value}
                                     </span>
                                 ))}
                                 <span className="text-[11px] font-semibold text-white/80" data-testid="check-modifier-total">
-                                    = d20 {signed(modifier)}
+                                    = d20{activeEffects.map((entry) => ` + ${entry.dice}`).join("")} {signed(modifier)}
                                 </span>
                                 {check.mode !== "normal" && <RarityChip color={check.mode === "advantage" ? rarityColors.uncommon : rarityColors.artifact}>{checkModeLabel(check.mode)}</RarityChip>}
                                 {check.dc !== null && <RarityChip color={rarityColors.rare}>CD {check.dc}</RarityChip>}
                             </div>
+                            {skippedEffects.map((entry) => (
+                                <p key={entry.id} className="text-[11px] text-amber-200/80" data-testid="check-effect-skipped">
+                                    {entry.name} não entrou: {entry.reason ?? "não vale neste teste"}.
+                                </p>
+                            ))}
                         </div>
                     </div>
 
@@ -153,6 +184,7 @@ export function GameCheckCard({ message, mine, color, replay, onRoll }: Props) {
                                     externalResult={pendingMine || localRoll ? null : replay}
                                     rollRequest={async () => {
                                         setFrozenModifier(presetModifier)
+                                        setFrozenTerms(presetTerms)
                                         const result = await onRoll(message.id)
                                         setLocalRoll(result)
                                         return result
@@ -163,14 +195,14 @@ export function GameCheckCard({ message, mine, color, replay, onRoll }: Props) {
                     )}
                 </div>
 
-                {resultRoll && <CheckResultLine roll={resultRoll.modifierParts?.length || !check.modifierParts.length ? resultRoll : { ...resultRoll, modifierParts: partsFromCalc(check.modifierParts) }} outcome={outcome} />}
+                {resultRoll && <CheckResultLine roll={resultRoll.modifierParts?.length || !check.modifierParts.length ? resultRoll : { ...resultRoll, modifierParts: partsFromCalc(check.modifierParts) }} outcome={outcome} effects={effects.filter((entry) => entry.status === "applied")} />}
             </div>
         </motion.div>
     )
 }
 
 /** Total, d20 (com o descartado) e modificador numa linha, com as bolhas do desfecho (CD visível) e do crítico. */
-function CheckResultLine({ roll, outcome }: { roll: DiceRollResponse; outcome: "success" | "failure" | "none" }) {
+function CheckResultLine({ roll, outcome, effects }: { roll: DiceRollResponse; outcome: "success" | "failure" | "none"; effects: readonly MaddoxCheckEffectEntry[] }) {
     const kept = roll.selectedD20?.kept ?? roll.terms[0]?.results[0] ?? 0
     const discarded = roll.selectedD20?.discarded
     const critical = getDiceCriticalState(roll)
@@ -187,7 +219,14 @@ function CheckResultLine({ roll, outcome }: { roll: DiceRollResponse; outcome: "
                 <span className="font-semibold" style={criticalColor ? { color: criticalColor } : undefined}>
                     {kept}
                 </span>
-                {discarded !== undefined && <span className="text-white/40"> (descartado {discarded})</span>} {signed(roll.modifier)}
+                {discarded !== undefined && <span className="text-white/40"> (descartado {discarded})</span>}
+                {effects.map((entry) => (
+                    <span key={entry.id} data-testid="check-effect-result">
+                        {" "}
+                        + {entry.dice} {entry.name} <span className="font-semibold">{entryTotal(entry)}</span>
+                    </span>
+                ))}{" "}
+                {signed(roll.modifier)}
             </span>
             {outcome !== "none" && (
                 <span data-testid="check-outcome">

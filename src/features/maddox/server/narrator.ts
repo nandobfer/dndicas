@@ -35,6 +35,7 @@ import type { MaddoxSettings } from "../schemas"
 import { resolveNarratorModel, type MaddoxResolvedModel } from "../model-resolution"
 import type { MaddoxAnswerContext, MaddoxMaster, MaddoxMasterSink, MaddoxNarrationContext, MaddoxRestExchangeContext } from "./game-master"
 import { checkTitle, sheetSummary, type MaddoxCheckSheet } from "../check-modifier"
+import { readCheckEffectEntries } from "../check-effects"
 import { worldCatalogOf } from "../world-catalog"
 import { restTranscriptLine } from "../rest-rules"
 import { buildNarratorInstructions, checkResultLine, narratorTaskText, narratorTranscript, usesChecks, usesCombat, usesTacticalCombat, type NarratorCheckResult, type NarratorDeclaration, type NarratorPromptContext, type NarratorTacticalTask, type NarratorTask } from "./narrator-prompt"
@@ -315,6 +316,7 @@ export function checkResultOf(message: IMaddoxCampaignMessage): NarratorCheckRes
         modifier: roll ? roll.modifier : null,
         rolledByOwner: Boolean(check.rolledBy && check.rolledBy !== message.userId),
         cancelReason: check.cancelReason ?? null,
+        effects: readCheckEffectEntries(check.effects),
     }
 }
 
@@ -387,7 +389,8 @@ async function generate(args: GenerateArgs, sink: MaddoxMasterSink): Promise<str
     const { settings, model } = await loadNarrator(context.campaign.rigor)
     const transcript = narratorTranscript(
         context.messages
-            .filter((message) => !args.excludeIds.has(String(message._id)) && !message.error && message.kind !== "reminder" && message.kind !== "rewind")
+            // DND-69: lembretes já resolvidos entram na transcrição (os pendentes vão na seção da tarefa).
+            .filter((message) => !args.excludeIds.has(String(message._id)) && !message.error && message.kind !== "rewind" && (message.kind !== "reminder" || (message.reminder?.status ?? "pending") !== "pending"))
             .map((message) => {
                 const check = checkResultOf(message)
                 if (message.kind === "combat") return { turnNumber: message.turnNumber, kind: message.kind, characterName: null, content: combatTranscriptLine(message, context.combats.get(String(message.combat?.combatId))) }

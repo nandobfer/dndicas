@@ -10,6 +10,7 @@ import { cn } from "@/core/utils"
 import { colors, diceColors } from "@/lib/config/colors"
 import { getDiceCriticalState } from "../critical-state"
 import { requestDiceRoll } from "../dice-api"
+import { hasPrimaryD20 } from "../dice-utils"
 import { DICE_TYPES, type DiceRollMode, type DiceRollPreset, type DiceRollRequest, type DiceRollResponse, type DiceTerm, type DiceType } from "../types"
 import { DiceVisualStage } from "./dice-visual-stage"
 import { DiceModeSelector } from "./dice-mode-selector"
@@ -20,7 +21,7 @@ function normalizeTerms(terms: DiceTerm[]) {
 }
 
 function isSingleD20(terms: DiceTerm[]) {
-    return terms.length === 1 && terms[0]?.dice === "d20" && terms[0]?.quantity === 1
+    return hasPrimaryD20(terms)
 }
 
 function getInitialState(preset?: DiceRollPreset | null) {

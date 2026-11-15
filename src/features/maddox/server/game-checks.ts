@@ -7,6 +7,7 @@ import { loggerFor } from "@/lib/logger"
 import type { DiceRollResponse } from "@/features/dice-roller/types"
 import { MADDOX_CAMPAIGN_AUDIT_ENTITY, MADDOX_COMBAT_PREP_BLOCKING_STATUSES } from "../constants"
 import { checkModifier, checkTitle, type MaddoxCheckSheet } from "../check-modifier"
+import { checkEffectEntry, readCheckEffectEntries } from "../check-effects"
 import { MaddoxCampaignMemberModel, MaddoxCampaignMessageModel, MaddoxCampaignModel, type IMaddoxCampaignMessage } from "../models"
 import type { MaddoxGameStateDto } from "../game-types"
 import { assertMemberCanPlay } from "./campaigns"
@@ -51,6 +52,8 @@ export function draftCheckMessage(campaignId: Types.ObjectId, turnNumber: number
             rolledBy: null,
             rolledAt: null,
             cancelReason: null,
+            // DND-69: prévia dos efeitos de teste no pedido (a rolagem confere de novo).
+            effects: draft.effects ?? [],
         },
     }
 }
@@ -80,17 +83,30 @@ export async function rollCheck(campaignId: string, checkId: string, userId: str
     const spec = { kind: check.kind, ability: check.ability, skill: check.skill ?? null }
     const sheet = check.sheetId ? await loadSheet(check.sheetId) : null
     const modifier = checkModifier(sheet, spec)
-    const [{ rollGeneralDice }, { resolveGeneralDiceTarget }] = await Promise.all([import("@/features/dice-roller/server/dice-roll-service"), import("@/features/dice-roller/server/dice-target")])
+    const [{ rollGeneralDice }, { resolveGeneralDiceTarget }, checkEffects] = await Promise.all([import("@/features/dice-roller/server/dice-roll-service"), import("@/features/dice-roller/server/dice-target"), import("./check-effects")])
+    // DND-69: efeitos de teste ativos na ficha (Orientação +1d4) entram como dados próprios, depois do d20.
+    const effects = await checkEffects.takeCheckEffectsForRoll(check.sheetId ?? null, spec, readCheckEffectEntries(check.effects))
     const roll = await rollGeneralDice(
-        { terms: [{ dice: "d20", quantity: 1 }], modifier: modifier.value, modifierParts: partsFromCalc(modifier.parts), mode: check.mode, label: checkTitle(spec), source: "sheet" },
+        {
+            terms: [{ dice: "d20", quantity: 1 }, ...effects.applied.map((effect) => ({ dice: effect.dice.die, quantity: effect.dice.count }))],
+            modifier: modifier.value,
+            modifierParts: partsFromCalc(modifier.parts),
+            mode: check.mode,
+            label: checkTitle(spec),
+            source: "sheet",
+        },
         resolveGeneralDiceTarget({ userId: message.userId })!,
     )
+    const effectEntries = [...effects.applied.map((effect, index) => checkEffectEntry(effect, "applied", { results: roll.terms[index + 1]?.results ?? [] })), ...effects.skipped]
     const saved = await MaddoxCampaignMessageModel.updateOne(
         { _id: message._id, "check.status": "pending" },
-        { $set: { "check.status": "rolled", "check.roll": roll, "check.modifierParts": modifier.parts, "check.rolledBy": userId, "check.rolledAt": new Date() } },
+        { $set: { "check.status": "rolled", "check.roll": roll, "check.modifierParts": modifier.parts, "check.effects": effectEntries, "check.rolledBy": userId, "check.rolledAt": new Date() } },
     )
-    if (saved.modifiedCount === 0) throw new DomainError(409, "Este teste já foi rolado.", "CHECK_ALREADY_ROLLED")
-    log.info({ campaignId, turnNumber: message.turnNumber, round: check.round, checkId, total: roll.total, byOwner: !isTarget }, "[maddox] Teste rolado")
+    if (saved.modifiedCount === 0) {
+        if (check.sheetId) await checkEffects.restoreConsumedCheckEffects(check.sheetId, effects.consumed)
+        throw new DomainError(409, "Este teste já foi rolado.", "CHECK_ALREADY_ROLLED")
+    }
+    log.info({ campaignId, turnNumber: message.turnNumber, round: check.round, checkId, total: roll.total, byOwner: !isTarget, effects: effectEntries.map((entry) => ({ name: entry.name, status: entry.status, reason: entry.reason })) }, "[maddox] Teste rolado")
     if (!isTarget) {
         await recordAudit({ userId, entidade: MADDOX_CAMPAIGN_AUDIT_ENTITY, entidadeId: campaignId, acao: AcaoAuditoria.ATUALIZAR, depois: { turn: message.turnNumber, check: checkId, rolledFor: message.userId, total: roll.total } })
     }

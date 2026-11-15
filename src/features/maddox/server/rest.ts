@@ -354,6 +354,8 @@ async function commitPrep(campaign: CampaignDoc, message: RestMessage, entry: IM
     )
     // DND-66: os bônus de CA "até o descanso curto/longo" saem com a recuperação.
     await (await import("./armor-class-bonuses")).restArmorClassBonuses(campaign._id, [new Types.ObjectId(String(entry.characterId))], message.rest.type === "long" ? "long" : "short")
+    // DND-69: os efeitos de teste (Orientação) terminam com o descanso concluído.
+    await (await import("./check-effects")).restCheckEffects(campaign._id, [new Types.ObjectId(String(entry.characterId))])
     log.info({ campaignId: String(campaign._id), restId: String(message._id), character: entry.name, recovered: plan.recovered.length, notRecovered: plan.notRecovered.length }, "[maddox] ficha preparada no descanso")
     await afterRestProgress(campaign._id)
     return true
