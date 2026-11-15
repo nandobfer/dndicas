@@ -243,7 +243,16 @@ export interface ExperienceEntry {
  * Soma XP às fichas (modo Experiência), grava o card e abre os degraus de quem atingiu o limiar. Durante combate
  * tático, os degraus ficam "depois do combate".
  */
-export async function grantExperience(campaignId: Types.ObjectId, entries: readonly ExperienceEntry[], reason: string, source: "combat" | "grant", turnNumber: number): Promise<{ total: number; levelUps: number }> {
+export interface GrantExperienceOptions {
+    /** DND-70: o combate desta XP (vai no card e na auditoria). */
+    combatId?: Types.ObjectId | string | null
+    /** DND-70: XP estimada pelo mestre (adversário fora do catálogo). */
+    estimated?: boolean
+    /** DND-70: quem pediu a concessão no "Pergunte ao mestre" (auditoria). */
+    requestedBy?: string | null
+}
+
+export async function grantExperience(campaignId: Types.ObjectId, entries: readonly ExperienceEntry[], reason: string, source: "combat" | "grant", turnNumber: number, options: GrantExperienceOptions = {}): Promise<{ total: number; levelUps: number; messageId: Types.ObjectId | null }> {
     const campaign = await MaddoxCampaignModel.findById(campaignId).lean<CampaignDoc>()
     if (!campaign || progressionModeOf(campaign) !== "experiencia") throw new ProgressionRefusal("Esta campanha não usa o modo Experiência.")
     const party = await partyOf(campaignId)
@@ -263,9 +272,10 @@ export async function grantExperience(campaignId: Types.ObjectId, entries: reado
         if (level > Math.max(member.level ?? 1, topStep(campaign, member.characterId))) reached.push({ member, level })
         await publishSheet(String(member.sheetId))
     }
-    if (!lines.length) return { total: 0, levelUps: 0 }
+    if (!lines.length) return { total: 0, levelUps: 0, messageId: null }
     const total = lines.reduce((sum, line) => sum + line.amount, 0)
-    await MaddoxCampaignMessageModel.create({ campaignId, turnNumber, phase: "master", kind: "experience", content: "", experience: { source, reason, total, entries: lines } })
+    const combatId = options.combatId ? new Types.ObjectId(String(options.combatId)) : null
+    const card = await MaddoxCampaignMessageModel.create({ campaignId, turnNumber, phase: "master", kind: "experience", content: "", experience: { source, reason, total, entries: lines, combatId, estimated: Boolean(options.estimated), pending: null } })
     const inCombat = await tacticalCombatActive(campaignId)
     let opened = 0
     for (const { member, level } of reached) {
@@ -281,10 +291,18 @@ export async function grantExperience(campaignId: Types.ObjectId, entries: reado
         entidadeId: String(campaignId),
         acao: AcaoAuditoria.ATUALIZAR,
         antes: {},
-        depois: { event: "experience-granted", source, reason, entries: lines.map((line) => ({ character: line.characterName, amount: line.amount, total: line.total })) },
+        depois: {
+            event: "experience-granted",
+            source,
+            reason,
+            entries: lines.map((line) => ({ character: line.characterName, amount: line.amount, total: line.total })),
+            ...(combatId ? { combatId: String(combatId) } : {}),
+            ...(options.estimated ? { estimated: true } : {}),
+            ...(options.requestedBy ? { requestedBy: options.requestedBy } : {}),
+        },
     }).catch(() => undefined)
-    log.info({ campaignId: String(campaignId), source, total, levelUps: opened }, "[maddox] XP concedida")
-    return { total, levelUps: opened }
+    log.info({ campaignId: String(campaignId), source, total, levelUps: opened, combatId: combatId ? String(combatId) : null, estimated: Boolean(options.estimated) }, "[maddox] XP concedida")
+    return { total, levelUps: opened, messageId: card._id }
 }
 
 /** Fim do combate tático: os degraus que esperavam o combate abrem. */
@@ -331,7 +349,8 @@ export async function commitProgression(campaignId: Types.ObjectId, jobId: strin
         if (draft.chapter) await recordChapter(campaignId, draft.chapter.title, draft.chapter.summary, turnNumber)
         for (const grant of draft.grants) {
             try {
-                await grantExperience(campaignId, grant.entries, grant.reason, "grant", turnNumber)
+                if (grant.combatId) await (await import("./combat-experience")).resolveCombatExperience(campaignId, grant, turnNumber)
+                else await grantExperience(campaignId, grant.entries, grant.reason, "grant", turnNumber, { requestedBy: grant.requestedBy ?? null })
             } catch (error) {
                 log.warn({ err: error instanceof Error ? error.message : String(error), campaignId: String(campaignId) }, "[maddox] XP concedida pelo Maddox não gravada")
             }
@@ -423,8 +442,24 @@ export function levelUpCardDto(card: { toLevel: number; reason: string; source: 
     return { toLevel: card.toLevel, reason: card.reason, source: card.source, entries: steps.map((step) => levelUpStepDto(step, viewer, lookups.actionable, lookups.sheetIds)) }
 }
 
-export function experienceCardDto(card: { source: "combat" | "grant"; reason: string; total: number; entries: { characterId: Types.ObjectId | string; characterName: string; amount: number; total: number }[] }): MaddoxExperienceCardDto {
-    return { source: card.source, reason: card.reason, total: card.total, entries: card.entries.map((entry) => ({ characterId: String(entry.characterId), characterName: entry.characterName, amount: entry.amount, total: entry.total })) }
+export function experienceCardDto(card: {
+    source: "combat" | "grant"
+    reason: string
+    total: number
+    entries: { characterId: Types.ObjectId | string; characterName: string; amount: number; total: number }[]
+    combatId?: Types.ObjectId | string | null
+    estimated?: boolean
+    pending?: { name: string; quantity: number }[] | null
+}): MaddoxExperienceCardDto {
+    return {
+        source: card.source,
+        reason: card.reason,
+        total: card.total,
+        entries: card.entries.map((entry) => ({ characterId: String(entry.characterId), characterName: entry.characterName, amount: entry.amount, total: entry.total })),
+        combatId: card.combatId ? String(card.combatId) : null,
+        estimated: Boolean(card.estimated),
+        pending: card.pending?.length ? card.pending.map((item) => ({ name: item.name, quantity: item.quantity })) : null,
+    }
 }
 
 /** Degraus que o espectador pode concluir agora (o próprio personagem; o dono, os Opex com falha). */

@@ -104,12 +104,27 @@ export function LevelUpCard({ message, onComplete, onRetry, retryingId = null }:
 export function ExperienceCard({ message }: { message: MaddoxGameMessageDto }) {
     const card = message.experience
     if (!card) return null
+    if (card.pending?.length) {
+        const names = card.pending.map((item) => `${item.name}${item.quantity > 1 ? ` (${item.quantity})` : ""}`).join(", ")
+        return (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex justify-center pb-3" data-testid="experience-pending-card">
+                <div className="max-w-full rounded-lg border border-dashed border-white/15 px-3 py-2 text-xs text-white/75">
+                    <p className="flex items-center justify-center gap-1.5 font-semibold text-white/85">
+                        <Sparkles className="h-3.5 w-3.5 shrink-0" style={{ color: rarityColors.rare }} aria-hidden />
+                        {MADDOX_LEVEL_UP_TEXT.experiencePendingTitle} · {card.reason}
+                    </p>
+                    <p className="mt-1 text-center">{MADDOX_LEVEL_UP_TEXT.experiencePendingDetail(names)}</p>
+                </div>
+            </motion.div>
+        )
+    }
     return (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex justify-center pb-3" data-testid="experience-card">
             <div className="max-w-full rounded-lg border border-white/10 px-3 py-2 text-xs text-white/75">
                 <p className="flex items-center justify-center gap-1.5 font-semibold text-white/85">
                     <Sparkles className="h-3.5 w-3.5 shrink-0" style={{ color: rarityColors.rare }} aria-hidden />
-                    {MADDOX_LEVEL_UP_TEXT.experienceTitle}: {card.total.toLocaleString("pt-BR")} XP · {card.reason}
+                    {MADDOX_LEVEL_UP_TEXT.experienceTitle}
+                    {card.estimated ? ` (${MADDOX_LEVEL_UP_TEXT.experienceEstimated})` : ""}: {card.total.toLocaleString("pt-BR")} XP · {card.reason}
                 </p>
                 <ul className="mt-1 space-y-0.5 text-center">
                     {card.entries.map((entry) => (

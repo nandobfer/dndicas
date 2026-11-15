@@ -1275,5 +1275,8 @@ export const MADDOX_LEVEL_UP_TEXT = {
     done: "Concluído",
     retry: "Tentar de novo",
     experienceTitle: "Experiência",
+    experiencePendingTitle: "XP pendente",
+    experiencePendingDetail: (names: string) => `${names}: fora do catálogo — o mestre vai estimar a XP.`,
+    experienceEstimated: "estimada pelo mestre",
     chapterTitle: "Capítulo encerrado",
 } as const

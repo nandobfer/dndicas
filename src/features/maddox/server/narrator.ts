@@ -394,7 +394,8 @@ async function generate(args: GenerateArgs, sink: MaddoxMasterSink): Promise<str
                 if (message.combatAction) return { turnNumber: message.turnNumber, kind: message.kind, characterName: null, content: message.combatAction.status === "cancelled" ? "" : message.combatAction.summary }
                 if (message.combatRoll) return { turnNumber: message.turnNumber, kind: message.kind, characterName: null, content: `${message.characterName ?? "Personagem"} — ${message.combatRoll.reason}: ${message.combatRoll.outcome ?? message.combatRoll.status}` }
                 if (message.levelUp) return { turnNumber: message.turnNumber, kind: message.kind, characterName: null, content: `Subida de nível para o nível ${message.levelUp.toLevel}: ${message.levelUp.reason}` }
-                if (message.experience) return { turnNumber: message.turnNumber, kind: message.kind, characterName: null, content: `Experiência (${message.experience.reason}): ${message.experience.entries.map((entry) => `${entry.characterName} +${entry.amount} XP (total ${entry.total})`).join(", ")}` }
+                if (message.experience?.pending?.length) return { turnNumber: message.turnNumber, kind: message.kind, characterName: null, content: `Experiência pendente (${message.experience.reason}): ${message.experience.pending.map((item) => item.name).join(", ")} sem ND do catálogo — o mestre estima e concede` }
+                if (message.experience) return { turnNumber: message.turnNumber, kind: message.kind, characterName: null, content: `Experiência${message.experience.estimated ? " estimada pelo mestre" : ""} (${message.experience.reason}): ${message.experience.entries.map((entry) => `${entry.characterName} +${entry.amount} XP (total ${entry.total})`).join(", ")}` }
                 if (message.chapter) return { turnNumber: message.turnNumber, kind: message.kind, characterName: null, content: `Capítulo encerrado: ${message.chapter.title}` }
                 if (message.kind === "rest" && message.rest) return { turnNumber: message.turnNumber, kind: message.kind, characterName: null, content: restTranscriptLine(message.rest) }
                 if (message.combatReaction) return { turnNumber: message.turnNumber, kind: message.kind, characterName: null, content: `${message.characterName ?? "Personagem"} — reação (${message.combatReaction.description}): ${message.combatReaction.outcome ?? message.combatReaction.status}` }
@@ -428,6 +429,12 @@ async function generate(args: GenerateArgs, sink: MaddoxMasterSink): Promise<str
     const { progressionToolNames } = await import("./master-tools")
     const progression = progressionToolNames({ mode: progressionMode, answer: args.task.kind === "answer" })
     let progressionText: string | null = null
+    // DND-70: XP pendente de combate (adversário fora do catálogo) vai na tarefa da narração e da resposta.
+    const pendingCombatXp = progressionMode === "experiencia" && ((narrating && task.tactical?.block?.kind !== "npc") || args.task.kind === "answer") ? await (await import("./combat-experience")).pendingCombatExperience(campaignId) : []
+    if (args.task.kind === "answer" && pendingCombatXp.length) {
+        const { progressionTaskLines } = await import("./narrator-prompt")
+        progressionText = progressionTaskLines({ milestone: null, levelUps: [], pendingCombatXp, answer: true })
+    }
     if (args.task.kind !== "answer" && progressionMode) {
         const { jobDraftProgression } = await import("./game-live")
         const draft = jobDraftProgression(String(campaignId), args.jobId)
@@ -439,7 +446,7 @@ async function generate(args: GenerateArgs, sink: MaddoxMasterSink): Promise<str
             draft.claimedLevelUps = narrate.map((step) => String(step._id))
         }
         const { progressionTaskLines } = await import("./narrator-prompt")
-        progressionText = progressionTaskLines({ milestone: pending ? { trigger: pending.trigger, reason: pending.reason } : null, levelUps: narrate })
+        progressionText = progressionTaskLines({ milestone: pending ? { trigger: pending.trigger, reason: pending.reason } : null, levelUps: narrate, pendingCombatXp: narrating ? pendingCombatXp : [] })
     }
     const npcBlock = narrating && task.tactical?.block?.kind === "npc"
     const userText = [

@@ -75,8 +75,12 @@ export interface IMaddoxCombat {
     effectsApplied: boolean
     /** A decisão do marco de nível (DND-56) já rodou para este fim de combate. */
     milestoneEvaluated?: boolean
-    /** A XP dos monstros (DND-56, modo Experiência) já foi concedida. */
+    /** A etapa automática da XP dos monstros (DND-56, modo Experiência) já rodou (claim de idempotência; não garante XP). */
     experienceGranted?: boolean
+    /** DND-70: adversários derrotados sem ND do catálogo; a XP deles espera a estimativa do mestre (`grant_experience` com `combate`). */
+    experiencePending?: IMaddoxCombatExperiencePending | null
+    /** DND-70: a concessão do mestre que liquidou a XP pendente (uma vez por combate). */
+    experienceResolved?: IMaddoxCombatExperienceResolved | null
     /** Combate narrativo (Maddox 6) ou tático (Maddox 7: iniciativa e turnos, Rigoroso e Fiel ao D&D). */
     mode: "narrative" | "tactical"
     /** Estado do combate tático (ordem, rodada, personagens); `null` no narrativo. */
@@ -86,6 +90,21 @@ export interface IMaddoxCombat {
     endedAt: Date | null
     createdAt: Date
     updatedAt: Date
+}
+
+export interface IMaddoxCombatExperiencePending {
+    adversaries: { name: string; quantity: number }[]
+    turnNumber: number
+    at: Date
+}
+
+export interface IMaddoxCombatExperienceResolved {
+    by: "master"
+    reason: string
+    amount: number
+    total: number
+    messageId: Types.ObjectId | null
+    at: Date
 }
 
 const CombatantSchema = new Schema<IMaddoxCombatant>(
@@ -141,6 +160,8 @@ const MaddoxCombatSchema = new Schema<IMaddoxCombat>(
         effectsApplied: { type: Boolean, default: false },
         milestoneEvaluated: { type: Boolean, default: false },
         experienceGranted: { type: Boolean, default: false },
+        experiencePending: { type: Schema.Types.Mixed, default: null },
+        experienceResolved: { type: Schema.Types.Mixed, default: null },
         mode: { type: String, enum: ["narrative", "tactical"], default: "narrative" },
         tactical: { type: Schema.Types.Mixed, default: null },
         rev: { type: Number, default: 0 },

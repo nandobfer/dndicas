@@ -118,6 +118,12 @@ export interface MaddoxExperienceCardDto {
     reason: string
     total: number
     entries: { characterId: string; characterName: string; amount: number; total: number }[]
+    /** DND-70: o combate desta XP. */
+    combatId: string | null
+    /** DND-70: XP estimada pelo mestre (adversário fora do catálogo). */
+    estimated: boolean
+    /** DND-70: card de pendência (adversários sem ND; o mestre ainda vai estimar). */
+    pending: { name: string; quantity: number }[] | null
 }
 
 /** Rolagem de um dado de vida no descanso curto (DND-58). */

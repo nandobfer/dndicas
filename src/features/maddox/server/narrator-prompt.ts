@@ -379,8 +379,10 @@ export function progressionRule(progression: NarratorPromptContext["progression"
         )
     } else if (progression?.mode === "experiencia") {
         lines.push(
-            "- Progressão por **Experiência**: a XP dos monstros do combate tático é concedida pelo servidor no fim do combate (pelo ND).",
+            "- Progressão por **Experiência**: a XP dos monstros DO CATÁLOGO no combate tático é concedida pelo servidor no fim do combate (pelo ND, tabela oficial).",
+            `- Adversário fora do catálogo (fera, animal, criatura com bloco próprio) CONTINUA valendo XP: o servidor deixa a XP dele pendente e a tarefa lista o combate. Estime o valor pelo poder do adversário comparado à tabela de XP por ND (ex.: fera parecida com uma de ND 1/2 = 100 XP no total, dividido entre quem lutou) e conceda com \`${MADDOX_PROGRESSION_TOOL_NAMES.grant}\` informando \`combate\`, com a estimativa no motivo.`,
             `- Conceda XP de missões e feitos com \`${MADDOX_PROGRESSION_TOOL_NAMES.grant}\` (personagens, valor e motivo). No combate narrativo, é a única forma de dar XP de combate. Quem atinge o limiar do próximo nível sobe; narre a subida brevemente quando a tarefa pedir.`,
+            `- Nunca diga que não pode conceder XP nem invente condição para ela (\"só quando entregar a pele\"): se a XP de um combate não veio, conceda com \`${MADDOX_PROGRESSION_TOOL_NAMES.grant}\` (também no "Pergunte ao mestre") e explique ao jogador.`,
             "- Não declare subida de nível nem invente níveis: o nível segue a XP.",
         )
     }
@@ -388,8 +390,21 @@ export function progressionRule(progression: NarratorPromptContext["progression"
 }
 
 /** Orientações da tarefa sobre a progressão (marco pendente e subidas por XP a narrar). */
-export function progressionTaskLines(input: { milestone: { trigger: MaddoxMilestoneTrigger; reason: string } | null; levelUps: readonly { characterName: string; toLevel: number }[] }): string | null {
+export function progressionTaskLines(input: {
+    milestone: { trigger: MaddoxMilestoneTrigger; reason: string } | null
+    levelUps: readonly { characterName: string; toLevel: number }[]
+    /** DND-70: combates com XP pendente (adversários fora do catálogo). */
+    pendingCombatXp?: readonly { combatId: string; title: string; adversaries: readonly { name: string; quantity: number }[]; characterNames: readonly string[] }[]
+    /** Tarefa do "Pergunte ao mestre". */
+    answer?: boolean
+}): string | null {
     const lines: string[] = []
+    for (const combat of input.pendingCombatXp ?? []) {
+        const adversaries = combat.adversaries.map((item) => `${item.name}${item.quantity > 1 ? ` (${item.quantity})` : ""}`).join(", ") || "os adversários derrotados"
+        lines.push(
+            `- XP PENDENTE do combate "${combat.title}" (combate: \`${combat.combatId}\`): ${adversaries} não têm ND do catálogo. Estime a XP adequada pelo poder deles (tabela de XP por ND) e conceda com \`${MADDOX_PROGRESSION_TOOL_NAMES.grant}\` (personagens ["grupo"], o valor para cada personagem, a estimativa no motivo e \`combate\` com esse id). Participantes: ${combat.characterNames.join(", ") || "nenhum"}.${input.answer ? " Se a pergunta for sobre essa XP, conceda agora e explique a estimativa." : " Mencione a XP num trecho curto."}`,
+        )
+    }
     if (input.milestone) lines.push(`- O marco de subida de nível foi atingido (${MADDOX_MILESTONE_TRIGGER_LABELS[input.milestone.trigger]}): ${input.milestone.reason} Declare a subida do grupo com \`${MADDOX_PROGRESSION_TOOL_NAMES.declare}\` nesta narração e narre o momento num trecho curto (fora de combate tático).`)
     if (input.levelUps.length) lines.push(`- Subiram de nível pela experiência: ${input.levelUps.map((item) => `${item.characterName} (nível ${item.toLevel})`).join(", ")}. Narre brevemente esse momento.`)
     return lines.length ? ["## Progressão de nível", ...lines].join("\n") : null

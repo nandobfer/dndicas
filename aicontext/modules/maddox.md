@@ -2159,9 +2159,9 @@ sem retrato e imagem quebrada, propagação bloqueada, `className`, painel de NP
 
 Graus com ficha (`MADDOX_SHEET_RIGORS`) escolhem na criação o modo `progression.mode`: **Marco** (padrão; campanhas antigas sem o campo também) ou **Experiência**. No Editar campanha o modo aparece só para leitura (`ProgressionModeField`). Estado no documento da campanha: `progression.declared[]` (níveis declarados, com motivo, gatilho e `offMilestone`), `progression.pendingMilestone` (marco positivo ainda não declarado, vira orientação da próxima narração), `levelUps[]` (uma subida por personagem e nível: `pending`/`deciding`/`waiting-combat`/`failed`/`done`, com `gains`) e `chapters[]`. Serviço central: `server/level-ups.ts`.
 
-- **Ferramentas do mestre** (`master-tools.ts`, execução em `server/progression-actions.ts`): `declare_level_up` (só narração e modo Marco; grupo inteiro vai para maior nível + 1, iguala quem está abaixo; recusa durante combate tático, acima do 20, já declarada), `end_chapter` (todos os graus; no grau com ficha, roda a decisão do marco), `grant_experience` (só modo Experiência, sem teto), `evaluate_level_milestone` (só no "Pergunte ao mestre"; positiva aciona a subida, negativa explica). O que a geração pede fica no rascunho do job (`MaddoxDraftProgression` em `game-live.ts`) e é gravado por `commitProgression` depois da fala (narração e resposta).
+- **Ferramentas do mestre** (`master-tools.ts`, execução em `server/progression-actions.ts`): `declare_level_up` (só narração e modo Marco; grupo inteiro vai para maior nível + 1, iguala quem está abaixo; recusa durante combate tático, acima do 20, já declarada), `end_chapter` (todos os graus; no grau com ficha, roda a decisão do marco), `grant_experience` (só modo Experiência, sem teto; na narração e, desde a DND-70, no "Pergunte ao mestre"; `combate` liquida a XP pendente de um combate — ver a seção DND-70), `evaluate_level_milestone` (só no "Pergunte ao mestre"; positiva aciona a subida, negativa explica). O que a geração pede fica no rascunho do job (`MaddoxDraftProgression` em `game-live.ts`) e é gravado por `commitProgression` depois da fala (narração e resposta).
 - **Decisão do marco** (`server/level-milestone.ts`): com a chave JEV `level-milestone` ligada nas configurações, o JEV decide (cenário, personagens ativos, nível do grupo, acontecimento); senão, ou se o JEV falha, uma geração curta do narrador (`level-up-ai.ts`). Gatilhos: fim de combate (`afterCombatEnded`), missão concluída, capítulo encerrado, "Avaliar marco".
-- **Experiência**: XP dos monstros do combate tático pelo ND (`XP_BY_CR`, `server/combat-experience.ts`, uma vez por combate: `experienceGranted`), dividida entre os personagens que participaram; desfechos que contam: morto, derrotado, capturado, rendeu-se, fugiu, poupado. Cada limiar cruzado gera uma subida (acumuladas em ordem); durante combate tático ficam `waiting-combat` até `releaseCombatLevelUps` no fim.
+- **Experiência**: XP dos monstros do combate tático pelo ND (`XP_BY_CR`, `server/combat-experience.ts`, uma vez por combate: `experienceGranted` é o claim da etapa automática, não garante XP), dividida entre os personagens que participaram; adversário derrotado sem ND do catálogo vira XP pendente para o mestre (DND-70); desfechos que contam: morto, derrotado, capturado, rendeu-se, fugiu, poupado. Cada limiar cruzado gera uma subida (acumuladas em ordem); durante combate tático ficam `waiting-combat` até `releaseCombatLevelUps` no fim.
 - **Chat**: cards `level-up` (status por personagem, ao vivo pelo estado da mesa; o que cada um ganhou), `experience` e `chapter` (`ProgressionCards.tsx`). O jogador vê o aviso "Subir de nível" no cabeçalho da mesa e o wizard abre sozinho uma vez (`GameLevelUps.tsx`); a subida não segura turno nenhum. `state.me.levelUps` traz as do próprio personagem e, para o dono, as de Personagens Opex com falha (motivo só para o dono).
 - **Personagem Opex** (`server/level-up-opex.ts`): o Opex decide as escolhas (`decideOpex`, com as opções do motor no prompt) e o servidor aplica sem clique; uma nova tentativa; depois disso, `failed`. O degrau guarda em `error` só o motivo em linguagem de mesa (`MADDOX_LEVEL_UP_OPEX_FAILURE`: genérico, interrompido, sem ficha, nível divergente, escolha recusada pelas regras; erro de domínio `DomainError` passa como está) e em `errorDetail` o erro técnico (log e diagnóstico, nunca no DTO). O dono conclui no wizard da ficha do Opex ou usa **"Tentar de novo"** no card (`canRetry` no DTO; `POST …/game/level-ups/[stepId]/retry`, `retryOpexLevelUp`: só o dono, só o degrau atual do personagem, só com o Opex na mesa — senão 403/404/409; volta a `pending`, audita `CampanhaMaddox` com `opex: "retry"` e decide de novo fora da fila; hook `useRetryOpexLevelUp`).
 - **Fronteira servidor x cliente**: o motor da subida roda no servidor e não pode importar nada de módulo `"use client"` (no bundle do Next a chamada lança "Attempted to call X() from the server"; o Vitest ignora a diretiva). As menções dos traços usam `appendMentionParagraphs` de `sheet-rules.ts` (pura, uma menção por parágrafo, sem repetir), nunca `appendMentionsToHtml` de `mention-sync.ts`. `tests/backend/server-client-boundary.test.ts` percorre os imports de valor a partir de `src/app/api`, `src/features/*/server` e do motor e falha se algum alcançar um arquivo `"use client"`.
@@ -2230,6 +2230,40 @@ Campo `exhaustion` (0–6) da ficha (linha "Exaustão" no card de dados de vida,
 Penalidade −2 × nível (parcela "Exaustão") em todo d20: `checkModifier` (perícia, atributo, resistência), iniciativa, salvaguarda,
 concentração, teste contra a morte (`deathSave(d20, …, penalidade)`: o natural decide 1/20, o total decide o 10) e ataque de
 oportunidade; no combate, o nível vem da ficha (`exhaustionOfSheet`).
+
+## XP de adversário fora do catálogo e XP no "Pergunte ao mestre" (DND-70)
+
+Caso real (campanha `6af8db71abcd65f7e78ebb00`, modo Experiência): o combate tático "A besta da estrada sul" teve só uma fera de
+bloco próprio (`tactical.stats.monsterId: null`, `source: "custom"`). A automação somou 0 XP, mas já tinha gravado
+`experienceGranted: true` antes da conta: nenhum card, combate "queimado". Na pergunta "por que não nos deu experiência?", o mestre
+não tinha `grant_experience` na resposta (`progressionToolNames` devolvia `[]` e `draftGrant` exigia a narração) e disse que não
+podia lançar a XP.
+
+- **Fim do combate** (`grantCombatExperience`): `combatExperienceBreakdown` separa a XP oficial (`catalogXp`) dos derrotados sem ND
+  (`missing`). A parte oficial sai como antes (card `source: "combat"` agora com `combatId`). Os sem ND — e a parte oficial que
+  divide para 0 por personagem — gravam `experiencePending { adversaries, turnNumber, at }` no combate e o card de pendência
+  (`kind: "experience"`, `total: 0`, `entries: []`, `pending: [...]`; tela "XP pendente · Combate "…"", `data-testid="experience-pending-card"`).
+  O retorno é `{ granted, pending }`. Sem derrotados ou sem participantes: sem XP, com log. O servidor nunca estima.
+- **Pendências** (`pendingCombatExperience`): combates táticos encerrados com `experiencePending` e sem `experienceResolved`, mais os
+  **legados** (antes da DND-70: `experienceGranted` sem pendência, sem resolução, com derrotado e sem card de combate pelo `combatId`
+  ou pelo motivo `Combate "<título>"`). Só no modo Experiência (`progressionModeOf`). Entram na tarefa da narração (exceto blocos de
+  adversário) e da resposta (`progressionTaskLines({ pendingCombatXp })`, com o id do combate).
+- **O mestre estima**: `grant_experience { personagens, valor, motivo, combate? }`. Com `combate` (id inteiro, final do id ou título;
+  `findPendingCombat`), a XP vai para os participantes do combate (`tactical.characters` sem `left`, ficha pronta; `["grupo"]` = todos
+  eles), uma vez: `resolveCombatExperience` (em `commitProgression`) troca `experienceResolved: null` → `{ by: "master", reason,
+  amount, total, messageId }` e grava o card `source: "grant"`, `estimated: true`, `combatId` ("Experiência (estimada pelo mestre)");
+  se a gravação falhar, a resolução volta a `null`. Recusas: combate ativo ("ainda não terminou"), narrativo, já resolvido ("já foi
+  concedida (N XP por personagem)"), sem pendência ("já saiu pela tabela oficial"), repetido na mesma geração.
+- **"Pergunte ao mestre"**: `progressionToolNames({ answer: true, mode: "experiencia" })` = `[grant_experience]` (no Marco continua
+  `evaluate_level_milestone`). `draftGrant` aceita a narração ou o `questionRun` do job. Sem `combate`, quem perguntou (não dono)
+  recebe só no próprio personagem (`grupo` ou outro = recusa com motivo); o dono, em qualquer um; com `combate` pendente, o jogador
+  comum liquida para o grupo do combate. Recusas em pt-BR: modo Marco (explica e indica o Avaliar marco), grau sem ficha, ficha não
+  concluída ("X ainda não tem ficha concluída"), valor inválido (Zod). A auditoria `experience-granted` leva `combatId`, `estimated`
+  e `requestedBy`. A barra de XP e o Opex atualizam pelo `publishSheet` e pelo `maddox.game.changed` do fim do job.
+- **Prompt** (`progressionRule`, modo Experiência): XP automática só para monstros do catálogo; fera/animal/bloco próprio continua
+  valendo XP e o mestre estima pela tabela de XP por ND; nunca dizer que não pode conceder XP nem inventar condição para ela.
+- Reparo do caso real: sem migração — o combate queimado é pendência legada e o dono pede no "Pergunte ao mestre".
+- Testes: bloco DND-70 de `tests/backend/maddox/level-progression.test.ts` e o de `tests/frontend/maddox/level-up-cards.test.tsx`.
 
 ## Bônus de CA nomeados e CA no card "Na mesa" (DND-66)
 

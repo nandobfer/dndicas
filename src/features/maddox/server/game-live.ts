@@ -160,7 +160,8 @@ export interface MaddoxDraftProgression {
     /** Combates encerrados nesta geração cuja decisão do marco já rodou. */
     evaluatedCombats: string[]
     declare: { reason: string; offMilestone: boolean; trigger: string } | null
-    grants: { entries: { characterId: string; amount: number }[]; reason: string }[]
+    /** DND-70: `combatId` = a concessão liquida a XP pendente daquele combate (uma vez); `requestedBy` = quem perguntou (resposta). */
+    grants: { entries: { characterId: string; amount: number }[]; reason: string; combatId?: string; requestedBy?: string | null }[]
     chapter: { title: string; summary: string } | null
     /** Marco pendente entregue a esta narração (`at` dele): sai depois de a fala ser gravada. */
     claimedMilestoneAt: Date | null
