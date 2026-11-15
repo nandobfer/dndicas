@@ -118,6 +118,38 @@ describe("DND-65 — update_character_coins na narração", () => {
         expect(await MaddoxCampaignMessageModel.countDocuments({ kind: "sheet-change" })).toBe(0)
     })
 
+    it("corrida: a ficha perde as moedas entre a leitura e a gravação ⇒ o piso $gte barra, saldo fica, sem auditoria nem linha", async () => {
+        const t = await table()
+        const original = CharacterSheet.updateOne.bind(CharacterSheet)
+        const spy = vi.spyOn(CharacterSheet, "updateOne").mockImplementationOnce((async (...args: Parameters<typeof CharacterSheet.updateOne>) => {
+            // O jogador gasta na ficha aberta depois que o Maddox leu o saldo (30 pp → 2 pp).
+            await CharacterSheet.collection.updateOne({ _id: t.liz.sheetId }, { $set: { "coins.sp": 2 } })
+            return original(...args)
+        }) as never)
+        try {
+            await expect(runMaddoxTool(coinsTool, { campaignId: t.campaignId, turnNumber: 2 }, { personagem: "Lizwan", subtrair: { pp: 5 }, motivo: "compra" })).rejects.toThrow("A ficha mudou agora há pouco: leia o saldo de novo e tente outra vez.")
+        } finally {
+            spy.mockRestore()
+        }
+        expect(await coinsOf(t.liz.sheetId)).toMatchObject({ sp: 2, gp: 11 })
+        expect(recordAudit).not.toHaveBeenCalled()
+        expect(sheetPusher.publishSheetPatched).not.toHaveBeenCalled()
+        expect(await MaddoxCampaignMessageModel.countDocuments({ kind: "sheet-change" })).toBe(0)
+    })
+
+    it("falha do banco no $inc ⇒ 'A ficha mudou', saldo intacto, sem auditoria nem linha", async () => {
+        const t = await table()
+        const spy = vi.spyOn(CharacterSheet, "updateOne").mockRejectedValueOnce(new Error("Cannot apply $inc"))
+        try {
+            await expect(runMaddoxTool(coinsTool, { campaignId: t.campaignId, turnNumber: 2 }, { personagem: "Lizwan", somar: { po: 2 }, motivo: "achado" })).rejects.toThrow("A ficha mudou agora há pouco")
+        } finally {
+            spy.mockRestore()
+        }
+        expect(await coinsOf(t.liz.sheetId)).toMatchObject({ sp: 30, gp: 11 })
+        expect(recordAudit).not.toHaveBeenCalled()
+        expect(await MaddoxCampaignMessageModel.countDocuments({ kind: "sheet-change" })).toBe(0)
+    })
+
     it("valor negativo, não numérico ou vazio é recusado", async () => {
         const t = await table()
         const run = (input: Record<string, unknown>) => runMaddoxTool(coinsTool, { campaignId: t.campaignId, turnNumber: 2 }, { personagem: "Lizwan", motivo: "x", ...input })
