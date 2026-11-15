@@ -343,6 +343,13 @@ async function applyExhaustionDeath(id: string, data: PatchSheetBody) {
     await applySheetExhaustionDeath(id)
 }
 
+/** DND-63: PV editado na ficha de um personagem de campanha Maddox avisa a mesa (barra de PV do card "Na mesa"). */
+async function notifyMaddoxHitPoints(id: string, data: PatchSheetBody) {
+    if (data.hpCurrent === undefined && data.hpMax === undefined && data.hpTemp === undefined) return
+    const { notifySheetHitPointsChanged } = await import('@/features/maddox/server/seat-hit-points')
+    await notifySheetHitPointsChanged(id, data)
+}
+
 export async function patchSheet(id: string, userId: string, data: PatchSheetBody, originId?: string) {
     await dbConnect()
     // DND-56: em ficha de campanha Maddox, o nível (e a XP do modo Experiência) não muda por PATCH, em nenhum caminho.
@@ -370,6 +377,7 @@ export async function patchSheet(id: string, userId: string, data: PatchSheetBod
         await getCharacterSheetPusherService().publishSheetPatched({ sheet: plainSheet, originId })
     })
     await applyExhaustionDeath(id, data)
+    await notifyMaddoxHitPoints(id, data)
     return plainSheet
 }
 
@@ -399,6 +407,7 @@ export async function patchSheetWithAccess(id: string, data: PatchSheetBody, ori
         await getCharacterSheetPusherService().publishSheetPatched({ sheet: plainSheet, originId })
     })
     await applyExhaustionDeath(id, data)
+    await notifyMaddoxHitPoints(id, data)
     return plainSheet
 }
 

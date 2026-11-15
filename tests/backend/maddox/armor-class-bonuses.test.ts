@@ -22,6 +22,7 @@ vi.mock("@/features/dice-roller/server/dice-engine", async (importOriginal) => {
 })
 const recordAudit = vi.fn(async (_entry: Record<string, unknown>) => undefined)
 vi.mock("@/lib/db", () => ({ dbConnect: vi.fn(async () => undefined), recordAudit, AcaoAuditoria: { CRIAR: "CRIAR", ATUALIZAR: "ATUALIZAR", EXCLUIR: "EXCLUIR", ATRIBUIR: "ATRIBUIR" } }))
+vi.mock("@/core/database/db", () => ({ default: vi.fn(async () => undefined) }))
 vi.mock("@/lib/pusher/channels", () => ({ publishToChannels: vi.fn(async () => undefined) }))
 vi.mock("@/features/maddox/server/game-presence", () => ({ onlineUserIds: vi.fn(async () => null) }))
 vi.mock("@/features/character-sheets/realtime/character-sheet-pusher-service", () => ({
@@ -389,6 +390,59 @@ describe("DND-66 — revisão F4: ligações reais (mesa e fim do combate)", () 
         await MaddoxCampaignModel.collection.updateOne({ _id: narrative.campaignId }, { $set: { status: "paused" } })
         const free = await getGameState(String(narrative.campaignId), narrative.owner)
         expect(free.participants.map((item) => item.hp)).toEqual([undefined, undefined])
+    })
+
+    it("DND-63: falha na leitura do PV não derruba a mesa: sem barra de PV, CA preservada (e o inverso)", async () => {
+        const t = await table()
+        await MaddoxCampaignModel.collection.updateOne({ _id: t.campaignId }, { $set: { status: "paused" } })
+        const { getGameState } = await import("@/features/maddox/server/game")
+        const realFind = CharacterSheet.collection.find.bind(CharacterSheet.collection)
+        const failWhen = (field: string) =>
+            vi.spyOn(CharacterSheet.collection, "find").mockImplementation(((filter: unknown, options?: { projection?: Record<string, unknown> }) => {
+                if (options?.projection && field in options.projection) throw new Error(`leitura de ${field} indisponível`)
+                return realFind(filter as never, options as never)
+            }) as never)
+
+        const hpDown = failWhen("hpTemp")
+        try {
+            const state = await getGameState(String(t.campaignId), t.owner)
+            expect(state.participants).toHaveLength(2)
+            expect(state.participants.map((item) => item.hp)).toEqual([undefined, undefined])
+            const expected = (await acBonuses.loadArmorClassSummaries([String(t.lizwan.sheetId)])).get(String(t.lizwan.sheetId))!
+            expect(state.participants.find((item) => item.characterName === "Lizwan")!.armorClass).toMatchObject({ value: expected.value })
+        } finally {
+            hpDown.mockRestore()
+        }
+
+        const caDown = failWhen("armorClassOverride")
+        try {
+            const state = await getGameState(String(t.campaignId), t.owner)
+            expect(state.participants.map((item) => item.armorClass)).toEqual([undefined, undefined])
+            expect(state.participants.find((item) => item.characterName === "Lizwan")!.hp).toEqual({ current: 9, max: 9, temp: 0 })
+        } finally {
+            caDown.mockRestore()
+        }
+    })
+
+    it("DND-63: PV editado na ficha (PATCH) avisa a mesa da campanha em andamento; outros campos e grau narrativo não", async () => {
+        const { publishToChannels } = await import("@/lib/pusher/channels")
+        const { MADDOX_GAME_CHANGED_EVENT } = await import("@/features/maddox/constants")
+        const { patchSheetWithAccess } = await import("@/features/character-sheets/api/character-sheets-service")
+        const published = () => vi.mocked(publishToChannels).mock.calls.filter(([, event]) => event === MADDOX_GAME_CHANGED_EVENT)
+        const t = await table()
+        vi.mocked(publishToChannels).mockClear()
+        await patchSheetWithAccess(String(t.lizwan.sheetId), { hpCurrent: 3 })
+        expect(published()).toHaveLength(1)
+        expect(published()[0][2]).toMatchObject({ campaignId: String(t.campaignId) })
+
+        vi.mocked(publishToChannels).mockClear()
+        await patchSheetWithAccess(String(t.lizwan.sheetId), { appearance: "Cicatriz no rosto" })
+        expect(published()).toHaveLength(0)
+
+        const narrative = await table({ rigor: "narrativo" })
+        vi.mocked(publishToChannels).mockClear()
+        await patchSheetWithAccess(String(narrative.lizwan.sheetId), { hpTemp: 2 })
+        expect(published()).toHaveLength(0)
     })
 
     it("fim do combate pelo caminho real (finishCombatTurn → afterCombatEnded): o bônus do combate sai e o permanente fica", async () => {
