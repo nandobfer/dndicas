@@ -99,7 +99,7 @@ export function GlobalFabGroup() {
     }
 
     return (
-        <div ref={rowRef} className="fixed bottom-6 right-6 z-[99] flex flex-col items-end gap-3 sm:flex-row sm:items-center" data-testid="global-fab-group">
+        <div ref={rowRef} className="fixed bottom-6 right-6 z-[45] flex flex-col items-end gap-3 sm:flex-row sm:items-center" data-testid="global-fab-group">
             <DndContext sensors={sensors} collisionDetection={collisionDetection} onDragEnd={onDragEnd} onDragCancel={() => (suppressClick.current = false)}>
                 <SortableContext items={visible} strategy={rectSortingStrategy}>
                     {visible.map((id) => (

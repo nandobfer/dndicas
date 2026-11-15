@@ -59,7 +59,8 @@ export function WindowProvider({ children }: { children: React.ReactNode }) {
                     ...window, 
                     id: targetId, 
                     zIndex: nextZIndex,
-                    initialPosition: window.initialPosition ?? { x: 50 + offset, y: 50 + offset },
+                    // Só o X faz cascata: o Y da janela fica travado no fim do header (GlassWindow).
+                    initialPosition: window.initialPosition ?? { x: 50 + offset, y: 0 },
                     isMinimized: false
                 }
             ]
@@ -79,7 +80,7 @@ export function WindowProvider({ children }: { children: React.ReactNode }) {
 
     const updatePosition = React.useCallback((id: string, position: { x: number, y: number }) => {
         setWindows((prev) => prev.map((w) => 
-            w.id === id ? { ...w, lastPosition: position } : w
+            w.id === id ? { ...w, lastPosition: { x: Math.max(0, position.x), y: position.y } } : w
         ))
     }, [])
 
@@ -98,9 +99,9 @@ export function WindowProvider({ children }: { children: React.ReactNode }) {
     return (
         <WindowContext.Provider value={{ windows, addWindow, removeWindow, bringToFront, toggleMinimize, updatePosition }}>
             {children}
-            <div className="fixed inset-0 pointer-events-none z-[10]">
-                {/* Windows will be rendered here via a separate component or portal-like logic */}
-                <div className="relative w-full h-full overflow-hidden">
+            {/* Camada das janelas (z-[48]): acima do header (z-40) e dos FABs (z-[45]), abaixo de popovers, tooltips e modais (z-50+). */}
+            <div data-testid="glass-windows-layer" className="fixed inset-0 pointer-events-none z-[48]">
+                <div className="relative w-full h-full">
                     <AnimatePresence>
                         {windows.map((window) => (
                             <WindowRenderer key={window.id} window={window} />
@@ -110,7 +111,7 @@ export function WindowProvider({ children }: { children: React.ReactNode }) {
             </div>
 
             {/* Taskbar-like area for minimized windows */}
-            <div className="fixed bottom-2 left-2 right-auto p-2 flex flex-wrap-reverse gap-2 pointer-events-none z-[11] items-end justify-start md:bottom-0 md:left-20 md:right-0">
+            <div data-testid="glass-windows-taskbar" className="fixed bottom-2 left-2 right-auto p-2 flex flex-wrap-reverse gap-2 pointer-events-none z-[48] items-end justify-start md:bottom-0 md:left-0 md:right-0">
                 <AnimatePresence mode="popLayout">
                     {windows
                         .filter((w) => w.isMinimized)
