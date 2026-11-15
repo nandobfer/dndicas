@@ -2226,6 +2226,39 @@ Penalidade −2 × nível (parcela "Exaustão") em todo d20: `checkModifier` (pe
 concentração, teste contra a morte (`deathSave(d20, …, penalidade)`: o natural decide 1/20, o total decide o 10) e ataque de
 oportunidade; no combate, o nível vem da ficha (`exhaustionOfSheet`).
 
+## Bônus de CA nomeados e CA no card "Na mesa" (DND-66)
+
+Caso real (campanha `6af8db71abcd65f7e78ebb00`): Ravel conjurou Escudo da Fé em Lizwan (card sem passos, efeito só na narração) e o rato
+seguiu atacando "contra CA 15". A ficha agora guarda **`armorClassBonuses[]`** (ver `aicontext/modules/character-sheets.md`): nome,
+valor, origem e duração; o total sai de `computeSheetArmorClass`, cada bônus é uma parcela com o próprio nome. Mesmo nome substitui.
+
+- **Ferramentas** (`MADDOX_MASTER_TOOLS`, narração e "Pergunte ao mestre", também no MCP): `add_armor_class_bonus { personagem, nome,
+  valor, origem: magia|item|talento|situacao|outro, duracao: permanente|rodadas|fim-do-combate|concentracao|descanso-curto|descanso-longo|momento,
+  rodadas?, conjurador?, momento?, motivo }` e `remove_armor_class_bonus { personagem, nome, motivo }` (nomes em
+  `MADDOX_ARMOR_CLASS_TOOL_NAMES`). Na pergunta, o jogador comum só mexe no próprio personagem. O retorno é o estado gravado
+  (`ca`, `caAntes`, `bonusDeCA`); nome inexistente = erro com os bônus atuais, sem mudar nada. Regra no prompt: `MADDOX_ARMOR_CLASS_RULE`.
+- **Serviço** `server/armor-class-bonuses.ts`: troca condicional sobre a lista lida (driver, `updatedAt` manual), auditoria
+  `FichaPersonagem`, `publishPatched`, linha `sheet-change` "CA de X: 15 → 17 (Escudo da Fé +2, concentração de Ravel — motivo)" e
+  `publishGameChanged`. Regra pura de vencimento em `character-sheets/utils/armor-class-bonuses.ts` (`expiredArmorClassBonuses`).
+- **Vencimento automático:** `rodadas` (aplicado na rodada R com X rodadas ⇒ `untilRound = R + X`, sai quando a rodada R+X começa) e
+  `concentracao` (sai quando a `concentration` do conjurador some, muda de magia, ou ele morre/sai) vencem no gancho logo depois de
+  **todo `saveTactical`** (`expireCombatArmorClassBonuses`, saída cedo com uma query quando nenhuma ficha tem bônus de combate).
+  `fim-do-combate`, `rodadas` e `concentracao` saem no passo `armor-class-bonuses` de `afterCombatEnded` (fim pela narração ou pelo
+  servidor); sobras de combates antigos saem no início do próximo (`staleCombatArmorClassBonuses` em `applyStart`). `descanso-curto`
+  sai em qualquer descanso concluído e `descanso-longo` só no longo (`commitPrep` de `rest.ts`). `momento` o Maddox remove (o
+  `sheetSummary` mostra o prazo a cada turno). `fim-do-combate` vale também no combate narrativo; `rodadas`/`concentracao` só no tático.
+- **Lista fechada da ficha:** `ac-bonus-upsert` (durações `MADDOX_SHEET_AC_DURATIONS`: sem rodadas/concentração), `ac-bonus-remove` e
+  `unarmored-defense`. Permanente que não é `situacao` e a Defesa sem Armadura exigem `source` do catálogo (`requiresCatalogSource`).
+  A preparação, o "Pedir ajuste" e o `update_character_sheet` mostram a CA com a conta e os bônus no texto da ficha (`combat-prep.ts`).
+- **Na rolagem:** `monster_action` relê a CA do alvo personagem pela ficha na hora (`loadArmorClass`) e atualiza o workspace; o
+  `get_combat` mostra a CA atual com `contaDaCA` e o Escudo da reação. A reação Escudo (+5, `flags.shield`) continua no combate.
+- **Card "Na mesa"** (`TurnPanel.tsx`): `MaddoxGameParticipantDto.armorClass { value, formula, parts }` (graus com ficha; todos veem a
+  CA dos personagens jogadores; com `flags.shield` soma "Escudo (reação) +5"), chip "CA N" focável com `CalcTooltip`. Nome e jogador
+  quebram linha (sem `truncate`); CA e situação numa linha própria; ações à direita como `IconAction` (só ícone, `aria-label` e dica
+  "Pular a vez de X" / "Rolar no lugar de X"). O "Pular" do `OpexFailureBanner` segue o mesmo padrão.
+- Testes: `tests/backend/maddox/armor-class-bonuses.test.ts`, `tests/backend/character-sheets/armor-class-bonuses.test.ts`, mesa em
+  `tests/frontend/maddox/maddox-game.test.tsx`.
+
 ## Condição gravada de verdade, correção do combate e Esconder-se (DND-59)
 
 Caso real: o Maddox disse "Registrei a condição em Lizwan" depois de gravar só texto (`update_character_state`), o combate seguiu sem

@@ -1,6 +1,7 @@
 import { getAttributeModifier, getProficiencyBonus, getSavingThrowBonus, getSkillBonus, SKILL_ATTRIBUTE_MAP, type CalcPart } from "@/features/character-sheets/utils/dnd-calculations"
 import type { AttributeType, CharacterSheet, SkillName } from "@/features/character-sheets/types/character-sheet.types"
 import { exhaustionLevel, exhaustionPenaltyOf } from "./exhaustion-rules"
+import { armorClassBonusLabel, readArmorClassBonuses } from "@/features/character-sheets/utils/armor-class-bonuses"
 import { coinsText } from "./coin-rules"
 import { MADDOX_CHECK_KIND_LABELS, MADDOX_CHECK_MODE_LABELS, type MaddoxCheckKind, type MaddoxCheckMode } from "./constants"
 
@@ -26,7 +27,7 @@ export const MADDOX_SKILLS = Object.keys(SKILL_ATTRIBUTE_MAP) as SkillName[]
 
 /** Campos da ficha usados nos testes e no resumo do narrador. */
 export type MaddoxCheckSheet = Pick<CharacterSheet, AttributeType | "level" | "proficiencyBonusOverride" | "savingThrows" | "skills"> &
-    Partial<Pick<CharacterSheet, "name" | "class" | "subclass" | "race" | "hpMax" | "hpCurrent" | "hpTemp" | "computedArmorClass" | "exhaustion" | "coins">>
+    Partial<Pick<CharacterSheet, "name" | "class" | "subclass" | "race" | "hpMax" | "hpCurrent" | "hpTemp" | "computedArmorClass" | "exhaustion" | "armorClassBonuses" | "coins">>
 
 export interface MaddoxCheckSpec {
     kind: MaddoxCheckKind
@@ -122,7 +123,9 @@ export function sheetSummary(sheet: MaddoxCheckSheet): string {
     const [cls, subclass, race] = [plainField(sheet.class), plainField(sheet.subclass), plainField(sheet.race)]
     const identity = [sheet.level ? `Nível ${sheet.level}` : null, [cls, subclass ? `(${subclass})` : null].filter(Boolean).join(" ") || null, race || null].filter(Boolean).join(" · ")
     const hp = sheet.hpMax != null ? `PV ${sheet.hpCurrent ?? sheet.hpMax}/${sheet.hpMax}${sheet.hpTemp ? ` (+${sheet.hpTemp} temporários)` : ""}` : null
-    const ac = sheet.computedArmorClass != null ? `CA ${sheet.computedArmorClass}` : null
+    // DND-66: os bônus nomeados com a duração (o de "momento" o Maddox remove quando o prazo chegar).
+    const acBonuses = readArmorClassBonuses(sheet.armorClassBonuses)
+    const ac = sheet.computedArmorClass != null ? `CA ${sheet.computedArmorClass}${acBonuses.length ? ` (bônus: ${acBonuses.map(armorClassBonusLabel).join("; ")})` : ""}` : null
     const abilities = MADDOX_ABILITIES.map((ability) => `${MADDOX_ABILITY_ABBR[ability]} ${attributes[ability]} (${signed(getAttributeModifier(attributes[ability]).value)})`).join(", ")
     const saves = MADDOX_ABILITIES.filter((ability) => sheet.savingThrows?.[ability]).map((ability) => MADDOX_ABILITY_ABBR[ability])
     const skills = MADDOX_SKILLS.filter((skill) => {

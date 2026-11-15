@@ -90,7 +90,7 @@ function buildSheet(overrides: Partial<CharacterSheetFull> = {}): CharacterSheet
         deathSavesFailure: 0,
         exhaustion: 0,
         armorClassOverride: null,
-        armorClassBonus: null,
+        armorClassBonuses: [],
         unarmoredDefense: { enabled: false, base: 10, attributes: [] },
         initiativeOverride: null,
         initiativeProficiency: false,

@@ -462,11 +462,58 @@ describe("mesa Maddox — participantes e presença", () => {
         expect(within(seat("m1")).queryByRole("button", { name: /Pular/ })).not.toBeInTheDocument()
         expect(within(seat("m4")).queryByRole("button", { name: /Pular/ })).not.toBeInTheDocument()
         post.mockResolvedValue(ok(gameState()))
-        fireEvent.click(within(seat("m3")).getByRole("button", { name: "Pular Borin" }))
+        fireEvent.click(within(seat("m3")).getByRole("button", { name: "Pular a vez de Borin" }))
         const dialog = await screen.findByRole("alertdialog")
         expect(dialog).toHaveTextContent("Pular a vez de Borin?")
         fireEvent.click(within(dialog).getByRole("button", { name: "Pular" }))
         await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns/c1/game/skip", { memberId: "m3" }))
+    })
+
+    it("DND-66: CA de cada personagem com a conta no tooltip, nome longo inteiro e 'Pular' só com o ícone acessível", async () => {
+        presenceIds = ["u-owner", "u-ana", "u-bia"]
+        const longName = "Lizwan Folhaverde da Clareira das Sete Luas Prateadas"
+        await renderGame(
+            gameState({
+                participants: [
+                    participant("m1", "u-owner", "Kael", { declared: true, armorClass: { value: 18, formula: "Cota de malha(16) + Escudo(2) = 18", parts: [{ label: "Cota de malha", value: 16, color: "base" }, { label: "Escudo", value: "+2", color: "bonus" }] } }),
+                    participant("m2", "u-ana", longName, {
+                        name: "Jogadora com um nome de usuário igualmente comprido",
+                        armorClass: { value: 17, formula: "Armadura de couro(11) + DEX(4) + Escudo da Fé(2) = 17", parts: [{ label: "Armadura de couro", value: 11, color: "base" }, { label: "Destreza", value: "+4", color: "dexterity" }, { label: "Escudo da Fé", value: "+2", color: "bonus" }] },
+                    }),
+                    participant("m3", "u-bia", "Borin"),
+                ],
+            }),
+        )
+        const seat = (id: string) => screen.getByTestId(`seat-${id}`)
+        const ca = within(seat("m2")).getByTestId("seat-armor-class")
+        expect(ca).toHaveTextContent("CA17")
+        expect(ca).toHaveAccessibleName("CA de " + longName + ": 17 (Armadura de couro 11, Destreza +4, Escudo da Fé +2)")
+        expect(ca).toHaveAttribute("tabindex", "0")
+        fireEvent.mouseEnter(ca.parentElement!)
+        expect(await screen.findByText("Escudo da Fé +2")).toBeInTheDocument()
+        fireEvent.mouseLeave(ca.parentElement!)
+        await waitFor(() => expect(screen.queryByText("Escudo da Fé +2")).not.toBeInTheDocument())
+        // Revisão F3: teclado e toque (foco) também abrem o detalhamento.
+        fireEvent.focus(ca)
+        expect(await screen.findByText("Escudo da Fé +2")).toBeInTheDocument()
+        fireEvent.blur(ca)
+        await waitFor(() => expect(screen.queryByText("Escudo da Fé +2")).not.toBeInTheDocument())
+        fireEvent.touchStart(ca)
+        expect(await screen.findByText("Escudo da Fé +2")).toBeInTheDocument()
+        fireEvent.touchStart(ca)
+        await waitFor(() => expect(screen.queryByText("Escudo da Fé +2")).not.toBeInTheDocument())
+        expect(within(seat("m1")).getByTestId("seat-armor-class")).toHaveTextContent("18")
+        expect(within(seat("m3")).queryByTestId("seat-armor-class")).not.toBeInTheDocument()
+
+        const name = within(seat("m2")).getByTestId("seat-character-name")
+        expect(name).toHaveTextContent(longName)
+        expect(seat("m2").querySelector(".truncate")).toBeNull()
+
+        const skip = within(seat("m2")).getByRole("button", { name: "Pular a vez de " + longName })
+        expect(skip).toHaveTextContent("")
+        expect(skip.querySelector("svg")).not.toBeNull()
+        fireEvent.click(skip)
+        expect(await screen.findByRole("alertdialog")).toHaveTextContent(`Pular a vez de ${longName}?`)
     })
 
     it("jogador comum não vê 'Pular'", async () => {
@@ -825,6 +872,8 @@ describe("mesa Maddox — testes pedidos pelo Maddox (Maddox 5)", () => {
         const seat = screen.getByTestId("seat-m2")
         expect(seat).toHaveTextContent("Rolando teste")
         expect(within(screen.getByTestId("seat-m1")).queryByRole("button", { name: /Rolar no lugar/ })).not.toBeInTheDocument()
+        // DND-66 (revisão F2): "Rolar no lugar" continua com o texto visível; só o "Pular" virou ícone.
+        expect(within(seat).getByRole("button", { name: "Rolar no lugar de Lyra" })).toHaveTextContent("Rolar no lugar")
         fireEvent.click(within(seat).getByRole("button", { name: "Rolar no lugar de Lyra" }))
         const dialog = await screen.findByRole("alertdialog")
         expect(dialog).toHaveTextContent("Rolar o teste no lugar de Lyra?")
@@ -1179,7 +1228,10 @@ describe("mesa Maddox — Personagem Opex parado (DND-26)", () => {
         expect(banner).toHaveTextContent("Tork não conseguiu agir: provedor fora")
         fireEvent.click(within(banner).getByRole("button", { name: /Tentar de novo/ }))
         await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns/c1/game/opex/m9/retry", {}))
-        fireEvent.click(within(screen.getByTestId("opex-failure")).getByRole("button", { name: /Pular/ }))
+        const skipOpex = within(screen.getByTestId("opex-failure")).getByRole("button", { name: "Pular a vez de Tork" })
+        // DND-66: "Pular" do aviso é só o ícone (com aria-label e dica).
+        expect(skipOpex).toHaveTextContent("")
+        fireEvent.click(skipOpex)
         const dialog = await screen.findByRole("alertdialog")
         fireEvent.click(within(dialog).getByRole("button", { name: "Pular" }))
         await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns/c1/game/opex/m9/skip", {}))

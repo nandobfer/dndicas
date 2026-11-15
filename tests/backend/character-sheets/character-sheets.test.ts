@@ -17,7 +17,7 @@ describe('character sheets backend', () => {
             photo: '/api/upload?key=ai%2Fgenerated%2Fclerk-1%2F1700000000000.png',
         }).success).toBe(true);
         expect(PatchSheetSchema.safeParse({
-            armorClassBonus: 1,
+            armorClassBonuses: [{ id: 'b1', name: 'Escudo da Fé', value: 2, origin: 'spell', duration: { kind: 'permanent' }, addedBy: 'player' }],
             unarmoredDefense: { enabled: true, base: 10, attributes: ['constitution', 'wisdom'] },
         }).success).toBe(true);
 

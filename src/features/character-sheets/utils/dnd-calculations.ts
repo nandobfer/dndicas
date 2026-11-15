@@ -141,6 +141,12 @@ export interface ArmorClassBonusSource {
     acBonus: number
 }
 
+/** Bônus de CA nomeado da ficha (DND-66): cada um vira uma parcela com o próprio nome. */
+export interface NamedArmorClassBonus {
+    name: string
+    value: number
+}
+
 export interface UnarmoredDefenseData {
     enabled: boolean
     base: number
@@ -153,7 +159,7 @@ export const getArmorClass = (
     _override: number | null,
     equippedArmor?: EquippedArmorData | null,
     equippedBonuses: ArmorClassBonusSource[] = [],
-    manualBonus?: number | null,
+    namedBonuses: readonly NamedArmorClassBonus[] = [],
     unarmoredDefense?: UnarmoredDefenseData | null,
     attributes?: Partial<Record<AttributeType, number>>,
 ): CalcResult => {
@@ -188,7 +194,7 @@ export const getArmorClass = (
     }
 
     const totalItemBonus = equippedBonuses.reduce((sum, source) => sum + source.acBonus, 0)
-    const bonus = manualBonus ?? 0
+    const bonus = namedBonuses.reduce((sum, item) => sum + item.value, 0)
     const totalUnarmoredAttributeBonus = unarmoredAttributeContribs.reduce((sum, part) => sum + part.value, 0)
     const calculated = base + dexContrib + totalUnarmoredAttributeBonus + totalItemBonus + bonus
 
@@ -202,7 +208,9 @@ export const getArmorClass = (
             parts.push({ label: source.name, value: fmt(source.acBonus), color: "bonus" })
         }
     })
-    if (bonus !== 0) parts.push({ label: "Bônus", value: fmt(bonus), color: "bonus" })
+    namedBonuses.forEach((item) => {
+        if (item.value !== 0) parts.push({ label: item.name, value: fmt(item.value), color: "bonus" })
+    })
 
     let formula = `${baseLabel}(${base})`
     if (dexContrib !== 0) formula += ` + DEX(${dexContrib})`
@@ -214,7 +222,9 @@ export const getArmorClass = (
             formula += ` + ${source.name}(${source.acBonus})`
         }
     })
-    if (bonus !== 0) formula += ` + bônus(${bonus})`
+    namedBonuses.forEach((item) => {
+        if (item.value !== 0) formula += ` + ${item.name}(${item.value})`
+    })
     formula += ` = ${calculated}`
 
     return { value: calculated, formula, parts, result: String(calculated) }

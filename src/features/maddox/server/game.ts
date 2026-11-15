@@ -21,6 +21,7 @@ import {
     MADDOX_MASTER_RETRY_MS,
     MADDOX_COMBAT_FORCE_END_AFTER,
     MADDOX_TACTICAL_COMBAT_RIGORS,
+    MADDOX_SHEET_RIGORS,
     MADDOX_OPEX_FAILED_MESSAGE,
     MADDOX_OPEX_LABEL,
     type MaddoxTurnPhase,
@@ -1274,6 +1275,20 @@ export async function getGameState(campaignId: string, userId: string): Promise<
     // Barra de XP (DND-63): só no modo Experiência; da ficha saem só nível e XP.
     const { loadXpProgress } = await import("./experience-progress")
     const xpByCharacter = await loadXpProgress(campaign, members.flatMap(({ character }) => (character ? [{ _id: character._id, sheetId: character.sheetId ?? null, ready: isMemberReadyToPlay(character) }] : [])))
+    // DND-66: CA de cada personagem (graus com ficha), com os bônus nomeados no tooltip do card "Na mesa".
+    const armorClasses = MADDOX_SHEET_RIGORS.includes(campaign.rigor)
+        ? await (await import("./armor-class-bonuses")).loadArmorClassSummaries(members.map(({ character }) => (character?.sheetId ? String(character.sheetId) : null)).filter((id): id is string => Boolean(id))).catch((error: unknown) => {
+              log.warn({ err: error instanceof Error ? error.message : String(error), campaignId: String(campaign._id) }, "[maddox] CA da mesa indisponível")
+              return null
+          })
+        : null
+    const participantArmorClass = (character: CharacterDoc | null): MaddoxGameParticipantDto["armorClass"] => {
+        const calc = character?.sheetId && armorClasses ? armorClasses.get(String(character.sheetId)) : undefined
+        if (!character || !calc) return undefined
+        const shield = tacticalCombat?.tactical.characters.find((state) => state.characterId === String(character._id))?.flags.shield
+        if (!shield) return { value: calc.value, formula: calc.formula, parts: calc.parts ?? [] }
+        return { value: calc.value + 5, formula: `${calc.formula.replace(/ = -?\d+$/, "")} + Escudo(5) = ${calc.value + 5}`, parts: [...(calc.parts ?? []), { label: "Escudo (reação)", value: "+5", color: "bonus" }] }
+    }
     const participants: MaddoxGameParticipantDto[] = members
         .map(({ member, character }) => ({
             memberId: String(member._id),
@@ -1287,6 +1302,10 @@ export async function getGameState(campaignId: string, userId: string): Promise<
             eligible: playersTurn && eligible.has(String(member._id)),
             declared: playersTurn && declared.has(String(member._id)),
             xp: character ? (xpByCharacter.get(String(character._id)) ?? null) : null,
+            ...(() => {
+                const armorClass = participantArmorClass(character)
+                return armorClass ? { armorClass } : {}
+            })(),
         }))
         .sort((a, b) => (a.role === "owner" ? 0 : a.opex ? 2 : 1) - (b.role === "owner" ? 0 : b.opex ? 2 : 1))
     const mine = participants.find((participant) => participant.memberId === String(loaded.member._id))

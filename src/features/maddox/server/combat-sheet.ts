@@ -57,7 +57,7 @@ interface StoredSheet extends MaddoxCheckSheet {
     spellSlots?: Record<string, { total: number; used: number }> | Map<string, { total: number; used: number }>
     resourceCharges?: { id: string; name: string; total: number; used: number; source: { entityType: string; entityId: string } | null }[]
     armorClassOverride?: number | null
-    armorClassBonus?: number | null
+    armorClassBonuses?: import("@/features/character-sheets/utils/armor-class-bonuses").ArmorClassBonus[]
     unarmoredDefense?: { enabled: boolean; base: number; attributes: AttributeType[] }
 }
 

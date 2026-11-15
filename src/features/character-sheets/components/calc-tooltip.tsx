@@ -55,12 +55,26 @@ export function CalcTooltip({ formula, parts, result, children, className }: Cal
         setPos({ x: e.clientX, y: e.clientY })
     }, [])
 
+    // Teclado e toque (o toque foca o filho focável): abre ancorado no elemento, sem depender do mouse.
+    const handleFocus = useCallback((e: React.FocusEvent<HTMLSpanElement>) => {
+        const rect = e.currentTarget.getBoundingClientRect()
+        setPos({ x: rect.left + rect.width / 2, y: rect.bottom })
+        setVisible(true)
+    }, [])
+
     return (
         <span
             className={cn("cursor-help", className)}
             onMouseEnter={() => setVisible(true)}
             onMouseLeave={() => setVisible(false)}
             onMouseMove={handleMouseMove}
+            onFocus={handleFocus}
+            onBlur={() => setVisible(false)}
+            onTouchStart={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect()
+                setPos({ x: rect.left + rect.width / 2, y: rect.bottom })
+                setVisible((open) => !open)
+            }}
         >
             {children}
             {visible && typeof document !== "undefined" && createPortal(

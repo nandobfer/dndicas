@@ -16,6 +16,7 @@ import { ensureOpexIndexes } from "./ensure-opex-indexes"
 import { ensureMaddoxIndexes } from "./ensure-maddox-indexes"
 import { ensureOpexFeedbackIndexes } from "./ensure-opex-feedback-indexes"
 import { sheetExperienceNumber } from "./sheet-experience-number"
+import { sheetArmorClassBonuses } from "./sheet-armor-class-bonuses"
 import { reclassifyOpexMemoriesOnce } from "./reclassify-opex-memories"
 
 registerMigrations(
@@ -32,5 +33,6 @@ registerMigrations(
     { name: "ensure-maddox-indexes", run: () => ensureMaddoxIndexes() },
     { name: "ensure-opex-feedback-indexes", run: () => ensureOpexFeedbackIndexes() },
     { name: "sheet-experience-number", run: () => sheetExperienceNumber() },
+    { name: "sheet-armor-class-bonuses", run: () => sheetArmorClassBonuses() },
     { name: "reclassify-opex-memories", run: () => reclassifyOpexMemoriesOnce() },
 )

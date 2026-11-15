@@ -450,6 +450,11 @@ export interface MaddoxGameParticipantDto {
     declared: boolean
     /** Barra de XP (DND-63): só no modo Experiência, com ficha e entrevista concluída. */
     xp?: MaddoxXpProgressDto | null
+    /**
+     * DND-66: CA do personagem (informação da mesa: todos veem), com a conta por parcela — armadura, DES, itens e cada
+     * bônus nomeado. Só nos graus com ficha; no combate tático soma o Escudo (reação) ativo. Ausente sem ficha.
+     */
+    armorClass?: { value: number; formula: string; parts: CalcPart[] } | null
 }
 
 export interface MaddoxGameStateDto {

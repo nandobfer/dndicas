@@ -6,6 +6,8 @@ import { GlassSwitch } from "@/components/ui/glass-switch"
 import { attributeColors } from "@/lib/config/colors"
 
 import type { AttributeType, UnarmoredDefenseConfig } from "../types/character-sheet.types"
+import type { ArmorClassBonus } from "../utils/armor-class-bonuses"
+import { ArmorClassBonusesEditor } from "./armor-class-bonuses-editor"
 import { SheetInput } from "./sheet-input"
 
 type UnarmoredDefenseInput = Partial<UnarmoredDefenseConfig> & { attribute?: AttributeType | null }
@@ -13,10 +15,10 @@ type UnarmoredDefenseInput = Partial<UnarmoredDefenseConfig> & { attribute?: Att
 interface ArmorClassConfigModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  armorClassBonus: number | null
+  armorClassBonuses: readonly ArmorClassBonus[] | null | undefined
   unarmoredDefense?: UnarmoredDefenseInput | null
   isReadOnly?: boolean
-  onArmorClassBonusChange: (value: number) => void
+  onArmorClassBonusesChange: (value: ArmorClassBonus[]) => void
   onUnarmoredDefenseChange: (value: UnarmoredDefenseConfig) => void
 }
 
@@ -58,10 +60,10 @@ function normalizeUnarmoredDefense(value?: UnarmoredDefenseInput | null): Unarmo
 export function ArmorClassConfigModal({
   open,
   onOpenChange,
-  armorClassBonus,
+  armorClassBonuses,
   unarmoredDefense,
   isReadOnly = false,
-  onArmorClassBonusChange,
+  onArmorClassBonusesChange,
   onUnarmoredDefenseChange,
 }: ArmorClassConfigModalProps) {
   const normalizedUnarmoredDefense = normalizeUnarmoredDefense(unarmoredDefense)
@@ -76,24 +78,13 @@ export function ArmorClassConfigModal({
         <GlassModalHeader className="pr-8 text-left">
           <GlassModalTitle>Configurar Classe de Armadura</GlassModalTitle>
           <GlassModalDescription>
-            Ajuste bônus fixos e regras usadas quando o personagem não estiver usando armadura.
+            Ajuste os bônus nomeados e as regras usadas quando o personagem não estiver usando armadura.
           </GlassModalDescription>
         </GlassModalHeader>
 
         <div className="mt-5 space-y-4">
           <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-            <SheetInput
-              compact
-              type="number"
-              label="Bônus de CA"
-              value={armorClassBonus ?? 0}
-              onChangeValue={(val) => onArmorClassBonusChange(parseInt(val, 10) || 0)}
-              showControls
-              inputClassName="text-center text-sm h-8"
-              className="items-center"
-              readOnlyMode={isReadOnly}
-            />
-            <p className="mt-2 text-xs text-white/45">Este bônus continua somando à CA em todos os cenários.</p>
+            <ArmorClassBonusesEditor bonuses={armorClassBonuses} isReadOnly={isReadOnly} onChange={onArmorClassBonusesChange} />
           </div>
 
           <div className="space-y-4 rounded-xl border border-amber-300/15 bg-amber-500/[0.06] p-4">

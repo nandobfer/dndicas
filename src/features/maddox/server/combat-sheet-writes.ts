@@ -116,7 +116,7 @@ export async function applySheetChanges(changes: readonly CombatSheetChange[], c
     for (const change of changes) {
         let outcome: Outcome = null
         try {
-            outcome = await applyOne(change, sheetObjectId, m, result.created, collectionEvents, context.characterName)
+            outcome = await applyOne(change, sheetObjectId, m, result.created, collectionEvents, context)
         } catch (error) {
             log.warn({ err: error instanceof Error ? error.message : String(error), sheetId: context.sheetId, type: change.type }, "[maddox] falha ao gravar uma correção na ficha")
             outcome = { label: describeSheetChange(change), before: "—", after: "—", applied: false }
@@ -183,6 +183,12 @@ export function describeSheetChange(change: CombatSheetChange): string {
             return "Item removido"
         case "item-quantity":
             return "Quantidade do item"
+        case "ac-bonus-upsert":
+            return `Bônus de CA ${change.name}`
+        case "ac-bonus-remove":
+            return `Bônus de CA ${change.name} removido`
+        case "unarmored-defense":
+            return "Defesa sem Armadura"
         case "coins":
             return "Moedas"
     }
@@ -214,7 +220,7 @@ type Models = Awaited<ReturnType<typeof models>>
 
 type SheetEvent = { name: CharacterSheetCollectionName; action: "created" | "updated" | "deleted"; recordId: string }
 
-async function applyOne(change: CombatSheetChange, sheetId: Types.ObjectId, m: Models, created: Map<string, string>, extra: SheetEvent[], characterName: string): Promise<Outcome> {
+async function applyOne(change: CombatSheetChange, sheetId: Types.ObjectId, m: Models, created: Map<string, string>, extra: SheetEvent[], context: SheetWriteContext): Promise<Outcome> {
     const label = describeSheetChange(change)
     const sheet = await m.CharacterSheet.findById(sheetId).lean<Record<string, unknown> & { _id: Types.ObjectId }>()
     if (!sheet) return { label, before: "—", after: "—", applied: false }
@@ -421,6 +427,17 @@ async function applyOne(change: CombatSheetChange, sheetId: Types.ObjectId, m: M
             if (!current) return { label, before: "—", after: "removido", applied: false }
             return { label: `Item ${plainText(current.name)}`, before: `qtd ${current.quantity ?? 1}`, after: "removido", applied: true, auditBefore: current, collection: { name: "items", action: "deleted", recordId: String(current._id) } }
         }
+        case "ac-bonus-upsert":
+        case "ac-bonus-remove":
+            return applyArmorClassChange(change, sheetId, sheet, m, context)
+        case "unarmored-defense": {
+            const current = (sheet.unarmoredDefense as { enabled?: boolean; base?: number; attributes?: string[] } | undefined) ?? {}
+            const next = { enabled: change.enabled, base: change.base, attributes: [...new Set(change.attributes)] }
+            const text = (value: { enabled?: boolean; base?: number; attributes?: string[] }) => (value.enabled ? `${value.base ?? 10} + ${(value.attributes ?? []).map(abilityLabel).join(" + ") || "DES"}` : "desligada")
+            if (Boolean(current.enabled) === next.enabled && (current.base ?? 10) === next.base && JSON.stringify(current.attributes ?? []) === JSON.stringify(next.attributes)) return null
+            const updated = await m.CharacterSheet.collection.updateOne({ _id: sheetId, unarmoredDefense: sheet.unarmoredDefense === undefined ? { $exists: false } : sheet.unarmoredDefense }, { $set: { unarmoredDefense: next, updatedAt: new Date() } })
+            return { label, before: text(current), after: text(next), applied: updated.modifiedCount > 0, sheet: true, auditBefore: current }
+        }
         case "item-quantity": {
             if (!Types.ObjectId.isValid(change.itemId)) return { label, before: "—", after: "—", applied: false }
             const current = await m.CharacterItem.findOne({ _id: new Types.ObjectId(change.itemId), sheetId }).lean<{ _id: Types.ObjectId; name: string; quantity: number }>()
@@ -435,13 +452,42 @@ async function applyOne(change: CombatSheetChange, sheetId: Types.ObjectId, m: M
             const current = (sheet.coins as SheetCoins | undefined) ?? {}
             const before = coinsText(current)
             const coinLabel = `Moedas (${coinChangeText(change)})`
-            const next = applyCoinChange(current, change, characterName)
+            const next = applyCoinChange(current, change, context.characterName)
             if (!next.ok) return { label: coinLabel, before, after: before, applied: false, refused: next.reason }
             const filter: Record<string, unknown> = { _id: sheetId, ...Object.fromEntries(Object.entries(next.requires).map(([path, min]) => [path, { $gte: min }])) }
             const updated = await m.CharacterSheet.updateOne(filter, { $inc: next.inc })
             return { label: coinLabel, before, after: coinsText(next.after), applied: updated.modifiedCount > 0, auditBefore: current, sheet: true }
         }
     }
+}
+
+const AC_ORIGIN_KEYS = { magia: "spell", item: "item", talento: "feat", situacao: "situation", outro: "other" } as const
+
+/** DND-66: bônus de CA nomeado pela lista fechada (mesmo nome substitui). Troca condicional sobre a lista lida. */
+async function applyArmorClassChange(change: Extract<CombatSheetChange, { type: "ac-bonus-upsert" | "ac-bonus-remove" }>, sheetId: Types.ObjectId, sheet: Record<string, unknown>, m: Models, context: SheetWriteContext): Promise<Outcome> {
+    const label = describeSheetChange(change)
+    const bonuses = await import("@/features/character-sheets/utils/armor-class-bonuses")
+    const raw = sheet.armorClassBonuses
+    const before = bonuses.readArmorClassBonuses(raw)
+    const write = async (next: unknown[]) => (await m.CharacterSheet.collection.updateOne({ _id: sheetId, armorClassBonuses: raw === undefined ? { $exists: false } : raw }, { $set: { armorClassBonuses: next, updatedAt: new Date() } })).modifiedCount > 0
+    if (change.type === "ac-bonus-remove") {
+        const target = bonuses.findArmorClassBonus(before, change.name)
+        if (!target) return { label, before: `não existe (atuais: ${before.map(bonuses.armorClassBonusLabel).join("; ") || "nenhum"})`, after: "—", applied: false }
+        return { label: `Bônus de CA ${target.name}`, before: bonuses.armorClassBonusLabel(target), after: "removido", applied: await write(before.filter((item) => item !== target)), sheet: true, auditBefore: before }
+    }
+    const { resolveArmorClassDuration } = await import("./armor-class-bonuses")
+    let duration
+    try {
+        duration = await resolveArmorClassDuration(new Types.ObjectId(context.campaignId), { kind: change.duration, moment: change.moment ?? null })
+    } catch (error) {
+        return { label, before: "—", after: error instanceof Error ? error.message : "duração inválida", applied: false }
+    }
+    const parsed = bonuses.armorClassBonusSchema.safeParse({ id: randomUUID(), name: change.name, value: change.value, origin: AC_ORIGIN_KEYS[change.origin], duration, source: change.source ?? null, campaignId: context.campaignId, addedBy: "maddox", createdAt: new Date().toISOString() })
+    if (!parsed.success) return { label, before: "—", after: "—", applied: false }
+    const { list, replaced } = bonuses.upsertArmorClassBonus(before, parsed.data)
+    if (!replaced && list.length > bonuses.ARMOR_CLASS_BONUSES_MAX) return { label, before: `${before.length} bônus`, after: "limite de bônus atingido", applied: false }
+    if (replaced && replaced.value === parsed.data.value && JSON.stringify(replaced.duration) === JSON.stringify(parsed.data.duration)) return null
+    return { label, before: replaced ? bonuses.armorClassBonusLabel(replaced) : "não existia", after: bonuses.armorClassBonusLabel(parsed.data), applied: await write(list), sheet: true, auditBefore: before }
 }
 
 /** DND-51: o atributo de conjuração mudou — o bônus dos ataques automáticos dos truques acompanha. */

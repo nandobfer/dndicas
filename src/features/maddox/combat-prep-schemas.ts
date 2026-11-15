@@ -1,7 +1,7 @@
 import { z } from "zod"
 import { MADDOX_ABILITIES, MADDOX_SKILLS } from "./check-modifier"
 import { parseDiceExpression } from "./combat-rules"
-import { MADDOX_COIN_KEYS, MADDOX_COMBAT_PREP_TEXT_CEILING as CEILING, MADDOX_REACTION_TRIGGERS } from "./constants"
+import { MADDOX_AC_ORIGINS, MADDOX_COIN_KEYS, MADDOX_COMBAT_PREP_TEXT_CEILING as CEILING, MADDOX_REACTION_TRIGGERS } from "./constants"
 import { MADDOX_MASTERY_KEYS } from "./weapon-mastery"
 
 /**
@@ -38,6 +38,9 @@ const recordId = z.string().trim().min(1).max(40)
  */
 const coinAmounts = z.object(Object.fromEntries(MADDOX_COIN_KEYS.map((key) => [key, z.number().int().min(0).optional()])) as Record<(typeof MADDOX_COIN_KEYS)[number], z.ZodOptional<z.ZodNumber>>).strict()
 
+/** DND-66: durações do bônus de CA pela lista fechada da ficha. */
+export const MADDOX_SHEET_AC_DURATIONS = ["permanente", "fim-do-combate", "descanso-curto", "descanso-longo", "momento"] as const
+
 /** Operações de ficha permitidas (lista fechada). `ref` liga uma criação a uma opção acrescentada (`fromChange`). */
 export const combatSheetChangeSchema = z.discriminatedUnion("type", [
     z.object({ type: z.literal("ability"), attribute, value: z.number().int().min(1).max(30), reason, ref, source, choice }),
@@ -72,6 +75,21 @@ export const combatSheetChangeSchema = z.discriminatedUnion("type", [
     z.object({ type: z.literal("item-add"), catalogItemId: recordId.optional(), name: text(CEILING.name).optional(), quantity: z.number().int().min(1).max(9_999).optional().default(1), equipped: z.boolean().optional().default(false), reason, ref, source, choice }),
     z.object({ type: z.literal("item-remove"), itemId: recordId, reason, ref, source, choice }),
     z.object({ type: z.literal("item-quantity"), itemId: recordId, quantity: z.number().int().min(0).max(9_999), reason, ref, source, choice }),
+    // DND-66: bônus de CA nomeados (os de rodadas e concentração só pela ferramenta `add_armor_class_bonus`) e a Defesa sem Armadura.
+    z.object({
+        type: z.literal("ac-bonus-upsert"),
+        name: text(80).pipe(z.string().min(1)),
+        value: z.number().int().min(-10).max(10).refine((value) => value !== 0, "o bônus não pode ser 0"),
+        origin: z.enum(MADDOX_AC_ORIGINS).optional().default("outro"),
+        duration: z.enum(MADDOX_SHEET_AC_DURATIONS).optional().default("permanente"),
+        moment: text(160).optional(),
+        reason,
+        ref,
+        source,
+        choice,
+    }),
+    z.object({ type: z.literal("ac-bonus-remove"), name: text(80).pipe(z.string().min(1)), reason, ref, source, choice }),
+    z.object({ type: z.literal("unarmored-defense"), enabled: z.boolean(), base: z.number().int().min(1).max(30).optional().default(10), attributes: z.array(attribute).max(3).optional().default([]), reason, ref, source, choice }),
     // DND-65: moedas são campo da ficha (`sheet.coins`), nunca item.
     z.object({ type: z.literal("coins"), add: coinAmounts.optional(), subtract: coinAmounts.optional(), reason, ref, source, choice }),
 ])
@@ -154,6 +172,9 @@ export function requiresCatalogSource(kind: "sheet" | "modify" | "add" | "sneak"
     if (kind === "sheet") {
         const change = item as CombatSheetChange
         if (change.type === "spell-update") return change.circle !== undefined
+        // DND-66: bônus de CA permanente que não é de situação (Estilo de Luta Defesa, item mágico) é regra: leva a fonte.
+        if (change.type === "ac-bonus-upsert") return change.duration === "permanente" && change.origin !== "situacao"
+        if (change.type === "unarmored-defense") return true
         return SOURCED_SHEET_CHANGES.has(change.type)
     }
     if (kind === "modify") {

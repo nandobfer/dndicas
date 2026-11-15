@@ -321,7 +321,7 @@ const baseSheet: CharacterSheet = {
     deathSavesFailure: 0,
     exhaustion: 0,
     armorClassOverride: null,
-    armorClassBonus: null,
+    armorClassBonuses: [],
     unarmoredDefense: { enabled: false, base: 10, attributes: [] },
     initiativeOverride: null,
     initiativeProficiency: false,
@@ -549,8 +549,13 @@ describe("SheetHeader", () => {
         fireEvent.click(screen.getByRole("button", { name: "Configurar Classe de Armadura" }))
 
         expect(await screen.findByText("Configurar Classe de Armadura")).toBeInTheDocument()
-        fireEvent.change(screen.getByLabelText("Bônus de CA"), { target: { value: "2" } })
-        expect(form.patchField).toHaveBeenCalledWith("armorClassBonus", 2)
+        // DND-66: bônus de CA nomeados (lista): nome, valor, origem e duração.
+        const editor = screen.getByTestId("armor-class-bonuses-editor")
+        expect(editor).toHaveTextContent("Nenhum bônus de CA.")
+        fireEvent.change(within(editor).getByLabelText("Nome do bônus"), { target: { value: "Escudo da Fé" } })
+        fireEvent.change(within(editor).getByLabelText("Valor"), { target: { value: "2" } })
+        fireEvent.click(within(editor).getByRole("button", { name: /Acrescentar bônus/ }))
+        expect(form.patchField).toHaveBeenCalledWith("armorClassBonuses", [expect.objectContaining({ name: "Escudo da Fé", value: 2, origin: "other", duration: { kind: "permanent" }, addedBy: "player" })])
 
         const unarmoredDefenseSwitch = screen.getByLabelText("Ativar Defesa sem Armadura")
         expect(unarmoredDefenseSwitch).toHaveAttribute("type", "checkbox")

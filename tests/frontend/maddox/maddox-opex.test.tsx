@@ -265,7 +265,7 @@ describe("vez do Personagem Opex no chat (DND-45)", () => {
         const view = render(<TurnPanel state={gameState(actor())} presence={presence} color="#3b82f6" skipping={false} onSkip={vi.fn()} />)
         const opexSeat = screen.getByTestId("seat-m9")
         for (const label of ["Agindo…", "Aguardando", "Parado: aguardando o dono", "Declarou"]) expect(opexSeat).not.toHaveTextContent(label)
-        expect(within(opexSeat).getByRole("button", { name: "Pular Tork" })).toBeInTheDocument()
+        expect(within(opexSeat).getByRole("button", { name: "Pular a vez de Tork" })).toBeInTheDocument()
         expect(screen.getByTestId("seat-m1")).toHaveTextContent("Aguardando")
         view.rerender(<TurnPanel state={gameState(actor({ failed: true, error: "x" }))} presence={presence} color="#3b82f6" skipping={false} onSkip={vi.fn()} />)
         expect(screen.getByTestId("seat-m9")).not.toHaveTextContent("Parado")

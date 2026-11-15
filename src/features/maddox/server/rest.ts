@@ -352,6 +352,8 @@ async function commitPrep(campaign: CampaignDoc, message: RestMessage, entry: IM
         { $set: { "rest.characters.$[c].prep.status": "ready", "rest.characters.$[c].prep.recovered": plan.recovered, "rest.characters.$[c].prep.notRecovered": plan.notRecovered, "rest.characters.$[c].prep.appliedAt": new Date(), "rest.characters.$[c].prep.token": null, "rest.characters.$[c].prep.error": null } },
         arrayFilter(entry.characterId, { "prep.status": "applying" }),
     )
+    // DND-66: os bônus de CA "até o descanso curto/longo" saem com a recuperação.
+    await (await import("./armor-class-bonuses")).restArmorClassBonuses(campaign._id, [new Types.ObjectId(String(entry.characterId))], message.rest.type === "long" ? "long" : "short")
     log.info({ campaignId: String(campaign._id), restId: String(message._id), character: entry.name, recovered: plan.recovered.length, notRecovered: plan.notRecovered.length }, "[maddox] ficha preparada no descanso")
     await afterRestProgress(campaign._id)
     return true

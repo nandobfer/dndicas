@@ -47,6 +47,12 @@ import {
     MADDOX_EXPERIENCE_GRANT_MAX,
     MADDOX_PROGRESSION_TOOL_NAMES,
     MADDOX_EXHAUSTION_TOOL_NAME,
+    MADDOX_ARMOR_CLASS_TOOL_NAMES,
+    MADDOX_AC_DURATIONS,
+    MADDOX_AC_ORIGINS,
+    playerArmorClassRefusal,
+    type MaddoxAcDuration,
+    type MaddoxAcOrigin,
     MADDOX_COINS_TOOL_NAME,
     MADDOX_REST_TOOL_NAME,
 } from "../constants"
@@ -485,6 +491,59 @@ export const MADDOX_MASTER_TOOLS: readonly MaddoxMasterTool[] = [
                 if (error instanceof ExhaustionError) throw new MaddoxToolError(error.message)
                 throw error
             }
+        },
+    }),
+    define({
+        name: MADDOX_ARMOR_CLASS_TOOL_NAMES.add,
+        description: [
+            "Aplica um BÔNUS DE CA nomeado NA FICHA de um personagem jogador (graus com ficha): magia (Escudo da Fé +2, Armadura Arcana), item, talento ou situação (cobertura parcial +2, três quartos +5). Sem esta ferramenta a CA NÃO muda: o ataque seguinte é comparado com a CA da ficha.",
+            "`duracao`: permanente | rodadas (com `rodadas`; sai sozinho no fim da última rodada) | fim-do-combate | concentracao (com `conjurador`: sai sozinho quando ele perde ou troca a concentração) | descanso-curto | descanso-longo | momento (com `momento`, ex.: \"o fim da cena\"; você remove quando chegar).",
+            "Mesmo nome = substitui (efeitos iguais não se acumulam). O retorno traz a CA e os bônus gravados: só diga que aplicou depois dele.",
+            "No \"Pergunte ao mestre\" de um jogador (não o dono), bônus permanente ou até o descanso de magia, item ou talento é regra da ficha: use update_character_sheet (ac-bonus-upsert) com a fonte do catálogo.",
+        ].join(" "),
+        readOnly: false,
+        input: z.object({
+            personagem: z.string().min(1).describe("Nome do personagem jogador que recebe o bônus"),
+            nome: z.string().min(1).max(80).describe("Nome do bônus como os jogadores leem (ex.: Escudo da Fé)"),
+            valor: z.number().int().min(-10).max(10).describe("Valor somado à CA (ex.: 2)"),
+            origem: z.enum(MADDOX_AC_ORIGINS).describe("magia | item | talento | situacao | outro"),
+            duracao: z.enum(MADDOX_AC_DURATIONS),
+            rodadas: z.number().int().min(1).max(100).optional().describe("duracao = rodadas: quantas"),
+            conjurador: z.string().optional().describe("duracao = concentracao: quem mantém a concentração (nome como na ordem do combate)"),
+            momento: z.string().max(160).optional().describe("duracao = momento: até quando vale"),
+            motivo: z.string().min(1).describe("Por que a CA muda, curto (os jogadores leem)"),
+        }),
+        async execute(context, input) {
+            return armorClassCall(context, input.personagem, (tools, run) =>
+                tools.applyArmorClassBonus({
+                    campaignId: context.campaignId,
+                    turnNumber: context.turnNumber,
+                    origin: run ? "question" : "narrator",
+                    requestedBy: run?.askerUserId ?? null,
+                    characterName: input.personagem,
+                    name: clip(input.nome, 80),
+                    value: input.valor,
+                    bonusOrigin: input.origem,
+                    duration: { kind: input.duracao, rounds: input.rodadas ?? null, caster: input.conjurador ?? null, moment: input.momento ?? null },
+                    reason: clip(input.motivo, MADDOX_TOOL_NAME_MAX * 2),
+                }),
+                { origin: input.origem, duration: input.duracao },
+            )
+        },
+    }),
+    define({
+        name: MADDOX_ARMOR_CLASS_TOOL_NAMES.remove,
+        description: "Remove pelo nome um bônus de CA da ficha de um personagem jogador (o efeito acabou, a cobertura ficou para trás, o prazo declarado chegou). Nome que não existe devolve erro com os bônus atuais e nada muda. Os bônus por rodadas, concentração, fim do combate e descanso saem sozinhos.",
+        readOnly: false,
+        input: z.object({
+            personagem: z.string().min(1).describe("Nome do personagem jogador"),
+            nome: z.string().min(1).max(80).describe("Nome do bônus a remover"),
+            motivo: z.string().min(1).describe("Por que o bônus sai, curto (os jogadores leem)"),
+        }),
+        async execute(context, input) {
+            return armorClassCall(context, input.personagem, (tools, run) =>
+                tools.removeArmorClassBonus({ campaignId: context.campaignId, turnNumber: context.turnNumber, origin: run ? "question" : "narrator", requestedBy: run?.askerUserId ?? null, characterName: input.personagem, name: input.nome, reason: clip(input.motivo, MADDOX_TOOL_NAME_MAX * 2) }),
+            )
         },
     }),
     define({
@@ -1337,6 +1396,33 @@ export const MADDOX_OPEX_NPC_TOOLS: readonly MaddoxMasterTool[] = [
         },
     }),
 ]
+
+/**
+ * DND-66: bônus de CA. No "Pergunte ao mestre", só o personagem de quem perguntou (o dono, qualquer um). O retorno é
+ * o estado gravado ("estado ou silêncio").
+ */
+async function armorClassCall(
+    context: MaddoxToolContext,
+    characterName: string,
+    work: (tools: typeof import("./armor-class-bonuses"), run: import("./question-runs").QuestionRun | null) => Promise<import("./armor-class-bonuses").ArmorClassBonusState>,
+    added?: { origin: MaddoxAcOrigin; duration: MaddoxAcDuration },
+): Promise<Record<string, unknown>> {
+    const [tools, { questionRun }] = await Promise.all([import("./armor-class-bonuses"), import("./question-runs")])
+    const run = questionRun(context.jobId) ?? null
+    if (run && !run.askerIsOwner) {
+        const own = run.askerCharacterId ? await MaddoxCharacterModel.findById(run.askerCharacterId).select("name").lean<{ name: string }>() : null
+        if (!own || keyOf(own.name) !== keyOf(characterName)) throw new MaddoxToolError("Quem perguntou só pode mudar a CA do próprio personagem.")
+        const refusal = added ? playerArmorClassRefusal(added.origin, added.duration) : null
+        if (refusal) throw new MaddoxToolError(refusal)
+    }
+    try {
+        const state = await work(tools, run)
+        return { saved: true, ...state, nota: "Gravado na ficha: a CA acima já vale nas próximas jogadas de ataque. Diga só o que o retorno mostra." }
+    } catch (error) {
+        if (error instanceof tools.ArmorClassBonusError) throw new MaddoxToolError(error.message)
+        throw error
+    }
+}
 
 /**
  * DND-51: leitura e correção da ficha pelo "Pergunte ao mestre". Só oferecidas na resposta a uma pergunta (graus com
