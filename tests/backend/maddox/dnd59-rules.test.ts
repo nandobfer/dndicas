@@ -86,6 +86,12 @@ describe("DND-59 — prompt: estado ou silêncio", () => {
         expect(text).toContain(MADDOX_STATE_OR_SILENCE_RULE)
     })
 
+    it("DND-69: o lembrete de usar Orientação manda registrar o efeito de teste antes da rolagem", () => {
+        const text = answer({ reminderRef: "abc123", question: 'vou lançar "orientação" em mim mesma' })
+        expect(text).toContain("`apply_check_effect`")
+        expect(text).toContain("Nunca diga que o efeito vale sem o retorno dela")
+    })
+
     it("regra do combate tático: rolagem gravada é definitiva e o Esconder-se antes da luta entra no start_combat", () => {
         const rule = tacticalCombatRule("fiel-dnd")
         expect(rule).toContain('nunca diga que ela "não vale"')

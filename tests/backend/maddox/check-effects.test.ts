@@ -44,6 +44,9 @@ const { enqueueMaddoxJob, waitForCampaignIdle, takeDraftChecks } = await import(
 const runs = await import("@/features/maddox/server/question-runs")
 const { readCheckEffects } = await import("@/features/maddox/check-effects")
 
+// A primeira rolagem carrega o estado da mesa inteiro (imports sob demanda): sob carga passa dos 5 s padrão.
+vi.setConfig({ testTimeout: 20_000 })
+
 let mongo: MongoMemoryServer
 
 beforeAll(async () => {

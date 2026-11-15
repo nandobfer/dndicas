@@ -20,8 +20,9 @@ function normalizeTerms(terms: DiceTerm[]) {
     return terms.filter((term) => term.quantity > 0)
 }
 
-function isSingleD20(terms: DiceTerm[]) {
-    return hasPrimaryD20(terms)
+function isSingleD20(terms: DiceTerm[], primaryD20 = false) {
+    if (primaryD20) return hasPrimaryD20(terms)
+    return terms.length === 1 && terms[0]?.dice === "d20" && terms[0]?.quantity === 1
 }
 
 function getInitialState(preset?: DiceRollPreset | null) {
@@ -45,6 +46,11 @@ interface DiceRollerPanelProps {
     disableRolling?: boolean
     disabledRollingMessage?: string | null
     hideConfigurationControls?: boolean
+    /**
+     * DND-69: vantagem/desvantagem e crítico valem no d20 principal mesmo com dados extras de outro tipo depois dele (o
+     * teste do Maddox com Orientação +1d4). Sem a opção, só numa rolagem de exatamente 1d20.
+     */
+    primaryD20Mode?: boolean
     forceCombinationModifierInline?: boolean
     /** Quem faz a rolagem oficial (padrão: `requestDiceRoll`). Ex.: o teste do Maddox rola no servidor da campanha. */
     rollRequest?: (input: Omit<DiceRollRequest, "diceSessionId">) => Promise<DiceRollResponse>
@@ -81,6 +87,7 @@ export function DiceRollerPanel({
     disableRolling = false,
     disabledRollingMessage = null,
     hideConfigurationControls = false,
+    primaryD20Mode = false,
     forceCombinationModifierInline = false,
     rollRequest,
     rollButtonLabel = "JOGAR",
@@ -155,12 +162,12 @@ export function DiceRollerPanel({
         }
     }, [])
     const normalizedTerms = normalizeTerms(terms)
-    const canUseD20Mode = isSingleD20(normalizedTerms)
+    const canUseD20Mode = isSingleD20(normalizedTerms, primaryD20Mode)
     const activeMode: DiceRollMode = canUseD20Mode ? mode : "normal"
     const displayedMode: DiceRollMode = result?.mode ?? activeMode
     const d20ModeLocked = canUseD20Mode && activeMode !== "normal"
     const isRollButtonDisabled = isRolling || isAnimatingDice || disableRolling
-    const criticalState = React.useMemo(() => getDiceCriticalState(result), [result])
+    const criticalState = React.useMemo(() => getDiceCriticalState(result, { primaryD20: primaryD20Mode }), [result, primaryD20Mode])
 
     const onRollResolvedRef = React.useRef(onRollResolved)
     React.useEffect(() => {

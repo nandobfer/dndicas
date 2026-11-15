@@ -39,7 +39,7 @@ vi.mock("@/features/dice-roller/components/dice-roller-panel", async () => {
     const { useEffect, useState } = await import("react")
     return {
         DiceRollerPanel: (props: {
-            preset?: { modifier?: number; mode?: string } | null
+            preset?: { modifier?: number; mode?: string; terms?: { dice: string; quantity: number }[] } | null
             externalResult?: { total: number } | null
             hideRollButton?: boolean
             disableRolling?: boolean

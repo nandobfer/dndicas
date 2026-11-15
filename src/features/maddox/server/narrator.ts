@@ -389,8 +389,7 @@ async function generate(args: GenerateArgs, sink: MaddoxMasterSink): Promise<str
     const { settings, model } = await loadNarrator(context.campaign.rigor)
     const transcript = narratorTranscript(
         context.messages
-            // DND-69: lembretes já resolvidos entram na transcrição (os pendentes vão na seção da tarefa).
-            .filter((message) => !args.excludeIds.has(String(message._id)) && !message.error && message.kind !== "rewind" && (message.kind !== "reminder" || (message.reminder?.status ?? "pending") !== "pending"))
+            .filter((message) => !args.excludeIds.has(String(message._id)) && !message.error && message.kind !== "reminder" && message.kind !== "rewind")
             .map((message) => {
                 const check = checkResultOf(message)
                 if (message.kind === "combat") return { turnNumber: message.turnNumber, kind: message.kind, characterName: null, content: combatTranscriptLine(message, context.combats.get(String(message.combat?.combatId))) }

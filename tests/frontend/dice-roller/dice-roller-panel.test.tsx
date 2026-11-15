@@ -728,6 +728,16 @@ describe("DiceRollerPanel", () => {
         })
     })
 
+    it("DND-69: primaryD20Mode keeps the preset advantage with an extra d4 after the d20", async () => {
+        render(<DiceRollerPanel primaryD20Mode hideConfigurationControls preset={{ label: "Sobrevivência", terms: [{ dice: "d20", quantity: 1 }, { dice: "d4", quantity: 1 }], modifier: 4, mode: "advantage", source: "sheet" }} />)
+
+        fireEvent.click(screen.getByRole("button", { name: "JOGAR" }))
+
+        await waitFor(() => {
+            expect(requestDiceRoll).toHaveBeenCalledWith(expect.objectContaining({ mode: "advantage", terms: [{ dice: "d20", quantity: 1 }, { dice: "d4", quantity: 1 }] }))
+        })
+    })
+
     it("locks dice controls while advantage or disadvantage is selected", async () => {
         render(<DiceRollerPanel />)
 

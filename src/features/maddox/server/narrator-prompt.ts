@@ -875,8 +875,6 @@ export function narratorTranscript(messages: readonly NarratorTranscriptMessage[
                         ? `[Turno ${message.turnNumber} — descanso] ${content}`
                       : message.kind === "rest-request"
                         ? `[Turno ${message.turnNumber} — ${who} pede uma troca depois do descanso] ${content}`
-                      : message.kind === "reminder"
-                        ? `[Turno ${message.turnNumber} — ${who} lembra o Maddox] ${content}`
                       : message.kind === "pass"
                         ? `[Turno ${message.turnNumber} — ${who} não fez nada]`
                         : `[Turno ${message.turnNumber} — ${who} declara] ${content}`

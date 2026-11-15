@@ -186,11 +186,6 @@ describe("fichas e testes no prompt (Maddox 5)", () => {
         expect(checkResultLine(result({ total: 20, effects }))).toBe("Lyra — Furtividade (Destreza), CD 15: total 20 (d20 12, Orientação +1d4: 3, modificador +5) — sucesso. Não entraram: Bênção (vale só em testes de resistência).")
     })
 
-    it("DND-69: lembretes resolvidos entram na transcrição", () => {
-        const text = narratorTranscript([{ turnNumber: 25, kind: "reminder", characterName: "Lizwan", content: 'vou lançar "orientação" em mim mesma' }], 10_000)
-        expect(text).toBe('[Turno 25 — Lizwan lembra o Maddox] vou lançar "orientação" em mim mesma')
-    })
-
     it("DND-69: a regra dos efeitos de teste vale nos graus com ficha", () => {
         expect(buildNarratorInstructions(context({ rigor: "rigoroso" }), { kind: "ai-sdk" })).toContain("## Efeitos de teste (Orientação, Inspiração de Bardo)")
         expect(buildNarratorInstructions(context({ rigor: "narrativo" }), { kind: "ai-sdk" })).not.toContain("## Efeitos de teste")

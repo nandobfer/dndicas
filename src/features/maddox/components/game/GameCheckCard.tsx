@@ -111,7 +111,7 @@ export function GameCheckCard({ message, mine, color, replay, onRoll }: Props) {
     const rolled = check.status === "rolled" || Boolean(localRoll)
     // Cor do card pelo resultado (só depois que o dado para): CD visível → verde/vermelho do desfecho; CD secreta → só o
     // crítico (20 natural sempre passa, 1 natural sempre falha); senão, a cor do rigor.
-    const critical = resultRoll ? getDiceCriticalState(resultRoll) : null
+    const critical = resultRoll ? getDiceCriticalState(resultRoll, { primaryD20: true }) : null
     const outcome: "success" | "failure" | "none" = resultRoll && check.success !== null ? (check.success ? "success" : "failure") : "none"
     const accent = outcome === "success" ? rarityColors.uncommon : outcome === "failure" ? rarityColors.artifact : critical ? CRITICAL_STAGE_CONFIG[critical].color : color
     return (
@@ -170,6 +170,7 @@ export function GameCheckCard({ message, mine, color, replay, onRoll }: Props) {
                                 <DiceRollerPanel
                                     preset={preset}
                                     hideConfigurationControls
+                                    primaryD20Mode
                                     appearance="inline"
                                     stageVariant="bare"
                                     stageSize="compact"
@@ -205,7 +206,7 @@ export function GameCheckCard({ message, mine, color, replay, onRoll }: Props) {
 function CheckResultLine({ roll, outcome, effects }: { roll: DiceRollResponse; outcome: "success" | "failure" | "none"; effects: readonly MaddoxCheckEffectEntry[] }) {
     const kept = roll.selectedD20?.kept ?? roll.terms[0]?.results[0] ?? 0
     const discarded = roll.selectedD20?.discarded
-    const critical = getDiceCriticalState(roll)
+    const critical = getDiceCriticalState(roll, { primaryD20: true })
     const criticalColor = critical ? CRITICAL_STAGE_CONFIG[critical].color : null
     return (
         <div className="relative z-10 flex flex-wrap items-center gap-2 text-sm text-white/80" data-testid="check-roll-result">
