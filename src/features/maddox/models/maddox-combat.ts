@@ -75,8 +75,14 @@ export interface IMaddoxCombat {
     effectsApplied: boolean
     /** A decisão do marco de nível (DND-56) já rodou para este fim de combate. */
     milestoneEvaluated?: boolean
-    /** A XP dos monstros (DND-56, modo Experiência) já foi concedida. */
+    /** A etapa automática da XP dos monstros (DND-56, modo Experiência) já rodou (claim de idempotência; não garante XP). */
     experienceGranted?: boolean
+    /** DND-70: quando a etapa automática (código novo) fez o claim; combate sem o campo e com `experienceGranted` é legado. */
+    experienceProcessedAt?: Date | null
+    /** DND-70: adversários derrotados sem ND do catálogo; a XP deles espera a estimativa do mestre (`grant_experience` com `combate`). */
+    experiencePending?: IMaddoxCombatExperiencePending | null
+    /** DND-70: a concessão do mestre que liquidou a XP pendente (uma vez por combate). */
+    experienceResolved?: IMaddoxCombatExperienceResolved | null
     /** Combate narrativo (Maddox 6) ou tático (Maddox 7: iniciativa e turnos, Rigoroso e Fiel ao D&D). */
     mode: "narrative" | "tactical"
     /** Estado do combate tático (ordem, rodada, personagens); `null` no narrativo. */
@@ -86,6 +92,32 @@ export interface IMaddoxCombat {
     endedAt: Date | null
     createdAt: Date
     updatedAt: Date
+}
+
+export interface IMaddoxCombatExperiencePending {
+    adversaries: { name: string; quantity: number }[]
+    turnNumber: number
+    at: Date
+    /** Falha no meio da XP oficial: só estes participantes ainda recebem (os demais já ganharam a parte oficial). */
+    characterIds?: string[]
+    /** Nomes de quem já recebeu a parte oficial antes da falha (a tarefa avisa o mestre). */
+    credited?: string[]
+    /**
+     * Combate misto com falha no meio da XP oficial: a parte oficial que faltou (valor já calculado pela tabela) sai junto da
+     * resolução do mestre, só para estes personagens; o mestre estima só a dos adversários sem ND, para todos.
+     */
+    owed?: { characterIds: string[]; characterNames: string[]; amount: number } | null
+}
+
+export interface IMaddoxCombatExperienceResolved {
+    by: "master"
+    reason: string
+    amount: number
+    total: number
+    messageId: Types.ObjectId | null
+    at: Date
+    /** A gravação falhou depois de somar parte das fichas (o combate fica resolvido para não duplicar XP). */
+    partial?: boolean
 }
 
 const CombatantSchema = new Schema<IMaddoxCombatant>(
@@ -141,6 +173,9 @@ const MaddoxCombatSchema = new Schema<IMaddoxCombat>(
         effectsApplied: { type: Boolean, default: false },
         milestoneEvaluated: { type: Boolean, default: false },
         experienceGranted: { type: Boolean, default: false },
+        experienceProcessedAt: { type: Date, default: null },
+        experiencePending: { type: Schema.Types.Mixed, default: null },
+        experienceResolved: { type: Schema.Types.Mixed, default: null },
         mode: { type: String, enum: ["narrative", "tactical"], default: "narrative" },
         tactical: { type: Schema.Types.Mixed, default: null },
         rev: { type: Number, default: 0 },

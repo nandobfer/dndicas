@@ -356,17 +356,383 @@ describe("modo Experiência", () => {
         }
         await MaddoxCombatModel.collection.insertOne(combat)
         const stored = (await MaddoxCombatModel.findById(combat._id).lean())!
-        await expect(grantCombatExperience(t.campaignId, stored, 5)).resolves.toBe(100)
-        await expect(grantCombatExperience(t.campaignId, stored, 5)).resolves.toBe(0)
+        // DND-70: o Ogro (sem ND) não some em silêncio: a parte oficial sai e a dele fica pendente para o mestre.
+        await expect(grantCombatExperience(t.campaignId, stored, 5)).resolves.toEqual({ granted: 99, pending: [{ name: "Ogro", quantity: 1 }] })
+        await expect(grantCombatExperience(t.campaignId, stored, 5)).resolves.toEqual({ granted: 0, pending: [] })
         for (const member of t.members) expect((await CharacterSheet.findById(member.sheetId).lean())!.experience).toBe(33)
-        expect((await MaddoxCampaignMessageModel.findOne({ kind: "experience" }).lean())!.experience).toMatchObject({ source: "combat", total: 99 })
+        expect((await MaddoxCampaignMessageModel.findOne({ kind: "experience", "experience.total": { $gt: 0 } }).lean())!.experience).toMatchObject({ source: "combat", total: 99, combatId: combat._id })
+        expect((await MaddoxCombatModel.findById(combat._id).lean())!.experiencePending).toMatchObject({ adversaries: [{ name: "Ogro", quantity: 1 }] })
     })
 
     it("combate narrativo e modo Marco não dão XP automática", async () => {
         const t = await table({ mode: "marco" })
         const combat = { _id: new Types.ObjectId(), campaignId: t.campaignId, status: "ended", mode: "tactical", title: "x", combatants: [], tactical: { characters: [] } }
         await MaddoxCombatModel.collection.insertOne(combat)
-        await expect(grantCombatExperience(t.campaignId, (await MaddoxCombatModel.findById(combat._id).lean())!, 5)).resolves.toBe(0)
+        await expect(grantCombatExperience(t.campaignId, (await MaddoxCombatModel.findById(combat._id).lean())!, 5)).resolves.toEqual({ granted: 0, pending: [] })
+    })
+})
+
+describe("DND-70: XP de adversário fora do catálogo e XP no Pergunte ao mestre", () => {
+    /** O combate do caso real: uma fera de bloco próprio (sem ND), derrotada. */
+    async function beastCombat(t: Table, extra: Record<string, unknown> = {}) {
+        const combat = {
+            _id: new Types.ObjectId(),
+            campaignId: t.campaignId,
+            status: "ended",
+            mode: "tactical",
+            title: "A besta da estrada sul",
+            combatants: [{ name: "A besta da estrada sul", nameKey: "a besta da estrada sul", side: "inimigo", quantity: 1, outcome: "morto", tactical: { defeated: true, stats: { source: "custom", monsterId: null } } }],
+            tactical: { characters: t.members.slice(0, 2).map((member) => ({ characterId: String(member.characterId), name: member.name, left: false })) },
+            ...extra,
+        }
+        await MaddoxCombatModel.collection.insertOne(combat)
+        return combat
+    }
+    const ask = (t: Table, jobId: string, asker = 0, owner = false) =>
+        runs.openQuestionRun({ campaignId: String(t.campaignId), jobId, turnNumber: 5, questionId: String(new Types.ObjectId()), askerUserId: t.members[asker]!.userId, askerCharacterId: String(t.members[asker]!.characterId), askerIsOwner: owner, playerTexts: ["por que não nos deu experiência após o combate?"] })
+    /** Uma resposta do "Pergunte ao mestre": a ferramenta roda no job e a gravação sai depois da fala. */
+    const answer = <T,>(t: Table, work: (jobId: string) => Promise<T>, asker = 0, owner = false) =>
+        inJob(t.campaignId, "answer", async (jobId) => {
+            ask(t, jobId, asker, owner)
+            try {
+                const output = await work(jobId)
+                await levels.commitProgression(t.campaignId, jobId, 5)
+                return output
+            } finally {
+                runs.closeQuestionRun(jobId)
+            }
+        })
+    const xpOf = async (member: Table["members"][number]) => (await CharacterSheet.findById(member.sheetId).lean())!.experience
+
+    it("combate só com a fera de bloco próprio: não queima o combate, grava a pendência e o card de XP pendente", async () => {
+        const t = await table({ mode: "experiencia", rigor: "rigoroso" })
+        const combat = await beastCombat(t)
+        await expect(grantCombatExperience(t.campaignId, (await MaddoxCombatModel.findById(combat._id).lean())!, 34)).resolves.toEqual({ granted: 0, pending: [{ name: "A besta da estrada sul", quantity: 1 }] })
+        const stored = (await MaddoxCombatModel.findById(combat._id).lean())!
+        expect(stored.experiencePending).toMatchObject({ adversaries: [{ name: "A besta da estrada sul", quantity: 1 }], turnNumber: 34 })
+        expect(stored.experienceResolved ?? null).toBeNull()
+        const card = (await MaddoxCampaignMessageModel.findOne({ campaignId: t.campaignId, kind: "experience" }).lean())!
+        expect(card.experience).toMatchObject({ source: "combat", total: 0, entries: [], combatId: combat._id, pending: [{ name: "A besta da estrada sul", quantity: 1 }] })
+        expect(levels.experienceCardDto(card.experience!)).toMatchObject({ pending: [{ name: "A besta da estrada sul", quantity: 1 }], combatId: String(combat._id), estimated: false })
+        const { pendingCombatExperience } = await import("@/features/maddox/server/combat-experience")
+        await expect(pendingCombatExperience(t.campaignId)).resolves.toEqual([expect.objectContaining({ combatId: String(combat._id), title: "A besta da estrada sul", legacy: false, characterNames: ["Nala", "Uther"] })])
+    })
+
+    it("a parte oficial que divide para 0 vira pendência (nada some em silêncio)", async () => {
+        const t = await table({ mode: "experiencia", rigor: "rigoroso" })
+        const rat = new Types.ObjectId()
+        await mongoose.connection.collection("monsters").insertOne({ _id: rat, name: "Rato", challengeRating: "0", status: "active", experienceOverride: 1 })
+        const combat = await beastCombat(t, { combatants: [{ name: "Rato", nameKey: "rato", side: "inimigo", quantity: 1, outcome: "morto", tactical: { defeated: true, stats: { source: "catalog", monsterId: String(rat) } } }] })
+        await expect(grantCombatExperience(t.campaignId, (await MaddoxCombatModel.findById(combat._id).lean())!, 5)).resolves.toEqual({ granted: 0, pending: [{ name: "Rato", quantity: 1 }] })
+    })
+
+    it("a narração seguinte recebe a pendência; o mestre estima e concede uma vez só, para quem lutou", async () => {
+        const t = await table({ mode: "experiencia", rigor: "rigoroso" })
+        const combat = await beastCombat(t)
+        await grantCombatExperience(t.campaignId, (await MaddoxCombatModel.findById(combat._id).lean())!, 34)
+        const { pendingCombatExperience } = await import("@/features/maddox/server/combat-experience")
+        const { progressionTaskLines } = await import("@/features/maddox/server/narrator-prompt")
+        const lines = progressionTaskLines({ milestone: null, levelUps: [], pendingCombatXp: await pendingCombatExperience(t.campaignId) })!
+        expect(lines).toContain("XP PENDENTE do combate \"A besta da estrada sul\"")
+        expect(lines).toContain(String(combat._id))
+        await inJob(t.campaignId, "narration", async (jobId) => {
+            const input = { personagens: ["grupo"], valor: 50, motivo: "Fera comparável a uma pantera (ND 1/2): 100 XP divididos.", combate: String(combat._id).slice(-6) }
+            await expect(runMaddoxTool(tool("grant_experience"), { campaignId: t.campaignId, turnNumber: 35, jobId }, input)).resolves.toMatchObject({ concedido: true, combate: "A besta da estrada sul", personagens: ["Nala", "Uther"] })
+            await expect(runMaddoxTool(tool("grant_experience"), { campaignId: t.campaignId, turnNumber: 35, jobId }, input)).rejects.toThrow("já foi concedida nesta geração")
+            await levels.commitProgression(t.campaignId, jobId, 35)
+        })
+        expect(await xpOf(t.members[0]!)).toBe(50)
+        expect(await xpOf(t.members[1]!)).toBe(50)
+        expect(await xpOf(t.members[2]!)).toBe(0)
+        const stored = (await MaddoxCombatModel.findById(combat._id).lean())!
+        expect(stored.experienceResolved).toMatchObject({ by: "master", amount: 50, total: 100, reason: "Fera comparável a uma pantera (ND 1/2): 100 XP divididos." })
+        const granted = (await MaddoxCampaignMessageModel.findOne({ campaignId: t.campaignId, kind: "experience", "experience.total": 100 }).lean())!
+        expect(granted.experience).toMatchObject({ source: "grant", estimated: true, combatId: combat._id })
+        expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({ depois: expect.objectContaining({ event: "experience-granted", combatId: String(combat._id), estimated: true }) }))
+        // Liquidada: sai da lista e uma nova concessão para o mesmo combate é recusada com o motivo.
+        await expect(pendingCombatExperience(t.campaignId)).resolves.toEqual([])
+        await inJob(t.campaignId, "narration", async (jobId) => {
+            await expect(runMaddoxTool(tool("grant_experience"), { campaignId: t.campaignId, turnNumber: 36, jobId }, { personagens: ["grupo"], valor: 50, motivo: "x", combate: String(combat._id) })).rejects.toThrow("já foi concedida (50 XP por personagem)")
+        })
+    })
+
+    it("Pergunte ao mestre: o jogador comum liquida a pendência do combate para o grupo e a XP vai para a ficha", async () => {
+        const t = await table({ mode: "experiencia", rigor: "rigoroso", kinds: ["human", "human", "opex"] })
+        const combat = await beastCombat(t)
+        await grantCombatExperience(t.campaignId, (await MaddoxCombatModel.findById(combat._id).lean())!, 34)
+        const { progressionToolNames } = await import("@/features/maddox/server/master-tools")
+        expect(progressionToolNames({ mode: "experiencia", answer: true })).toEqual(["grant_experience"])
+        expect(progressionToolNames({ mode: "marco", answer: true })).toEqual(["evaluate_level_milestone"])
+        await answer(t, (jobId) => runMaddoxTool(tool("grant_experience"), { campaignId: t.campaignId, turnNumber: 5, jobId }, { personagens: ["grupo"], valor: 50, motivo: "Fera comparável a ND 1/2.", combate: String(combat._id) }), 1)
+        expect(await xpOf(t.members[0]!)).toBe(50)
+        expect(await xpOf(t.members[1]!)).toBe(50)
+        expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({ depois: expect.objectContaining({ event: "experience-granted", requestedBy: t.members[1]!.userId }) }))
+    })
+
+    it("Pergunte ao mestre sem combate: jogador comum só no próprio personagem; o dono em qualquer um", async () => {
+        const t = await table({ mode: "experiencia", rigor: "rigoroso", kinds: ["human", "human", "opex"] })
+        await expect(answer(t, (jobId) => runMaddoxTool(tool("grant_experience"), { campaignId: t.campaignId, turnNumber: 5, jobId }, { personagens: ["Nala"], valor: 10, motivo: "x" }), 1)).rejects.toThrow("só pode receber XP no próprio personagem")
+        await expect(answer(t, (jobId) => runMaddoxTool(tool("grant_experience"), { campaignId: t.campaignId, turnNumber: 5, jobId }, { personagens: ["grupo"], valor: 10, motivo: "x" }), 1)).rejects.toThrow("só pode receber XP no próprio personagem")
+        await answer(t, (jobId) => runMaddoxTool(tool("grant_experience"), { campaignId: t.campaignId, turnNumber: 5, jobId }, { personagens: ["Uther"], valor: 25, motivo: "Ideia que salvou o grupo." }), 1)
+        expect(await xpOf(t.members[1]!)).toBe(25)
+        await answer(t, (jobId) => runMaddoxTool(tool("grant_experience"), { campaignId: t.campaignId, turnNumber: 5, jobId }, { personagens: ["Vaelyra"], valor: 40, motivo: "Correção do dono." }), 0, true)
+        expect(await xpOf(t.members[2]!)).toBe(40)
+        expect(await xpOf(t.members[0]!)).toBe(0)
+        expect(await MaddoxCampaignMessageModel.countDocuments({ campaignId: t.campaignId, kind: "experience", "experience.source": "grant" })).toBe(2)
+    })
+
+    it("recusas com motivo: modo Marco, grau sem ficha, ficha não concluída e combate ainda ativo", async () => {
+        const marco = await table({ mode: "marco" })
+        await expect(answer(marco, (jobId) => runMaddoxTool(tool("grant_experience"), { campaignId: marco.campaignId, turnNumber: 5, jobId }, { personagens: ["Nala"], valor: 10, motivo: "x" }), 0, true)).rejects.toThrow("modo Marco: não há XP. O grupo sobe pelos marcos da história; para avaliar agora, use evaluate_level_milestone")
+        const narrative = await table({ rigor: "narrativo", mode: null })
+        await expect(answer(narrative, (jobId) => runMaddoxTool(tool("grant_experience"), { campaignId: narrative.campaignId, turnNumber: 5, jobId }, { personagens: ["Nala"], valor: 10, motivo: "x" }), 0, true)).rejects.toThrow("não tem experiência nem nível")
+        const t = await table({ mode: "experiencia", rigor: "rigoroso" })
+        await MaddoxCharacterModel.updateOne({ _id: t.members[1]!.characterId }, { $set: { "interview.status": "in-progress" } })
+        await expect(answer(t, (jobId) => runMaddoxTool(tool("grant_experience"), { campaignId: t.campaignId, turnNumber: 5, jobId }, { personagens: ["Uther"], valor: 10, motivo: "x" }), 0, true)).rejects.toThrow("Uther ainda não tem ficha concluída")
+        await expect(answer(t, (jobId) => runMaddoxTool(tool("grant_experience"), { campaignId: t.campaignId, turnNumber: 5, jobId }, { personagens: ["Nala"], valor: 0, motivo: "x" }), 0, true)).rejects.toThrow("Entrada inválida")
+        const active = await beastCombat(t, { status: "active" })
+        await expect(answer(t, (jobId) => runMaddoxTool(tool("grant_experience"), { campaignId: t.campaignId, turnNumber: 5, jobId }, { personagens: ["grupo"], valor: 10, motivo: "x", combate: String(active._id) }), 0, true)).rejects.toThrow("ainda não terminou")
+        expect(await xpOf(t.members[0]!)).toBe(0)
+    })
+
+    it("combate queimado antes da DND-70 (experienceGranted sem card) é pendência legada; o dos ratos, com card, não", async () => {
+        const t = await table({ mode: "experiencia", rigor: "rigoroso" })
+        const burned = await beastCombat(t, { experienceGranted: true })
+        const rats = await beastCombat(t, { title: "Ratos no porão de Halvar", experienceGranted: true })
+        await MaddoxCampaignMessageModel.create({ campaignId: t.campaignId, turnNumber: 13, phase: "master", kind: "experience", content: "", experience: { source: "combat", reason: 'Combate "Ratos no porão de Halvar"', total: 74, entries: [] } })
+        const { pendingCombatExperience } = await import("@/features/maddox/server/combat-experience")
+        const pending = await pendingCombatExperience(t.campaignId)
+        expect(pending.map((item) => item.combatId)).toEqual([String(burned._id)])
+        expect(pending[0]).toMatchObject({ legacy: true, adversaries: [{ name: "A besta da estrada sul", quantity: 1 }] })
+        await expect(answer(t, (jobId) => runMaddoxTool(tool("grant_experience"), { campaignId: t.campaignId, turnNumber: 5, jobId }, { personagens: ["grupo"], valor: 50, motivo: "x", combate: String(rats._id) }), 0, true)).rejects.toThrow("não tem XP pendente")
+        await answer(t, (jobId) => runMaddoxTool(tool("grant_experience"), { campaignId: t.campaignId, turnNumber: 5, jobId }, { personagens: ["grupo"], valor: 50, motivo: "Fera comparável a ND 1/2.", combate: String(burned._id) }), 0, true)
+        expect(await xpOf(t.members[0]!)).toBe(50)
+        await expect(pendingCombatExperience(t.campaignId)).resolves.toEqual([])
+    })
+
+    it("pendência sem participante com ficha concluída não fica na tarefa para sempre e a recusa explica o motivo", async () => {
+        const t = await table({ mode: "experiencia", rigor: "rigoroso" })
+        const gone = await beastCombat(t, { experienceGranted: true, tactical: { characters: t.members.slice(0, 2).map((member) => ({ characterId: String(member.characterId), name: member.name, left: true })) } })
+        const notReady = await beastCombat(t, { title: "Lobos", experienceGranted: true, tactical: { characters: [{ characterId: String(t.members[2]!.characterId), name: t.members[2]!.name, left: false }] } })
+        await MaddoxCharacterModel.updateOne({ _id: t.members[2]!.characterId }, { $set: { "interview.status": "in-progress" } })
+        const { pendingCombatExperience } = await import("@/features/maddox/server/combat-experience")
+        await expect(pendingCombatExperience(t.campaignId)).resolves.toEqual([])
+        await expect(answer(t, (jobId) => runMaddoxTool(tool("grant_experience"), { campaignId: t.campaignId, turnNumber: 5, jobId }, { personagens: ["grupo"], valor: 50, motivo: "x", combate: String(notReady._id) }), 0, true)).rejects.toThrow('Nenhum participante do combate "Lobos" tem ficha concluída')
+        expect(String(gone._id)).not.toBe(String(notReady._id))
+    })
+
+    it("combate em processamento pela etapa automática nunca parece legado (sem corrida com a XP oficial)", async () => {
+        const t = await table({ mode: "experiencia", rigor: "rigoroso" })
+        const goblin = new Types.ObjectId()
+        await mongoose.connection.collection("monsters").insertOne({ _id: goblin, name: "Goblin", challengeRating: "1/4", status: "active" })
+        const combat = await beastCombat(t, { title: "Goblins", combatants: [{ name: "Goblin", nameKey: "goblin", side: "inimigo", quantity: 2, outcome: "morto", tactical: { defeated: true, stats: { source: "catalog", monsterId: String(goblin) } } }] })
+        const { pendingCombatExperience } = await import("@/features/maddox/server/combat-experience")
+        // A pendência é lida enquanto a XP oficial ainda está sendo gravada (claim feito, card ainda não).
+        const spy = vi.spyOn(levels, "grantExperience")
+        let during: unknown = null
+        const create = MaddoxCampaignMessageModel.create.bind(MaddoxCampaignMessageModel)
+        const createSpy = vi.spyOn(MaddoxCampaignMessageModel, "create").mockImplementationOnce((async (...args: Parameters<typeof create>) => {
+            during = await pendingCombatExperience(t.campaignId)
+            return create(...args)
+        }) as never)
+        await expect(grantCombatExperience(t.campaignId, (await MaddoxCombatModel.findById(combat._id).lean())!, 5)).resolves.toEqual({ granted: 100, pending: [] })
+        createSpy.mockRestore()
+        spy.mockRestore()
+        expect(during).toEqual([])
+        expect((await MaddoxCombatModel.findById(combat._id).lean())!.experienceProcessedAt).toBeInstanceOf(Date)
+        await expect(pendingCombatExperience(t.campaignId)).resolves.toEqual([])
+    })
+
+    it("falha depois de somar fichas mantém o combate resolvido (não duplica); falha antes de somar reabre a pendência", async () => {
+        const t = await table({ mode: "experiencia", rigor: "rigoroso" })
+        const combat = await beastCombat(t)
+        await grantCombatExperience(t.campaignId, (await MaddoxCombatModel.findById(combat._id).lean())!, 34)
+        const { pendingCombatExperience } = await import("@/features/maddox/server/combat-experience")
+        // Antes de qualquer ficha: a pendência volta e o mestre pode tentar de novo.
+        const incSpy = vi.spyOn(CharacterSheet.collection, "findOneAndUpdate").mockRejectedValueOnce(new Error("banco fora do ar"))
+        await answer(t, (jobId) => runMaddoxTool(tool("grant_experience"), { campaignId: t.campaignId, turnNumber: 5, jobId }, { personagens: ["grupo"], valor: 50, motivo: "Fera ND 1/2.", combate: String(combat._id) }), 0, true)
+        incSpy.mockRestore()
+        expect((await MaddoxCombatModel.findById(combat._id).lean())!.experienceResolved ?? null).toBeNull()
+        expect(await xpOf(t.members[0]!)).toBe(0)
+        await expect(pendingCombatExperience(t.campaignId)).resolves.toHaveLength(1)
+        // Depois de somar as fichas (o card falha): o combate fica resolvido com o total parcial e sai das pendências.
+        const createSpy = vi.spyOn(MaddoxCampaignMessageModel, "create").mockRejectedValueOnce(new Error("card falhou") as never)
+        await answer(t, (jobId) => runMaddoxTool(tool("grant_experience"), { campaignId: t.campaignId, turnNumber: 5, jobId }, { personagens: ["grupo"], valor: 50, motivo: "Fera ND 1/2.", combate: String(combat._id) }), 0, true)
+        createSpy.mockRestore()
+        expect(await xpOf(t.members[0]!)).toBe(50)
+        expect(await xpOf(t.members[1]!)).toBe(50)
+        expect((await MaddoxCombatModel.findById(combat._id).lean())!.experienceResolved).toMatchObject({ by: "master", amount: 50, total: 100, partial: true })
+        await expect(pendingCombatExperience(t.campaignId)).resolves.toEqual([])
+        await expect(answer(t, (jobId) => runMaddoxTool(tool("grant_experience"), { campaignId: t.campaignId, turnNumber: 5, jobId }, { personagens: ["grupo"], valor: 50, motivo: "x", combate: String(combat._id) }), 0, true)).rejects.toThrow("já foi concedida")
+        expect(await xpOf(t.members[0]!)).toBe(50)
+    })
+
+    it("falha da etapa automática depois do claim: os derrotados viram pendência (nada some em silêncio)", async () => {
+        const t = await table({ mode: "experiencia", rigor: "rigoroso" })
+        const goblin = new Types.ObjectId()
+        await mongoose.connection.collection("monsters").insertOne({ _id: goblin, name: "Goblin", challengeRating: "1/4", status: "active" })
+        const combat = await beastCombat(t, { combatants: [{ name: "Goblin", nameKey: "goblin", side: "inimigo", quantity: 2, outcome: "morto", tactical: { defeated: true, stats: { source: "catalog", monsterId: String(goblin) } } }, { name: "A besta da estrada sul", nameKey: "a besta", side: "inimigo", quantity: 1, outcome: "morto", tactical: { defeated: true, stats: { source: "custom", monsterId: null } } }] })
+        const { MonsterModel } = await import("@/features/monsters/models/monster")
+        const find = vi.spyOn(MonsterModel, "find").mockImplementationOnce(() => {
+            throw new Error("banco fora do ar")
+        })
+        await expect(grantCombatExperience(t.campaignId, (await MaddoxCombatModel.findById(combat._id).lean())!, 34)).rejects.toThrow("banco fora do ar")
+        find.mockRestore()
+        expect((await MaddoxCombatModel.findById(combat._id).lean())!.experiencePending).toMatchObject({ adversaries: [{ name: "Goblin", quantity: 2 }, { name: "A besta da estrada sul", quantity: 1 }] })
+        const { pendingCombatExperience } = await import("@/features/maddox/server/combat-experience")
+        await expect(pendingCombatExperience(t.campaignId)).resolves.toEqual([expect.objectContaining({ combatId: String(combat._id), legacy: false })])
+        expect(await xpOf(t.members[0]!)).toBe(0)
+    })
+
+    it("falha no meio da XP oficial (2ª ficha): quem ficou sem recebe pela pendência; quem já recebeu não recebe de novo", async () => {
+        const t = await table({ mode: "experiencia", rigor: "rigoroso" })
+        const goblin = new Types.ObjectId()
+        await mongoose.connection.collection("monsters").insertOne({ _id: goblin, name: "Goblin", challengeRating: "1/4", status: "active" })
+        const combat = await beastCombat(t, {
+            title: "Goblins",
+            combatants: [{ name: "Goblin", nameKey: "goblin", side: "inimigo", quantity: 2, outcome: "morto", tactical: { defeated: true, stats: { source: "catalog", monsterId: String(goblin) } } }],
+            tactical: { characters: t.members.map((member) => ({ characterId: String(member.characterId), name: member.name, left: false })) },
+        })
+        const original = CharacterSheet.collection.findOneAndUpdate.bind(CharacterSheet.collection)
+        let calls = 0
+        const spy = vi.spyOn(CharacterSheet.collection, "findOneAndUpdate").mockImplementation(((...args: Parameters<typeof original>) => {
+            calls += 1
+            if (calls === 2) return Promise.reject(new Error("falha transitória"))
+            return original(...args)
+        }) as never)
+        await expect(grantCombatExperience(t.campaignId, (await MaddoxCombatModel.findById(combat._id).lean())!, 34)).rejects.toThrow("falha transitória")
+        spy.mockRestore()
+        expect(await xpOf(t.members[0]!)).toBe(33)
+        expect(await xpOf(t.members[1]!)).toBe(0)
+        expect(await xpOf(t.members[2]!)).toBe(0)
+        expect((await MaddoxCombatModel.findById(combat._id).lean())!.experiencePending).toMatchObject({ adversaries: [{ name: "Goblin", quantity: 2 }], characterIds: [String(t.members[1]!.characterId), String(t.members[2]!.characterId)], credited: ["Nala"] })
+        const { pendingCombatExperience } = await import("@/features/maddox/server/combat-experience")
+        const pending = await pendingCombatExperience(t.campaignId)
+        expect(pending).toEqual([expect.objectContaining({ combatId: String(combat._id), characterNames: ["Uther", "Vaelyra"], credited: ["Nala"], legacy: false })])
+        const { progressionTaskLines } = await import("@/features/maddox/server/narrator-prompt")
+        expect(progressionTaskLines({ milestone: null, levelUps: [], pendingCombatXp: pending })).toContain("Nala já recebeu a XP oficial deste combate: não conceda de novo")
+        await answer(t, (jobId) => runMaddoxTool(tool("grant_experience"), { campaignId: t.campaignId, turnNumber: 35, jobId }, { personagens: ["grupo"], valor: 33, motivo: "XP oficial dos goblins que faltou.", combate: String(combat._id) }), 0, true)
+        expect(await xpOf(t.members[0]!)).toBe(33)
+        expect(await xpOf(t.members[1]!)).toBe(33)
+        expect(await xpOf(t.members[2]!)).toBe(33)
+        await expect(pendingCombatExperience(t.campaignId)).resolves.toEqual([])
+    })
+
+    it("falha no meio da XP oficial em combate misto: a parte oficial devida sai junto e a da fera vale para todos (inclusive o creditado)", async () => {
+        const t = await table({ mode: "experiencia", rigor: "rigoroso" })
+        const goblin = new Types.ObjectId()
+        await mongoose.connection.collection("monsters").insertOne({ _id: goblin, name: "Goblin", challengeRating: "1/4", status: "active" })
+        const combat = await beastCombat(t, {
+            title: "Goblins e a besta",
+            combatants: [
+                { name: "Goblin", nameKey: "goblin", side: "inimigo", quantity: 2, outcome: "morto", tactical: { defeated: true, stats: { source: "catalog", monsterId: String(goblin) } } },
+                { name: "A besta da estrada sul", nameKey: "a besta", side: "inimigo", quantity: 1, outcome: "morto", tactical: { defeated: true, stats: { source: "custom", monsterId: null } } },
+            ],
+            tactical: { characters: t.members.map((member) => ({ characterId: String(member.characterId), name: member.name, left: false })) },
+        })
+        const original = CharacterSheet.collection.findOneAndUpdate.bind(CharacterSheet.collection)
+        let calls = 0
+        const spy = vi.spyOn(CharacterSheet.collection, "findOneAndUpdate").mockImplementation(((...args: Parameters<typeof original>) => {
+            calls += 1
+            if (calls === 2) return Promise.reject(new Error("falha transitória"))
+            return original(...args)
+        }) as never)
+        await expect(grantCombatExperience(t.campaignId, (await MaddoxCombatModel.findById(combat._id).lean())!, 34)).rejects.toThrow("falha transitória")
+        spy.mockRestore()
+        expect([await xpOf(t.members[0]!), await xpOf(t.members[1]!), await xpOf(t.members[2]!)]).toEqual([33, 0, 0])
+        expect((await MaddoxCombatModel.findById(combat._id).lean())!.experiencePending).toMatchObject({
+            adversaries: [{ name: "A besta da estrada sul", quantity: 1 }],
+            credited: ["Nala"],
+            owed: { characterIds: [String(t.members[1]!.characterId), String(t.members[2]!.characterId)], characterNames: ["Uther", "Vaelyra"], amount: 33 },
+        })
+        const { pendingCombatExperience } = await import("@/features/maddox/server/combat-experience")
+        const pending = await pendingCombatExperience(t.campaignId)
+        expect(pending).toEqual([expect.objectContaining({ characterNames: ["Nala", "Uther", "Vaelyra"], owed: expect.objectContaining({ amount: 33 }) })])
+        const { progressionTaskLines } = await import("@/features/maddox/server/narrator-prompt")
+        const lines = progressionTaskLines({ milestone: null, levelUps: [], pendingCombatXp: pending })!
+        expect(lines).toContain("A XP oficial que faltou para Uther, Vaelyra (33 XP cada) sai junto, automaticamente")
+        expect(lines).not.toContain("não conceda de novo")
+        await answer(t, (jobId) => runMaddoxTool(tool("grant_experience"), { campaignId: t.campaignId, turnNumber: 35, jobId }, { personagens: ["grupo"], valor: 30, motivo: "Besta comparável a ND 1/2.", combate: String(combat._id) }), 0, true)
+        expect([await xpOf(t.members[0]!), await xpOf(t.members[1]!), await xpOf(t.members[2]!)]).toEqual([63, 63, 63])
+        expect((await MaddoxCombatModel.findById(combat._id).lean())!.experienceResolved).toMatchObject({ amount: 30, total: 156 })
+        expect(await MaddoxCampaignMessageModel.countDocuments({ campaignId: t.campaignId, kind: "experience", "experience.combatId": combat._id, "experience.source": "combat", "experience.total": 66 })).toBe(1)
+        await expect(pendingCombatExperience(t.campaignId)).resolves.toEqual([])
+    })
+
+    it("estimativa do mestre falha logo na 1ª ficha depois do owed gravado: a pendência da fera volta, sem repetir o owed", async () => {
+        const t = await table({ mode: "experiencia", rigor: "rigoroso" })
+        const goblin = new Types.ObjectId()
+        await mongoose.connection.collection("monsters").insertOne({ _id: goblin, name: "Goblin", challengeRating: "1/4", status: "active" })
+        const combat = await beastCombat(t, {
+            title: "Goblins e a besta",
+            combatants: [
+                { name: "Goblin", nameKey: "goblin", side: "inimigo", quantity: 2, outcome: "morto", tactical: { defeated: true, stats: { source: "catalog", monsterId: String(goblin) } } },
+                { name: "A besta da estrada sul", nameKey: "a besta", side: "inimigo", quantity: 1, outcome: "morto", tactical: { defeated: true, stats: { source: "custom", monsterId: null } } },
+            ],
+            tactical: { characters: t.members.map((member) => ({ characterId: String(member.characterId), name: member.name, left: false })) },
+        })
+        const original = CharacterSheet.collection.findOneAndUpdate.bind(CharacterSheet.collection)
+        let calls = 0
+        let failAt = 2
+        const spy = vi.spyOn(CharacterSheet.collection, "findOneAndUpdate").mockImplementation(((...args: Parameters<typeof original>) => {
+            calls += 1
+            if (calls === failAt) return Promise.reject(new Error("falha transitória"))
+            return original(...args)
+        }) as never)
+        await expect(grantCombatExperience(t.campaignId, (await MaddoxCombatModel.findById(combat._id).lean())!, 34)).rejects.toThrow("falha transitória")
+        // Concessão do mestre: as 2 fichas do owed passam e a 1ª da estimativa falha.
+        calls = 0
+        failAt = 3
+        await answer(t, (jobId) => runMaddoxTool(tool("grant_experience"), { campaignId: t.campaignId, turnNumber: 35, jobId }, { personagens: ["grupo"], valor: 30, motivo: "Besta comparável a ND 1/2.", combate: String(combat._id) }), 0, true)
+        spy.mockRestore()
+        expect([await xpOf(t.members[0]!), await xpOf(t.members[1]!), await xpOf(t.members[2]!)]).toEqual([33, 33, 33])
+        const stored = (await MaddoxCombatModel.findById(combat._id).lean())!
+        expect(stored.experienceResolved ?? null).toBeNull()
+        expect(stored.experiencePending).toMatchObject({ adversaries: [{ name: "A besta da estrada sul", quantity: 1 }], owed: null, credited: [] })
+        const { pendingCombatExperience } = await import("@/features/maddox/server/combat-experience")
+        const pending = await pendingCombatExperience(t.campaignId)
+        expect(pending).toEqual([expect.objectContaining({ characterNames: ["Nala", "Uther", "Vaelyra"], owed: null })])
+        const { progressionTaskLines } = await import("@/features/maddox/server/narrator-prompt")
+        const lines = progressionTaskLines({ milestone: null, levelUps: [], pendingCombatXp: pending })!
+        expect(lines).not.toContain("não conceda de novo")
+        expect(lines).not.toContain("sai junto")
+        // O mestre tenta de novo: só a fera, para os três (o owed não se repete).
+        await answer(t, (jobId) => runMaddoxTool(tool("grant_experience"), { campaignId: t.campaignId, turnNumber: 36, jobId }, { personagens: ["grupo"], valor: 30, motivo: "Besta comparável a ND 1/2.", combate: String(combat._id) }), 0, true)
+        expect([await xpOf(t.members[0]!), await xpOf(t.members[1]!), await xpOf(t.members[2]!)]).toEqual([63, 63, 63])
+        await expect(pendingCombatExperience(t.campaignId)).resolves.toEqual([])
+    })
+
+    it("se nem a pendência grava, o claim perde a marca de processamento e o combate volta a ser pendência recuperável", async () => {
+        const t = await table({ mode: "experiencia", rigor: "rigoroso" })
+        const combat = await beastCombat(t)
+        const update = MaddoxCombatModel.updateOne.bind(MaddoxCombatModel)
+        // Toda gravação da pendência falha (a da etapa e a do tratamento da falha); o claim e o desfazer passam.
+        const updateSpy = vi.spyOn(MaddoxCombatModel, "updateOne").mockImplementation(((...args: Parameters<typeof update>) => {
+            if (JSON.stringify(args[1] ?? {}).includes("experiencePending")) return Promise.reject(new Error("pendência falhou"))
+            return update(...args)
+        }) as never)
+        await expect(grantCombatExperience(t.campaignId, (await MaddoxCombatModel.findById(combat._id).lean())!, 34)).rejects.toThrow("pendência falhou")
+        updateSpy.mockRestore()
+        const stored = (await MaddoxCombatModel.findById(combat._id).lean())!
+        expect(stored.experienceGranted).toBe(true)
+        expect(stored.experienceProcessedAt ?? null).toBeNull()
+        const { pendingCombatExperience } = await import("@/features/maddox/server/combat-experience")
+        await expect(pendingCombatExperience(t.campaignId)).resolves.toEqual([expect.objectContaining({ combatId: String(combat._id), legacy: true })])
+    })
+
+    it("processo caído depois do claim: claim antigo sem card nem pendência vira pendência recuperável; o recente não", async () => {
+        const t = await table({ mode: "experiencia", rigor: "rigoroso" })
+        const { pendingCombatExperience, MADDOX_XP_PROCESSING_STALE_MS } = await import("@/features/maddox/server/combat-experience")
+        const stale = await beastCombat(t, { experienceGranted: true, experienceProcessedAt: new Date(Date.now() - MADDOX_XP_PROCESSING_STALE_MS - 60_000) })
+        await beastCombat(t, { title: "Lobos", experienceGranted: true, experienceProcessedAt: new Date() })
+        await expect(pendingCombatExperience(t.campaignId)).resolves.toEqual([expect.objectContaining({ combatId: String(stale._id), legacy: true })])
+    })
+
+    it("regra do narrador: fera fora do catálogo vale XP e nunca \"não posso conceder\"", async () => {
+        const { progressionRule } = await import("@/features/maddox/server/narrator-prompt")
+        const rule = progressionRule({ mode: "experiencia", level: 1 })
+        expect(rule).toContain("Adversário fora do catálogo (fera, animal, criatura com bloco próprio) CONTINUA valendo XP")
+        expect(rule).toContain("Nunca diga que não pode conceder XP")
     })
 })
 

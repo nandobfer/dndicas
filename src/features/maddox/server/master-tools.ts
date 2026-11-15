@@ -1625,27 +1625,29 @@ export const MADDOX_PROGRESSION_TOOLS: readonly MaddoxMasterTool[] = [
     define({
         name: MADDOX_PROGRESSION_TOOL_NAMES.grant,
         description:
-            'Concede experiência (modo Experiência) aos personagens: missões (o grupo, com personagens ["grupo"]) e feitos individuais. Sem teto. No grau Equilibrado (combate narrativo), é a única forma de dar XP de combate. Gera um card no chat com o motivo; quem atingir o limiar do próximo nível sobe.',
+            'Concede experiência (modo Experiência) aos personagens: missões (o grupo, com personagens ["grupo"]) e feitos individuais. Sem teto. No grau Equilibrado (combate narrativo), é a única forma de dar XP de combate. Também no "Pergunte ao mestre" (quem perguntou recebe só no próprio personagem; o dono da campanha, em qualquer um). XP PENDENTE de combate tático (adversário fora do catálogo, sem ND): estime o valor pelo poder do adversário comparado à tabela de XP por ND e informe `combate` (o id indicado na tarefa) — a XP vai para quem participou daquele combate, uma vez só, e o motivo deve trazer a estimativa. Gera um card no chat com o motivo; quem atingir o limiar do próximo nível sobe.',
         readOnly: false,
         input: z.object({
-            personagens: z.array(z.string().min(1)).min(1).describe('Nomes dos personagens ou ["grupo"]'),
+            personagens: z.array(z.string().min(1)).min(1).describe('Nomes dos personagens ou ["grupo"] (com `combate`, ["grupo"] = quem participou do combate)'),
             valor: z.number().int().min(1).max(MADDOX_EXPERIENCE_GRANT_MAX).describe("XP para cada personagem"),
-            motivo: z.string().min(1),
+            motivo: z.string().min(1).describe("Por que a XP é concedida (os jogadores leem no card); na XP estimada de combate, diga a estimativa (ex.: \"fera comparável a ND 1/2\")"),
+            combate: z.string().optional().describe("Só para a XP pendente de um combate tático: o id do combate indicado na tarefa"),
         }),
         async execute(context, input) {
-            return progressionCall((actions) => actions.draftGrant(context, input.personagens, input.valor, input.motivo))
+            return progressionCall((actions) => actions.draftGrant(context, input.personagens, input.valor, input.motivo, input.combate ?? null))
         },
     }),
 ]
 
-export const MADDOX_PROGRESSION_ANSWER_TOOL_NAMES: readonly string[] = [MADDOX_PROGRESSION_TOOL_NAMES.evaluate]
+export const MADDOX_PROGRESSION_ANSWER_TOOL_NAMES: readonly string[] = [MADDOX_PROGRESSION_TOOL_NAMES.evaluate, MADDOX_PROGRESSION_TOOL_NAMES.grant]
 
 /** Todas as ferramentas do narrador (persistência, testes, combate, a vez dos adversários, a imagem da cena e as sugestões de ação). */
 export const MADDOX_NARRATOR_TOOLS: readonly MaddoxMasterTool[] = [...MADDOX_MASTER_TOOLS, ...MADDOX_COMBAT_TOOLS, ...MADDOX_TACTICAL_TOOLS, ...MADDOX_SCENE_IMAGE_TOOLS, ...MADDOX_ACTION_OPTIONS_TOOLS, ...MADDOX_OPEX_NPC_TOOLS, ...MADDOX_SHEET_FIX_TOOLS, ...MADDOX_COMBAT_FIX_TOOLS, ...MADDOX_PROGRESSION_TOOLS]
 
 /** Ferramentas de progressão oferecidas na geração (DND-56): o modo da campanha e o tipo da geração decidem. */
 export function progressionToolNames(options: { mode: "marco" | "experiencia" | null; answer: boolean }): string[] {
-    if (options.answer) return options.mode === "marco" ? [MADDOX_PROGRESSION_TOOL_NAMES.evaluate] : []
+    // DND-70: o "Pergunte ao mestre" corrige a XP também (modo Experiência).
+    if (options.answer) return options.mode === "marco" ? [MADDOX_PROGRESSION_TOOL_NAMES.evaluate] : options.mode === "experiencia" ? [MADDOX_PROGRESSION_TOOL_NAMES.grant] : []
     return [MADDOX_PROGRESSION_TOOL_NAMES.chapter, ...(options.mode === "marco" ? [MADDOX_PROGRESSION_TOOL_NAMES.declare] : []), ...(options.mode === "experiencia" ? [MADDOX_PROGRESSION_TOOL_NAMES.grant] : [])]
 }
 

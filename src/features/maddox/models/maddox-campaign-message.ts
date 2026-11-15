@@ -216,6 +216,12 @@ export interface IMaddoxExperienceCard {
     reason: string
     total: number
     entries: { characterId: Types.ObjectId; characterName: string; amount: number; total: number }[]
+    /** DND-70: o combate desta XP (automática ou estimada pelo mestre). */
+    combatId?: Types.ObjectId | null
+    /** DND-70: XP estimada pelo mestre para adversários fora do catálogo. */
+    estimated?: boolean
+    /** DND-70: card de pendência — adversários sem ND cuja XP o mestre ainda vai estimar (`total: 0`, sem `entries`). */
+    pending?: { name: string; quantity: number }[] | null
 }
 
 export interface IMaddoxOpexNpcFailure {

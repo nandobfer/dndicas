@@ -4,7 +4,7 @@ import { MADDOX_CHAPTER_SUMMARY_MAX, MADDOX_CHAPTER_TITLE_MAX, MADDOX_LEVEL_UP_R
 import { MaddoxCampaignModel, type IMaddoxCampaign } from "../models"
 import { jobDraftCombat, jobDraftProgression, maddoxJobMeta, type MaddoxDraftProgression } from "./game-live"
 import { evaluateLevelMilestone } from "./level-milestone"
-import { checkDeclaration, partyOf, progressionModeOf, ProgressionRefusal, tacticalCombatActive } from "./level-ups"
+import { checkDeclaration, partyOf, progressionModeOf, ProgressionRefusal, tacticalCombatActive, type PartyMember } from "./level-ups"
 import { questionRun } from "./question-runs"
 
 /**
@@ -117,21 +117,72 @@ export async function draftChapter(context: ProgressionToolContext, title: strin
     return { encerrado: true, titulo: cleanTitle, ...(milestone ?? {}) }
 }
 
-/** "Conceder experiência" (modo Experiência): personagens, valor e motivo, sem teto. */
-export async function draftGrant(context: ProgressionToolContext, names: readonly string[], amount: number, reason: string): Promise<Record<string, unknown>> {
-    requireNarration(context, "A experiência é concedida")
+/**
+ * "Conceder experiência" (modo Experiência): personagens, valor e motivo, sem teto. Vale na narração e, desde a DND-70, no
+ * "Pergunte ao mestre" (quem perguntou recebe só no próprio personagem; o dono, em qualquer um). Com `combatRef`, liquida a
+ * XP pendente de um combate (adversário fora do catálogo): vai para os participantes daquele combate, uma vez.
+ */
+export async function draftGrant(context: ProgressionToolContext, names: readonly string[], amount: number, reason: string, combatRef?: string | null): Promise<Record<string, unknown>> {
+    const run = questionRun(context.jobId)
+    if (!run) requireNarration(context, "A experiência é concedida")
     const campaign = await loadCampaign(context)
     const mode = progressionModeOf(campaign)
     if (!mode) throw new ProgressionRefusal("Este grau de rigor não tem experiência nem nível.")
-    if (mode !== "experiencia") throw new ProgressionRefusal(`Esta campanha usa o modo Marco: não há XP. Para subir o grupo, use ${MADDOX_PROGRESSION_TOOL_NAMES.declare}.`)
+    if (mode !== "experiencia") {
+        throw new ProgressionRefusal(
+            run
+                ? `Esta campanha usa o modo Marco: não há XP. O grupo sobe pelos marcos da história; para avaliar agora, use ${MADDOX_PROGRESSION_TOOL_NAMES.evaluate}.`
+                : `Esta campanha usa o modo Marco: não há XP. Para subir o grupo, use ${MADDOX_PROGRESSION_TOOL_NAMES.declare}.`,
+        )
+    }
     const draft = draftOf(context)
-    const party = (await partyOf(campaign._id)).filter((member) => member.ready)
+    const party = await partyOf(campaign._id)
     const wanted = names.map((name) => normalizeCatalogName(name))
-    const everyone = wanted.some((name) => name === "grupo" || name === "todos")
-    const chosen = everyone ? party : party.filter((member) => wanted.includes(normalizeCatalogName(member.characterName)))
-    const unknown = everyone ? [] : names.filter((name) => !party.some((member) => normalizeCatalogName(member.characterName) === normalizeCatalogName(name)))
-    if (!chosen.length) throw new ProgressionRefusal(`Nenhum personagem encontrado. Personagens com ficha: ${party.map((member) => member.characterName).join(", ") || "nenhum"}.`)
-    if (unknown.length) throw new ProgressionRefusal(`Personagem não encontrado: ${unknown.join(", ")}. Personagens com ficha: ${party.map((member) => member.characterName).join(", ")}.`)
-    draft.grants.push({ entries: chosen.map((member) => ({ characterId: String(member.characterId), amount })), reason: clip(reason, MADDOX_LEVEL_UP_REASON_MAX) })
-    return { concedido: true, valor: amount, personagens: chosen.map((member) => member.characterName), nota: "O card de XP aparece no chat depois da narração; quem atingir o limiar do próximo nível sobe (fora de combate tático)." }
+    const everyone = !wanted.length || wanted.some((name) => name === "grupo" || name === "todos")
+    const notReady = (pool: readonly PartyMember[]) => pool.filter((member) => !member.ready && wanted.includes(normalizeCatalogName(member.characterName)))
+    const cleanReason = clip(reason, MADDOX_LEVEL_UP_REASON_MAX)
+
+    if (combatRef?.trim()) {
+        const { findPendingCombat } = await import("./combat-experience")
+        const combat = await findPendingCombat(campaign._id, combatRef)
+        if (draft.grants.some((grant) => grant.combatId === combat.combatId)) throw new ProgressionRefusal(`A XP do combate "${combat.title}" já foi concedida nesta geração.`)
+        const pool = party.filter((member) => combat.characterIds.includes(String(member.characterId)))
+        const waiting = notReady(pool)
+        if (waiting.length) throw new ProgressionRefusal(`${waiting.map((member) => member.characterName).join(", ")} ainda não tem ficha concluída (entrevista pendente): não recebe XP.`)
+        const ready = pool.filter((member) => member.ready)
+        const chosen = everyone ? ready : ready.filter((member) => wanted.includes(normalizeCatalogName(member.characterName)))
+        const unknown = everyone ? [] : names.filter((name) => !ready.some((member) => normalizeCatalogName(member.characterName) === normalizeCatalogName(name)))
+        if (unknown.length) throw new ProgressionRefusal(`${unknown.join(", ")} não participou do combate "${combat.title}". Participantes: ${combat.characterNames.join(", ") || "nenhum"}.`)
+        if (!chosen.length) throw new ProgressionRefusal(`Nenhum participante do combate "${combat.title}" tem ficha concluída para receber XP.`)
+        draft.grants.push({ entries: chosen.map((member) => ({ characterId: String(member.characterId), amount })), reason: cleanReason, combatId: combat.combatId, requestedBy: run?.askerUserId ?? null })
+        return {
+            concedido: true,
+            combate: combat.title,
+            valor: amount,
+            personagens: chosen.map((member) => member.characterName),
+            nota: `A XP estimada do combate entra no chat logo depois desta ${run ? "resposta" : "narração"} (card de XP, com o motivo). Explique ao jogador a estimativa em tom de mestre.`,
+        }
+    }
+
+    const waiting = notReady(party)
+    if (waiting.length) throw new ProgressionRefusal(`${waiting.map((member) => member.characterName).join(", ")} ainda não tem ficha concluída (entrevista pendente): não recebe XP.`)
+    const ready = party.filter((member) => member.ready)
+    let chosen = everyone ? ready : ready.filter((member) => wanted.includes(normalizeCatalogName(member.characterName)))
+    const unknown = everyone ? [] : names.filter((name) => !ready.some((member) => normalizeCatalogName(member.characterName) === normalizeCatalogName(name)))
+    if (unknown.length) throw new ProgressionRefusal(`Personagem não encontrado: ${unknown.join(", ")}. Personagens com ficha: ${ready.map((member) => member.characterName).join(", ") || "nenhum"}.`)
+    if (!chosen.length) throw new ProgressionRefusal(`Nenhum personagem encontrado. Personagens com ficha: ${ready.map((member) => member.characterName).join(", ") || "nenhum"}.`)
+    // DND-51/DND-70: no "Pergunte ao mestre", quem perguntou só recebe no próprio personagem (o dono, em qualquer um).
+    if (run && !run.askerIsOwner) {
+        const others = chosen.filter((member) => String(member.characterId) !== run.askerCharacterId)
+        if (others.length || everyone) throw new ProgressionRefusal("Quem perguntou só pode receber XP no próprio personagem; peça ao dono da campanha para conceder aos outros. Se for a XP pendente de um combate, informe `combate`.")
+        chosen = chosen.filter((member) => String(member.characterId) === run.askerCharacterId)
+        if (!chosen.length) throw new ProgressionRefusal("Quem perguntou não tem personagem com ficha concluída para receber XP.")
+    }
+    draft.grants.push({ entries: chosen.map((member) => ({ characterId: String(member.characterId), amount })), reason: cleanReason, requestedBy: run?.askerUserId ?? null })
+    return {
+        concedido: true,
+        valor: amount,
+        personagens: chosen.map((member) => member.characterName),
+        nota: `O card de XP aparece no chat depois da ${run ? "resposta" : "narração"}; quem atingir o limiar do próximo nível sobe (fora de combate tático).`,
+    }
 }

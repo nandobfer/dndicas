@@ -80,13 +80,28 @@ describe("card Subida de nível", () => {
     it("cards de XP e de capítulo", () => {
         render(
             <>
-                <ExperienceCard message={message({ kind: "experience", experience: { source: "combat", reason: "Combate \"Emboscada\"", total: 99, entries: [{ characterId: "c1", characterName: "Nala", amount: 33, total: 333 }] } })} />
+                <ExperienceCard message={message({ kind: "experience", experience: { source: "combat", reason: "Combate \"Emboscada\"", total: 99, entries: [{ characterId: "c1", characterName: "Nala", amount: 33, total: 333 }], combatId: "cb1", estimated: false, pending: null } })} />
                 <ChapterLine message={message({ id: "m2", kind: "chapter", chapter: { title: "A Trilha Triboar", summary: "…" } })} />
             </>,
         )
         expect(screen.getByTestId("experience-card")).toHaveTextContent("Experiência: 99 XP")
         expect(screen.getByTestId("experience-card")).toHaveTextContent("Nala: +33 XP (total 333)")
         expect(screen.getByTestId("chapter-line")).toHaveTextContent("Capítulo encerrado: A Trilha Triboar")
+    })
+
+    it("DND-70: XP pendente (fora do catálogo) e XP estimada pelo mestre são acontecimentos distintos", () => {
+        render(
+            <>
+                <ExperienceCard message={message({ kind: "experience", experience: { source: "combat", reason: "Combate \"A besta da estrada sul\"", total: 0, entries: [], combatId: "cb1", estimated: false, pending: [{ name: "A besta da estrada sul", quantity: 1 }] } })} />
+                <ExperienceCard message={message({ id: "m2", kind: "experience", experience: { source: "grant", reason: "Fera comparável a ND 1/2", total: 100, entries: [{ characterId: "c1", characterName: "Lizwan", amount: 50, total: 117 }, { characterId: "c2", characterName: "Ravel", amount: 50, total: 117 }], combatId: "cb1", estimated: true, pending: null } })} />
+            </>,
+        )
+        const pending = screen.getByTestId("experience-pending-card")
+        expect(pending).toHaveTextContent("XP pendente · Combate \"A besta da estrada sul\"")
+        expect(pending).toHaveTextContent("A besta da estrada sul: fora do catálogo — o mestre vai estimar a XP.")
+        const granted = screen.getByTestId("experience-card")
+        expect(granted).toHaveTextContent("Experiência (estimada pelo mestre): 100 XP · Fera comparável a ND 1/2")
+        expect(granted).toHaveTextContent("Lizwan: +50 XP (total 117)")
     })
 })
 
