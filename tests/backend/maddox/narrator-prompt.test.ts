@@ -174,8 +174,26 @@ describe("fichas e testes no prompt (Maddox 5)", () => {
     })
 
     it("no MCP, a lista de ferramentas só inclui request_check quando os testes valem", () => {
-        expect(buildNarratorInstructions(context({ rigor: "fiel-dnd" }), { kind: "mcp", server: "dndicas-maddox", turnToken: "t", checks: true })).toContain("update_character_state, update_character_hit_points, update_character_exhaustion, add_armor_class_bonus, remove_armor_class_bonus, update_character_coins, resolve_reminder, request_check, promover_npc_opex, desfazer_npc_opex, gravar_memoria_npc_opex, search_catalog, get_catalog_entity)")
+        expect(buildNarratorInstructions(context({ rigor: "fiel-dnd" }), { kind: "mcp", server: "dndicas-maddox", turnToken: "t", checks: true })).toContain("update_character_state, update_character_hit_points, update_character_exhaustion, add_armor_class_bonus, remove_armor_class_bonus, apply_check_effect, end_check_effect, update_character_coins, resolve_reminder, request_check, promover_npc_opex, desfazer_npc_opex, gravar_memoria_npc_opex, search_catalog, get_catalog_entity)")
         expect(buildNarratorInstructions(context(), { kind: "mcp", server: "dndicas-maddox", turnToken: "t", checks: false })).not.toContain("request_check")
+    })
+
+    it("DND-69: linha do resultado com o dado do efeito de teste e os efeitos que não entraram", () => {
+        const effects = [
+            { id: "e1", name: "Orientação", dice: "1d4", status: "applied" as const, results: [3], reason: null },
+            { id: "e2", name: "Bênção", dice: "1d4", status: "skipped" as const, results: null, reason: "vale só em testes de resistência" },
+        ]
+        expect(checkResultLine(result({ total: 20, effects }))).toBe("Lyra — Furtividade (Destreza), CD 15: total 20 (d20 12, Orientação +1d4: 3, modificador +5) — sucesso. Não entraram: Bênção (vale só em testes de resistência).")
+    })
+
+    it("DND-69: lembretes resolvidos entram na transcrição", () => {
+        const text = narratorTranscript([{ turnNumber: 25, kind: "reminder", characterName: "Lizwan", content: 'vou lançar "orientação" em mim mesma' }], 10_000)
+        expect(text).toBe('[Turno 25 — Lizwan lembra o Maddox] vou lançar "orientação" em mim mesma')
+    })
+
+    it("DND-69: a regra dos efeitos de teste vale nos graus com ficha", () => {
+        expect(buildNarratorInstructions(context({ rigor: "rigoroso" }), { kind: "ai-sdk" })).toContain("## Efeitos de teste (Orientação, Inspiração de Bardo)")
+        expect(buildNarratorInstructions(context({ rigor: "narrativo" }), { kind: "ai-sdk" })).not.toContain("## Efeitos de teste")
     })
 
     it("linha do resultado: total, d20, modificador, vantagem, natural, dono no lugar, cancelado e pendente", () => {
@@ -232,7 +250,7 @@ describe("catálogo do DnDicas no narrador", () => {
     })
 
     it("no MCP, a lista de ferramentas inclui as de catálogo também sem testes", () => {
-        expect(buildNarratorInstructions(context(), { kind: "mcp", server: "dndicas-maddox", turnToken: "t", checks: false })).toContain("update_character_state, update_character_hit_points, update_character_exhaustion, add_armor_class_bonus, remove_armor_class_bonus, update_character_coins, resolve_reminder, promover_npc_opex, desfazer_npc_opex, gravar_memoria_npc_opex, search_catalog, get_catalog_entity)")
+        expect(buildNarratorInstructions(context(), { kind: "mcp", server: "dndicas-maddox", turnToken: "t", checks: false })).toContain("update_character_state, update_character_hit_points, update_character_exhaustion, add_armor_class_bonus, remove_armor_class_bonus, apply_check_effect, end_check_effect, update_character_coins, resolve_reminder, promover_npc_opex, desfazer_npc_opex, gravar_memoria_npc_opex, search_catalog, get_catalog_entity)")
     })
 })
 
