@@ -14,7 +14,7 @@ import { getDiceCriticalState } from "@/features/dice-roller/critical-state"
 import type { DiceRollPreset, DiceRollResponse } from "@/features/dice-roller/types"
 import { modeReasonText, parseDiceExpression } from "../../../combat-rules"
 import type { CombatActionStep } from "../../../combat-types"
-import { MADDOX_CHECK_DIE_HIDE_MS, MADDOX_COMBAT_ADJUST_TEXT_MAX, messageAvatarContext } from "../../../constants"
+import { MADDOX_CHECK_DIE_HIDE_MS, MADDOX_COMBAT_ADJUST_TEXT_MAX, MADDOX_MASTER_REVIEWING_MESSAGE, messageAvatarContext } from "../../../constants"
 import type { MaddoxCombatPreparationDto, MaddoxGameCombatEventDto, MaddoxGameMessageDto } from "../../../game-types"
 import { MemberAvatar, OpexChip, RarityChip } from "../../campaigns/campaign-visuals"
 import { COMBAT_COLOR } from "../GameCombatCard"
@@ -72,13 +72,15 @@ interface RollerProps {
     /** Ciclo do dado no card (DND-48): prende o passo do clique até o palco sair. */
     held: HeldRoll
     stepIndex: number
+    /** DND-59: o mestre está revisando um pedido (pergunta ou lembrete): o Rolar espera a resposta. */
+    blocked?: boolean
 }
 
 /**
  * Painel de dados inline: quem rola clica "Rolar"; os outros repetem a animação recebida pelo stream. O card segura o
  * painel no mesmo passo até o palco sair (a mesa nova chega com o passo já resolvido no meio da animação).
  */
-function InlineRoller({ rollId, dice, label, mode, mine, replay, onRoll, buttonLabel, held, stepIndex }: RollerProps) {
+function InlineRoller({ rollId, dice, label, mode, mine, replay, onRoll, buttonLabel, held, stepIndex, blocked = false }: RollerProps) {
     const [local, setLocal] = useState<DiceRollResponse | null>(null)
     const preset = useMemo(() => presetOf(dice, label, mode), [dice, label, mode])
     if (!mine && !replay) return null
@@ -95,7 +97,7 @@ function InlineRoller({ rollId, dice, label, mode, mine, replay, onRoll, buttonL
                 rollButtonClassName="h-11 w-auto min-w-[7.5rem] px-6 text-sm font-semibold"
                 rollButtonLabel={buttonLabel}
                 hideRollButton={!mine || Boolean(local)}
-                disableRolling={Boolean(local) || !mine}
+                disableRolling={Boolean(local) || !mine || (blocked && !held.holding)}
                 externalResult={mine ? null : replay}
                 onRollSettled={held.settled}
                 onStageHidden={held.hidden}
@@ -112,6 +114,11 @@ function InlineRoller({ rollId, dice, label, mode, mine, replay, onRoll, buttonL
                     }
                 }}
             />
+            {mine && blocked && !local && !held.holding && (
+                <p className="max-w-[12rem] text-center text-[11px] text-white/60" data-testid="combat-roll-reviewing">
+                    {MADDOX_MASTER_REVIEWING_MESSAGE}
+                </p>
+            )}
         </div>
     )
 }
@@ -201,9 +208,11 @@ interface ActionCardProps {
     /** DND-49: resposta ao "Somar ataque furtivo?" depois do acerto. */
     onSneakChoice?: (actionId: string, add: boolean) => void
     sneakChoosing?: boolean
+    /** DND-59: o mestre está respondendo uma pergunta ou um lembrete (o Rolar espera). */
+    masterReviewing?: boolean
 }
 
-export function CombatActionCard({ message, mine, replay, stepReplays, onRoll, onCancel, onSneakChoice, sneakChoosing = false }: ActionCardProps) {
+export function CombatActionCard({ message, mine, replay, stepReplays, onRoll, onCancel, onSneakChoice, sneakChoosing = false, masterReviewing = false }: ActionCardProps) {
     const action = message.combatAction!
     const accent = action.actorKind === "character" ? ECONOMY_COLORS[action.economy] : COMBAT_COLOR
     const pending = action.steps.find((step) => step.status === "pending" && step.roller === "player")
@@ -242,7 +251,7 @@ export function CombatActionCard({ message, mine, replay, stepReplays, onRoll, o
                         </div>
                     </div>
                     {rollerStep && !cancelled && (
-                        <InlineRoller key={`${message.id}:${held.index}`} rollId={message.id} dice={rollerStep.dice} label={`${action.label} · ${STEP_LABELS[rollerStep.kind]}`} mode={rollerStep.mode} mine={mine} replay={held.replay} onRoll={onRoll} buttonLabel={`Rolar ${STEP_LABELS[rollerStep.kind].toLowerCase()}`} held={held} stepIndex={held.index} />
+                        <InlineRoller key={`${message.id}:${held.index}`} rollId={message.id} dice={rollerStep.dice} label={`${action.label} · ${STEP_LABELS[rollerStep.kind]}`} mode={rollerStep.mode} mine={mine} replay={held.replay} onRoll={onRoll} buttonLabel={`Rolar ${STEP_LABELS[rollerStep.kind].toLowerCase()}`} held={held} stepIndex={held.index} blocked={masterReviewing} />
                     )}
                 </div>
                 {sneakChoice && mine && !cancelled && onSneakChoice && !held.holding && (

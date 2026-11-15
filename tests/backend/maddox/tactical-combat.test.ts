@@ -10,6 +10,8 @@ import { MongoMemoryServer } from "mongodb-memory-server"
 
 const dice = { server: [] as number[][], players: new Map<string, number[][]>() }
 const presence = { online: null as Set<string> | null }
+/** DND-59: força o modo da rolagem do jogador (simula um dado que chegou fora do modo calculado). */
+const rollModeOverride = { mode: null as "normal" | null }
 const validation = { verdict: '{"valid": true}' }
 const jev = { "combat-option-cost": false, "free-action-validity": false }
 const askJevSystemOne = vi.fn(async (input: unknown) => {
@@ -31,7 +33,8 @@ vi.mock("@/features/dice-roller/server/dice-engine", async (importOriginal) => {
 vi.mock("@/features/dice-roller/server/dice-roll-service", () => ({
     rollGeneralDice: async (input: never, target: { targetId: string }) => {
         const { rollDice } = await import("@/features/dice-roller/server/dice-engine")
-        return rollDice(input, { randomInt: scripted(dice.players.get(target.targetId.replace("user:", ""))) })
+        const forced = rollModeOverride.mode ? { ...(input as object), mode: rollModeOverride.mode } : input
+        return rollDice(forced as never, { randomInt: scripted(dice.players.get(target.targetId.replace("user:", ""))) })
     },
 }))
 vi.mock("@/lib/db", () => ({ dbConnect: vi.fn(async () => undefined), recordAudit: vi.fn(async () => undefined), AcaoAuditoria: { CRIAR: "CRIAR", ATUALIZAR: "ATUALIZAR", EXCLUIR: "EXCLUIR", ATRIBUIR: "ATRIBUIR" } }))
@@ -1636,6 +1639,81 @@ describe("DND-49 — maestrias de arma e Esconder-se", () => {
         await MaddoxCombatModel.updateOne({ campaignId: id }, { $set: { "tactical.characters.$[me].conditions": [{ key: "invisible", untilRound: null, source: "Invisibilidade" }] } }, { arrayFilters: [{ "me.actorKey": kael.actorKey }] })
         await attack(id, kael.userId, dagger.id, [[2, 1]])
         expect((await stateOf(id, kael.actorKey)).conditions.map((condition) => condition.source)).toEqual(["Invisibilidade"])
+    })
+
+    // ── DND-59: condição gravada de fato, vantagem vinda do estado e rolagem fora do modo recusada ──────────────────
+
+    let fixJob = 0
+    /** Abre a execução de uma resposta do "Pergunte ao mestre" (as ferramentas de correção só valem dentro dela). */
+    async function openFix(id: string, userId: string) {
+        const runs = await import("@/features/maddox/server/question-runs")
+        const jobId = `fix-${++fixJob}`
+        const question = await MaddoxCampaignMessageModel.create({ campaignId: id, turnNumber: 2, phase: "players", kind: "question", userId, characterName: "Kael", content: "Kael está escondido, ataca com vantagem!" })
+        runs.openQuestionRun({ campaignId: id, jobId, turnNumber: 2, questionId: String(question._id), askerUserId: userId, askerCharacterId: null, askerIsOwner: true, playerTexts: [] })
+        return { jobId, close: () => runs.closeQuestionRun(jobId) }
+    }
+
+    it("DND-59 (a): Invisível do Esconder-se aplicado pelo mestre antes da rolagem — o card pendente já mostra a vantagem e o ataque sai com dois d20 (vale o maior)", async () => {
+        const fixTools = await import("@/features/maddox/server/question-combat-tools")
+        const { id, kael, dagger } = await masteryScene("push", { mastered: false })
+        await actions.submitCombatAction(id, { economy: "action", optionId: dagger.id, targets: ["npc:gob"] }, kael.userId)
+        expect((await actionOf(id)).combatAction!.steps[0]).toMatchObject({ mode: "normal", modeReasons: [] })
+        const fix = await openFix(id, kael.userId)
+        const result = await fixTools.setCombatCondition(fix.jobId, { alvo: "kael", condicao: "Invisível", esconderse: true, cd: 15, motivo: "Venceu a Furtividade (15)" })
+        fix.close()
+        expect(result).toMatchObject({ aplicado: true, condicoes: ["Invisível (Esconder-se · CD 15)"] })
+        expect((await stateOf(id, kael.actorKey)).conditions).toEqual([{ key: "invisible", untilRound: null, source: "Esconder", dc: 15 }])
+        // O card ainda não rolado já mostra a vantagem com o motivo; a linha da correção aparece na mesa.
+        expect((await actionOf(id)).combatAction!.steps[0]).toMatchObject({ mode: "advantage", modeReasons: ["atacante invisível"] })
+        expect((await MaddoxCampaignMessageModel.findOne({ campaignId: id, kind: "combat-fix" }).lean())!.content).toBe("Kael está Invisível (Esconder-se · CD 15) — Venceu a Furtividade (15)")
+        const view = await game.getGameState(id, kael.userId)
+        expect(view.combat!.tactical!.order.find((slot) => slot.actorKey === kael.actorKey)!.conditions).toEqual([{ key: "invisible", label: "Invisível (Esconder-se · CD 15)" }])
+        dice.players.set(kael.userId, [[4, 2]])
+        await actions.rollCombatAction(id, String((await actionOf(id))._id), kael.userId)
+        const step = (await actionOf(id)).combatAction!.steps[0]!
+        expect(step).toMatchObject({ mode: "advantage", modeReasons: ["atacante invisível"], modeContext: { attacker: ["Invisível (Esconder-se · CD 15)"], target: [] } })
+        expect(step.roll!.selectedD20).toMatchObject({ kept: 4, discarded: expect.any(Number), reason: "advantage" })
+        // O ataque revela quem estava escondido.
+        expect((await stateOf(id, kael.actorKey)).conditions).toEqual([])
+    })
+
+    it("DND-59 (a'): sem a condição no estado (só narrada), o ataque sai normal — o estado é a fonte da vantagem", async () => {
+        const { id, kael, dagger } = await masteryScene("push", { mastered: false })
+        await MaddoxCharacterModel.updateOne({ campaignId: id, name: "Kael" }, { $set: { currentState: "Escondido atrás dos sacos: condição Invisível." } })
+        const done = await attack(id, kael.userId, dagger.id, [[2]])
+        expect(done.combatAction!.steps[0]).toMatchObject({ mode: "normal", modeReasons: [] })
+    })
+
+    it("DND-59 (c): rolagem que chega fora do modo calculado (um d20 quando o estado pede vantagem) é recusada e o passo pode ser rolado de novo", async () => {
+        const { id, kael, dagger } = await masteryScene("push", { mastered: false })
+        await MaddoxCombatModel.updateOne({ campaignId: id }, { $set: { "tactical.characters.$[me].conditions": [{ key: "invisible", untilRound: null, source: "Esconder", dc: 15 }] } }, { arrayFilters: [{ "me.actorKey": kael.actorKey }] })
+        await actions.submitCombatAction(id, { economy: "action", optionId: dagger.id, targets: ["npc:gob"] }, kael.userId)
+        const message = await actionOf(id)
+        rollModeOverride.mode = "normal"
+        dice.players.set(kael.userId, [[11]])
+        try {
+            await expect(actions.rollCombatAction(id, String(message._id), kael.userId)).rejects.toMatchObject({ code: "ROLL_MODE_MISMATCH", message: "A rolagem não saiu no modo calculado (vantagem: atacante invisível). Role de novo." })
+        } finally {
+            rollModeOverride.mode = null
+        }
+        const kept = (await actionOf(id)).combatAction!
+        expect(kept).toMatchObject({ status: "pending", rollingStep: null })
+        expect(kept.steps[0]).toMatchObject({ status: "pending", roll: null })
+        // A condição continua (o ataque recusado não revelou ninguém) e a nova rolagem sai com vantagem.
+        expect((await stateOf(id, kael.actorKey)).conditions.map((condition) => condition.key)).toEqual(["invisible"])
+        dice.players.set(kael.userId, [[15, 3]])
+        await actions.rollCombatAction(id, String(message._id), kael.userId)
+        expect((await actionOf(id)).combatAction!.steps[0]).toMatchObject({ status: "done", mode: "advantage" })
+    })
+
+    it("DND-59: Esconder-se pelo card grava a CD (total do teste) na condição", async () => {
+        const { id, kael } = await masteryScene("push", { mastered: false })
+        await actions.submitCombatAction(id, { economy: "action", optionId: "standard:hide", targets: [], skill: "Furtividade" }, kael.userId)
+        dice.players.set(kael.userId, [[17]])
+        await actions.rollCombatAction(id, String((await actionOf(id))._id), kael.userId)
+        const hidden = (await stateOf(id, kael.actorKey)).conditions[0]!
+        expect(hidden).toMatchObject({ key: "invisible", source: "Esconder" })
+        expect(hidden.dc).toBe((await actionOf(id)).combatAction!.steps[0]!.total)
     })
 })
 

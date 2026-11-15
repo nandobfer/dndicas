@@ -130,7 +130,7 @@ async function linkCombatant(campaignId: Types.ObjectId, combatant: MaddoxDraftC
 async function applyStart(campaign: CampaignRef, turnNumber: number, event: Extract<MaddoxDraftCombatEvent, { type: "start" }>, round: number, extra: Record<string, unknown>[]): Promise<CombatMessagePlan | null> {
     if (event.tactical) {
         const { createTacticalCombat } = await import("./tactical-combat")
-        const plan = await createTacticalCombat(campaign, turnNumber, round, { title: event.title, location: event.location, surprise: event.tactical.surprise, combatants: event.tactical.combatants }, async (item) =>
+        const plan = await createTacticalCombat(campaign, turnNumber, round, { title: event.title, location: event.location, surprise: event.tactical.surprise, combatants: event.tactical.combatants, hidden: event.tactical.hidden ?? [] }, async (item) =>
             (await linkCombatant(campaign._id, { ...item, name: item.individual, quantity: 1, registerNpc: item.registerNpc && item.quantity <= 1 })).npcId,
         )
         if (!plan) return null

@@ -1,5 +1,5 @@
 import { memoriesSection } from "@/features/ai/memories-prompt"
-import { MADDOX_ACTION_OPTIONS_MAX, MADDOX_CATALOG_TOOL_NAMES, MADDOX_COMBAT_DIFFICULTY_DEFAULT, MADDOX_COMBAT_DIFFICULTY_LEVEL_DEFS, MADDOX_DEFAULT_DENSITY, MADDOX_DENSITY_LEVEL_DEFS, MADDOX_CHECK_RIGORS, MADDOX_CHECK_ROUNDS_MAX, MADDOX_COMBAT_LONG_TURNS, MADDOX_COMBAT_RIGORS, MADDOX_DECLARATION_VALIDATION_RIGORS, MADDOX_PROFILE_SECTIONS, MADDOX_SHEET_FIX_TOOL_NAMES, MADDOX_SHEET_RIGORS, MADDOX_TACTICAL_COMBAT_RIGORS, MADDOX_TOOL_TEXT_GUIDE, MADDOX_WORLD_CATALOG_RIGORS, type MaddoxCampaignMemoryKind, type MaddoxCombatDifficultyLevel, type MaddoxDensityLevel, type MaddoxGameMessageKind, type MaddoxQuestStatus, type MaddoxRigorLevel, type MaddoxVisibility } from "../constants"
+import { MADDOX_ACTION_OPTIONS_MAX, MADDOX_CATALOG_TOOL_NAMES, MADDOX_COMBAT_DIFFICULTY_DEFAULT, MADDOX_COMBAT_DIFFICULTY_LEVEL_DEFS, MADDOX_DEFAULT_DENSITY, MADDOX_DENSITY_LEVEL_DEFS, MADDOX_CHECK_RIGORS, MADDOX_CHECK_ROUNDS_MAX, MADDOX_COMBAT_LONG_TURNS, MADDOX_COMBAT_RIGORS, MADDOX_DECLARATION_VALIDATION_RIGORS, MADDOX_PROFILE_SECTIONS, MADDOX_COMBAT_FIX_TOOL_NAMES, MADDOX_SHEET_FIX_TOOL_NAMES, MADDOX_SHEET_RIGORS, MADDOX_TACTICAL_COMBAT_RIGORS, MADDOX_TOOL_TEXT_GUIDE, MADDOX_WORLD_CATALOG_RIGORS, type MaddoxCampaignMemoryKind, type MaddoxCombatDifficultyLevel, type MaddoxDensityLevel, type MaddoxGameMessageKind, type MaddoxQuestStatus, type MaddoxRigorLevel, type MaddoxVisibility } from "../constants"
 import { CATALOG_CITATION_RULE, rigorBlock } from "./interview-prompt"
 import { MADDOX_PROGRESSION_TOOL_NAMES, MADDOX_MILESTONE_TRIGGER_LABELS, type MaddoxMilestoneTrigger, type MaddoxProgressionMode } from "../constants"
 import { checkSucceeded } from "../check-modifier"
@@ -122,6 +122,8 @@ export function tacticalCombatRule(rigor: MaddoxRigorLevel): string {
         "- Quando o retorno disser que alguém pode reagir ou precisa rolar (salvaguarda, reação, concentração), narre até aquele instante e PARE; a continuação chega com o resultado e você conclui o mesmo adversário.",
         "- Quando um adversário sair do alcance de um personagem, ou conjurar uma magia diante de quem tem Contramágica, chame `offer_reaction`. Efeitos que você adjudica (ambiente, magia utilitária, ação livre aceita) usam `apply_effect` (condição, dano ou cura em dados rolados pelo servidor); dano de uma ação livre de personagem usa `request_damage_roll`.",
         "- \"Outra ação\" de um jogador já foi validada pelo rigor; resolva-a pelas regras (peça teste com `request_check` quando couber).",
+        "- Rolagem gravada num card é definitiva: nunca diga que ela \"não vale\", que o golpe \"não aconteceu\" nem peça para rolar de novo. A vantagem e a desvantagem vêm das condições gravadas no combate (Invisível do Esconder-se = vantagem no ataque): condição só na narração ou no Diário não muda o dado.",
+        "- Quem venceu a Furtividade antes da luta começa Invisível (Esconder-se) sozinho quando o teste é do turno em que o combate começa; teste de turno anterior só vale se, na ficção, o personagem continua escondido: liste-o em `escondidos` no `start_combat` (quem já se revelou vai em `revelados`).",
         "- Personagem com 0 PV fica Inconsciente e faz testes contra a morte na vez dele; ninguém morre por conveniência da história, só pelas regras.",
         "- Adversário enfraquecido pela ficção (bêbado, sonolento, ferido, desprevenido): registre o motivo na `descricao` dele no `start_combat` (ou no `update_combat`) e, enquanto durar, use `modo: \"desvantagem\"` em cada ataque dele no `monster_action`. Só quando a cena justificar: nunca enfraqueça todos os adversários em todo combate.",
         "- Quando todos os inimigos caírem, fugirem ou se renderem (ou o grupo cair), chame `end_combat` na mesma narração: resultado, resumo, desfecho de cada adversário, recompensas e a cena final.",
@@ -334,14 +336,14 @@ function memoriesBlock(memories: readonly NarratorMemory[]): string | null {
     return parts.join("\n")
 }
 
-export type NarratorToolMode = { kind: "ai-sdk" } | { kind: "mcp"; server: string; turnToken: string; checks?: boolean; combat?: boolean; tactical?: boolean; sceneImages?: boolean; actionOptions?: boolean; opexNpcs?: boolean; sheetFix?: boolean; progression?: readonly string[]; rest?: boolean }
+export type NarratorToolMode = { kind: "ai-sdk" } | { kind: "mcp"; server: string; turnToken: string; checks?: boolean; combat?: boolean; tactical?: boolean; sceneImages?: boolean; actionOptions?: boolean; opexNpcs?: boolean; sheetFix?: boolean; combatFix?: boolean; progression?: readonly string[]; rest?: boolean }
 
 /** Bloco das ferramentas: na AI SDK elas vêm na chamada; no OpenCode, pelo MCP com o token de turno. */
 function toolsBlock(mode: NarratorToolMode): string | null {
     if (mode.kind === "ai-sdk") return null
     return [
         "## Ferramentas desta narração",
-        `- As ferramentas de anotações da campanha estão no servidor MCP \`${mode.server}\` (get_campaign_state, update_campaign_state, list_npcs, get_npc, save_npc, search_memories, save_memory, update_character_state, update_character_hit_points, update_character_exhaustion, resolve_reminder${mode.checks ? ", request_check" : ""}${mode.rest ? ", start_rest" : ""}${mode.combat ? ", get_combat, start_combat, update_combat, end_combat" : ""}${mode.tactical ? ", monster_action, apply_effect, request_damage_roll, offer_reaction" : ""}${mode.sceneImages ? ", request_scene_image" : ""}${mode.actionOptions ? ", suggest_actions" : ""}, promover_npc_opex, desfazer_npc_opex, gravar_memoria_npc_opex${mode.opexNpcs ? ", consultar_npc_opex" : ""}${mode.sheetFix ? `, ${MADDOX_SHEET_FIX_TOOL_NAMES.join(", ")}` : ""}${mode.progression?.length ? `, ${mode.progression.join(", ")}` : ""}, ${MADDOX_CATALOG_TOOL_NAMES.search}, ${MADDOX_CATALOG_TOOL_NAMES.get}).`,
+        `- As ferramentas de anotações da campanha estão no servidor MCP \`${mode.server}\` (get_campaign_state, update_campaign_state, list_npcs, get_npc, save_npc, search_memories, save_memory, update_character_state, update_character_hit_points, update_character_exhaustion, resolve_reminder${mode.checks ? ", request_check" : ""}${mode.rest ? ", start_rest" : ""}${mode.combat ? ", get_combat, start_combat, update_combat, end_combat" : ""}${mode.tactical ? ", monster_action, apply_effect, request_damage_roll, offer_reaction" : ""}${mode.sceneImages ? ", request_scene_image" : ""}${mode.actionOptions ? ", suggest_actions" : ""}, promover_npc_opex, desfazer_npc_opex, gravar_memoria_npc_opex${mode.opexNpcs ? ", consultar_npc_opex" : ""}${mode.sheetFix ? `, ${MADDOX_SHEET_FIX_TOOL_NAMES.join(", ")}` : ""}${mode.combatFix ? `, ${MADDOX_COMBAT_FIX_TOOL_NAMES.join(", ")}` : ""}${mode.progression?.length ? `, ${mode.progression.join(", ")}` : ""}, ${MADDOX_CATALOG_TOOL_NAMES.search}, ${MADDOX_CATALOG_TOOL_NAMES.get}).`,
         `- Em TODA chamada a essas ferramentas, envie o campo \`turno\` exatamente com este valor: \`${mode.turnToken}\`.`,
         "- Não use outras ferramentas (arquivos, terminal, web): a campanha vive só nessas anotações.",
     ].join("\n")
@@ -486,6 +488,10 @@ export type NarratorTask =
           thread?: readonly { role: "player" | "maddox"; characterName: string | null; content: string }[]
           /** DND-51: o Maddox pode ler e corrigir a ficha pelo "Pergunte ao mestre" (graus com ficha). */
           sheetFix?: boolean
+          /** DND-59: combate tático em andamento — a resposta corrige o combate na hora (condição, card, adversário, economia). */
+          combatFix?: boolean
+          /** DND-59: o pedido é um lembrete (Injetar Lembrança) corrigido na hora; id curto para `resolve_reminder`. */
+          reminderRef?: string
       }
     | {
           /** DND-58: trocas pedidas depois de um descanso (o Maddox avalia pelo catálogo e aplica na ficha). */
@@ -665,6 +671,20 @@ function taskBody(task: NarratorTask): string {
             MADDOX_REST_EXCHANGE_TASK_RULES,
         ].join("\n")
     }
+    if (task.kind === "answer" && task.reminderRef) {
+        return [
+            `# Lembrete de ${task.characterName} (turno ${task.turnNumber})`,
+            `[${task.reminderRef}] **${task.characterName}** lembra: ${task.question.trim()}`,
+            ...(task.declarations.length ? ["", "Declarações já feitas neste turno (ainda não resolvidas):", ...declarationLines(task.declarations)] : []),
+            "",
+            "O jogador quer que você considere isto AGORA. Se o lembrete aponta algo errado no estado do jogo (condição, card de ação ainda não rolado, PV, ficha, economia), CORRIJA já com as ferramentas, antes que o jogador role. Se não houver nada a corrigir, diga em uma frase como isso vale. Depois chame `resolve_reminder` com o id entre colchetes (`guardar: true` só quando for um fato durável da campanha).",
+            "Responda ao jogador em poucas frases: o que mudou de fato (pelo retorno das ferramentas) ou por que não mudou. NÃO avance a cena, não resolva declarações e não atribua ações a ninguém: o turno continua aberto.",
+            ...(task.sheetFix ? ["", MADDOX_SHEET_FIX_TASK_RULES] : []),
+            ...(task.combatFix ? ["", MADDOX_COMBAT_FIX_TASK_RULES] : []),
+            "",
+            MADDOX_STATE_OR_SILENCE_RULE,
+        ].join("\n")
+    }
     if (task.kind === "answer") {
         const thread = task.thread ?? []
         return [
@@ -675,6 +695,9 @@ function taskBody(task: NarratorTask): string {
             "",
             "Responda diretamente, em poucas frases, só com o que o personagem pode perceber, lembrar ou saber. NÃO avance a cena, não resolva declarações e não atribua ações a ninguém: o turno continua aberto. Se a resposta estabelecer um fato novo do mundo, grave-o.",
             ...(task.sheetFix ? ["", MADDOX_SHEET_FIX_TASK_RULES] : []),
+            ...(task.combatFix ? ["", MADDOX_COMBAT_FIX_TASK_RULES] : []),
+            "",
+            MADDOX_STATE_OR_SILENCE_RULE,
         ].join("\n")
     }
     if (task.declarations.length === 0 && task.tactical?.phase === "running") {
@@ -704,11 +727,26 @@ function taskBody(task: NarratorTask): string {
  */
 export const MADDOX_SHEET_FIX_TASK_RULES = [
     "## Correções pedidas pelo jogador",
-    `Se o jogador pedir para corrigir a ficha, as ações, os PV ou o estado do personagem, CORRIJA de fato (não só narre): leia a ficha com \`${MADDOX_SHEET_FIX_TOOL_NAMES[0]}\` e o que ele escolheu na entrevista com \`${MADDOX_SHEET_FIX_TOOL_NAMES[1]}\`, consulte a regra no catálogo e grave com \`${MADDOX_SHEET_FIX_TOOL_NAMES[2]}\` (atributos, atributo de conjuração, truques e magias, ataques, talentos, características, itens, espaços de magia e cargas), \`update_character_hit_points\` (PV) e \`update_character_state\` (condição na história). Depois diga ao jogador, em uma ou duas frases, o que mudou.`,
+    `Se o jogador pedir para corrigir a ficha, as ações, os PV ou o estado do personagem, CORRIJA de fato (não só narre): leia a ficha com \`${MADDOX_SHEET_FIX_TOOL_NAMES[0]}\` e o que ele escolheu na entrevista com \`${MADDOX_SHEET_FIX_TOOL_NAMES[1]}\`, consulte a regra no catálogo e grave com \`${MADDOX_SHEET_FIX_TOOL_NAMES[2]}\` (atributos, atributo de conjuração, truques e magias, ataques, talentos, características, itens, espaços de magia e cargas), \`update_character_hit_points\` (PV) e \`update_character_state\` (como o personagem está na história, fora do combate tático: texto do Diário, que não muda nenhum dado). Depois diga ao jogador, em uma ou duas frases, o que mudou.`,
     "Toda correção de regra leva a fonte do catálogo (`source`: a entidade lida e o trecho exato dela).",
     "NUNCA escolha pelo jogador o que a regra manda ele escolher (o atributo de conjuração de uma lista como \"Inteligência, Sabedoria ou Carisma\", os truques ou a magia escolhidos de uma lista). Grave a escolha só quando ele a disse, com o trecho literal da mensagem dele em `choice.quote`. Se ele ainda não disse, PERGUNTE e não grave: a resposta dele chega como uma nova pergunta nesta conversa.",
     "Se faltar um dado para corrigir (qual truque, qual item, quanto), pergunte antes de gravar. A correção nunca gasta a Ação do personagem nem fecha o turno.",
 ].join("\n")
+
+/**
+ * DND-59: correções do combate tático na resposta a uma pergunta ou a um lembrete (regras fixas no código). Elas gravam na
+ * hora; o texto livre do Diário (`update_character_state`, `update_campaign_state`) não muda nenhum dado do combate.
+ */
+export const MADDOX_COMBAT_FIX_TASK_RULES = [
+    "## Correções do combate tático (há um combate em andamento)",
+    `Tudo do combate muda SÓ por estas ferramentas, que gravam na hora: leia com \`${MADDOX_COMBAT_FIX_TOOL_NAMES[0]}\`; condição (inclusive Invisível do Esconder-se, com \`esconderse: true\` e \`cd\` = total da Furtividade) com \`${MADDOX_COMBAT_FIX_TOOL_NAMES[1]}\`; card de ação ainda não rolado (vantagem/desvantagem da situação, alvo, cancelar) com \`${MADDOX_COMBAT_FIX_TOOL_NAMES[2]}\`; PV, CA ou "fora de combate" de adversário com \`${MADDOX_COMBAT_FIX_TOOL_NAMES[3]}\`; Ação, Ação bônus, Reação, ataques e marcas (Esquivar, Desengajar, Disparada, Ajudado) de personagem com \`${MADDOX_COMBAT_FIX_TOOL_NAMES[4]}\`. PV de personagem jogador: \`update_character_hit_points\`.`,
+    "Se o jogador aponta que o estado está errado e a regra confirma (ex.: venceu a Furtividade e não está Invisível; o card vai rolar sem a vantagem devida), corrija o estado E o card pendente agora, antes da rolagem. A vantagem e a desvantagem das condições o servidor aplica sozinho no card; use o `modo` do card só para a situação (terreno, surpresa, ajuda narrada).",
+    "Rolagem já feita é definitiva: nunca diga que ela não vale nem peça para rolar de novo. O que você corrigir vale dali em diante.",
+].join("\n")
+
+/** DND-59: estado ou silêncio — a resposta só afirma uma mudança que a ferramenta gravou. */
+export const MADDOX_STATE_OR_SILENCE_RULE =
+    "Só diga que registrou, aplicou, removeu ou corrigiu algo depois que a ferramenta correspondente voltou SEM erro (e com o que ela devolveu). Se a ferramenta recusar, faltar ou você não a chamar, diga claramente que não foi possível e por quê; nunca afirme uma mudança de estado que só existe no seu texto."
 
 /** DND-58: regras fixas das trocas depois do descanso (valem com qualquer instrução salva na aba Agente Maddox). */
 export const MADDOX_REST_EXCHANGE_TASK_RULES = [
@@ -765,6 +803,8 @@ export function narratorTranscript(messages: readonly NarratorTranscriptMessage[
                         ? `[Turno ${message.turnNumber} — combate] ${content}`
                       : message.kind === "hit-points" || message.kind === "sheet-change"
                         ? `[Turno ${message.turnNumber} — ficha] ${content}`
+                      : message.kind === "combat-fix"
+                        ? `[Turno ${message.turnNumber} — combate corrigido] ${content}`
                       : message.kind === "rest"
                         ? `[Turno ${message.turnNumber} — descanso] ${content}`
                       : message.kind === "rest-request"

@@ -42,6 +42,8 @@ export interface MaddoxAnswerContext {
     questionId: string
     characterName: string
     question: string
+    /** DND-59: o "pedido" é um lembrete (Injetar Lembrança) corrigido na hora; `questionId` é o id do lembrete. */
+    reminderId?: string | null
     signal?: AbortSignal
 }
 

@@ -166,6 +166,10 @@ export interface CombatActionStep {
     skill: string | null
     /** DND-49: motivos da vantagem/desvantagem do ataque ("atacante invisível"); os dois juntos = rolagem normal. */
     modeReasons?: string[]
+    /** DND-59: vantagem ou desvantagem pela situação que o mestre pôs no card pendente (`edit_combat_action`). */
+    situationalMode?: { mode: "advantage" | "disadvantage"; reason: string } | null
+    /** DND-59: condições do atacante e do alvo no momento da rolagem (diagnóstico da decisão de modo). */
+    modeContext?: { attacker: string[]; target: string[] } | null
     /** DND-47: parcelas nomeadas do modificador da expressão (vão para a rolagem e aparecem no tooltip do resultado). */
     modifierParts?: DiceModifierPart[]
 }

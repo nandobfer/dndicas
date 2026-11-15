@@ -6,16 +6,16 @@ import { DomainError } from "@/lib/api/route"
 import { loggerFor } from "@/lib/logger"
 import type { DiceRollResponse } from "@/features/dice-roller/types"
 import type { SkillName } from "@/features/character-sheets/types/character-sheet.types"
-import { MADDOX_CAMPAIGN_AUDIT_ENTITY, MADDOX_COMBAT_OFFLINE_GRACE_MS, MADDOX_COMBAT_ROLL_CLAIM_STALE_MS, MADDOX_DECLARATION_VALIDATION_RIGORS, MADDOX_STANDARD_ACTION_DEFS, type MaddoxStandardAction } from "../constants"
+import { MADDOX_CAMPAIGN_AUDIT_ENTITY, MADDOX_COMBAT_OFFLINE_GRACE_MS, MADDOX_COMBAT_ROLL_CLAIM_STALE_MS, MADDOX_DECLARATION_VALIDATION_RIGORS, MADDOX_MASTER_REVIEWING_MESSAGE, MADDOX_STANDARD_ACTION_DEFS, type MaddoxStandardAction } from "../constants"
 import { MADDOX_ABILITY_LABELS } from "../check-modifier"
-import { adjustDamage, attackMode, attackOutcome, autoCritical, criticalExpression, deathSave, exhaustionPenalty, formatDiceExpression, hasCondition, parseDiceExpression, saveMode } from "../combat-rules"
+import { adjustDamage, attackMode, attackOutcome, autoCritical, conditionDisplayLabel, criticalExpression, deathSave, exhaustionPenalty, formatDiceExpression, hasCondition, hiddenCondition, isHiddenCondition, parseDiceExpression, rollMatchesMode, saveMode } from "../combat-rules"
 import { findCombatOption, weaponItemId, type CombatOption } from "../combat-options"
 import type { CombatActionStep, IMaddoxCombatAction, IMaddoxCombatRoll, TacticalCharacterState } from "../combat-types"
 import type { MaddoxCombatActionInput, MaddoxEndCombatTurnInput } from "../combat-schemas"
 import type { MaddoxGameStateDto } from "../game-types"
 import { MaddoxCampaignMemberModel, MaddoxCampaignMessageModel, MaddoxCampaignModel, MaddoxCharacterModel, type IMaddoxCampaign, type IMaddoxCampaignMember, type IMaddoxCampaignMessage } from "../models"
 import { assertMemberCanPlay } from "./campaigns"
-import { emitCombatRolled, emitCombatStepRolled } from "./game-live"
+import { emitCombatRolled, emitCombatStepRolled, hasPendingReview } from "./game-live"
 import { assertActive, assertPlayersTurn, characterOf, evaluateTurn, getGameState, loadAsMember, publishGameChanged, recordTurnAction } from "./game"
 import { d20Expression, findActiveTactical, findActor, keptD20Of, mutateTactical, rollExpression, scheduleAbsenceCheck, type CombatActor, type TacticalCombat } from "./tactical-combat"
 import { characterDamage, characterHealing, concentrationRollDoc, damageCombatant, type CharacterHp } from "./tactical-master"
@@ -70,6 +70,12 @@ async function writeHp(state: TacticalCharacterState, hp: CharacterHp) {
 
 /** Trava de rolagem mais antiga que isto foi abandonada (processo morto entre a reivindicação e a gravação). */
 const staleClaimCutoff = () => new Date(Date.now() - MADDOX_COMBAT_ROLL_CLAIM_STALE_MS)
+
+function assertNoPendingReview(campaignId: string) {
+    if (hasPendingReview(campaignId)) throw new DomainError(409, MADDOX_MASTER_REVIEWING_MESSAGE, "MASTER_REVIEWING")
+}
+
+const modeText = (mode: CombatActionStep["mode"], reasons: readonly string[]) => (mode === "normal" ? "normal" : `${mode === "advantage" ? "vantagem" : "desvantagem"}${reasons.length ? `: ${reasons.join(", ")}` : ""}`)
 
 const newStep = (input: Partial<CombatActionStep> & Pick<CombatActionStep, "kind">): CombatActionStep => ({
     targetKey: null,
@@ -314,9 +320,6 @@ export async function submitCombatAction(campaignId: string, input: MaddoxCombat
     return getGameState(campaignId, userId)
 }
 
-/** Invisível vindo do Esconder-se (DND-49: sai depois de um ataque ou de uma magia com componente Verbal). */
-const isHiddenCondition = (condition: { key: string; source?: string }) => condition.key === "invisible" && condition.source === "Esconder"
-
 /**
  * DND-49: ataque que acertou sem vantagem nem desvantagem — o furtivo vale com um aliado consciente a até 1,5 m do alvo
  * (JEV com a chave ligada; senão, geração curta do narrador). Falha da conferência = vale (o jogo não trava; fica no log).
@@ -384,6 +387,9 @@ export async function rollCombatAction(campaignId: string, actionId: string, use
     const index = action.steps.findIndex((item) => item.status === "pending")
     if (index < 0) throw new DomainError(409, "Esta ação já foi resolvida.", "ACTION_RESOLVED")
     if (action.steps[index]!.kind === "sneak-choice") throw new DomainError(409, "Escolha antes se soma o ataque furtivo ao dano.", "SNEAK_CHOICE_PENDING")
+    // DND-59: com uma pergunta ou um lembrete sendo respondido, o mestre pode corrigir o card: a rolagem espera a resposta.
+    // O Personagem Opex não é barrado no meio da vez (a passada dele já espera a revisão antes de começar, em `driveOpex`).
+    if (!isOpexUserId(userId)) assertNoPendingReview(campaignId)
     const combat = await findActiveTactical(campaign._id)
     const actor = combat ? findActor(combat, action.actorKey) : null
     if (!combat || !actor || actor.kind !== "character") throw new DomainError(409, "O combate terminou.", "NO_COMBAT")
@@ -428,6 +434,7 @@ async function rollClaimedStep(
     let roll: DiceRollResponse
     let mode: CombatActionStep["mode"] = "normal"
     let modeReasons: string[] = []
+    let modeContext: { attacker: string[]; target: string[] } | null = null
     let helpedUsed = false
     let vexUsed = false
     let sneakOffer = false
@@ -439,12 +446,21 @@ async function rollClaimedStep(
         if (!target) throw new DomainError(409, "O alvo saiu do combate.", "INVALID_TARGET")
         const ranged = Boolean(action.ranged)
         const helped = Boolean(actor.state.flags.helped)
-        const computed = attackMode({ attacker: actor.state, target: target.state, ranged, helped, targetKey: target.key })
+        const computed = attackMode({ attacker: actor.state, target: target.state, ranged, helped, targetKey: target.key, situational: current.situationalMode ?? null })
         mode = computed.mode
         modeReasons = computed.reasons
         vexUsed = computed.reasons.includes("Maestria Afligir")
         helpedUsed = helped
+        modeContext = { attacker: actor.state.conditions.map(conditionDisplayLabel), target: target.state.conditions.map(conditionDisplayLabel) }
         roll = await rollExpression(current.dice, { mode, label: `${action.label} · ataque`, userId: message.userId, modifierParts: current.modifierParts })
+        // DND-59: o modo é do servidor; uma rolagem que não saiu nele (um d20 quando o estado pede dois) não é aceita.
+        const logged = { campaignId, actionId: String(message._id), actor: actor.name, targetName: target.name, previewMode: current.mode, mode, reasons: modeReasons, situational: current.situationalMode ?? null, attackerConditions: modeContext.attacker, targetConditions: modeContext.target }
+        if (!rollMatchesMode(roll, mode)) {
+            log.warn({ ...logged, rolledMode: roll.mode ?? null, selectedD20: roll.selectedD20 ?? null }, "[maddox] rolagem do ataque fora do modo calculado: recusada")
+            throw new DomainError(409, `A rolagem não saiu no modo calculado (${modeText(mode, modeReasons)}). Role de novo.`, "ROLL_MODE_MISMATCH")
+        }
+        if (current.mode !== mode) log.warn(logged, "[maddox] modo do ataque mudou entre o card e a rolagem")
+        else log.info(logged, "[maddox] modo do ataque")
         const ac = target.kind === "combatant" ? target.state.stats.ac : 10
         const hit = attackOutcome(keptD20Of(roll), roll.total, ac, autoCritical(target.state, ranged)).hit
         // DND-49: furtivo perguntado depois do acerto — uma vez por turno, nunca com desvantagem; com vantagem vale direto,
@@ -504,6 +520,7 @@ async function rollClaimedStep(
         const liveTarget = done.targetKey ? findActor(live, done.targetKey) : null
         if (done.kind === "attack") {
             done.modeReasons = modeReasons
+            done.modeContext = modeContext
             // DND-49: o ataque revela quem estava escondido (a vantagem já valeu para este ataque) e gasta o Afligir usado.
             me.state.conditions = me.state.conditions.filter((condition) => !isHiddenCondition(condition))
             if (vexUsed) me.state.flags.vex = null
@@ -575,7 +592,8 @@ async function rollClaimedStep(
         } else if (done.kind === "check") {
             if (action.optionId === "standard:hide") {
                 done.success = roll.total >= 15
-                if (done.success && !me.state.conditions.some((condition) => condition.key === "invisible")) me.state.conditions.push({ key: "invisible", untilRound: null, source: "Esconder" })
+                // DND-59: o total do teste é a CD para os inimigos acharem quem se escondeu.
+                if (done.success && !me.state.conditions.some((condition) => condition.key === "invisible")) me.state.conditions.push(hiddenCondition(roll.total))
             }
         }
     })
@@ -701,14 +719,27 @@ export async function cancelCombatAction(campaignId: string, actionId: string, u
     const message = await MaddoxCampaignMessageModel.findOne({ _id: new Types.ObjectId(actionId), campaignId: campaign._id, kind: "combat-action", memberId: member._id }).lean<MessageDoc & { combatAction: IMaddoxCombatAction & { cancellable?: boolean } }>()
     const action = message?.combatAction
     if (!message || !action) throw new DomainError(404, "Ação não encontrada", "NOT_FOUND")
+    await cancelPendingAction(campaign._id, { ...message, combatAction: { ...action, actorKey: actor.key } })
+    await publishGameChanged(campaign._id)
+    return getGameState(campaignId, userId)
+}
+
+/**
+ * Cancela um card de ação ainda não rolado e devolve a economia (pelo jogador e, desde a DND-59, pela correção do mestre).
+ * Card que já gastou espaço de magia, carga ou item no envio (`cancellable: false`) não é cancelado por ninguém: só a
+ * economia voltaria, e o recurso ficaria perdido. Lança 409 quando um passo já foi rolado ou está sendo rolado.
+ */
+export async function cancelPendingAction(campaignObjectId: Types.ObjectId, message: MessageDoc): Promise<void> {
+    const action = message.combatAction as (IMaddoxCombatAction & { cancellable?: boolean }) | null
+    if (!action) throw new DomainError(404, "Ação não encontrada", "NOT_FOUND")
     if (action.status !== "pending" || !action.cancellable || action.steps.some((item) => item.status === "done")) throw new DomainError(409, "Esta ação já não pode ser cancelada.", "ACTION_NOT_CANCELLABLE")
     const cancelled = await MaddoxCampaignMessageModel.updateOne({ _id: message._id, "combatAction.status": "pending", $or: [{ "combatAction.rollingStep": null }, { "combatAction.rollingAt": { $lt: staleClaimCutoff() } }] }, { $set: { "combatAction.status": "cancelled", "combatAction.rollingStep": null, "combatAction.rollingAt": null, "combatAction.summary": actionSummary({ ...action, status: "cancelled" }) } })
     if (cancelled.modifiedCount === 0) throw new DomainError(409, "Esta ação já não pode ser cancelada.", "ACTION_NOT_CANCELLABLE")
     // A ação Atacar volta inteira quando nenhum ataque foi rolado nela; senão, só o ataque cancelado volta.
-    const rolledAttacks = await MaddoxCampaignMessageModel.exists({ campaignId: campaign._id, turnNumber: message.turnNumber, kind: "combat-action", "combatAction.actorKey": actor.key, "combatAction.category": "weapons", "combatAction.economy": "action", "combatAction.status": "resolved" })
-    await mutateTactical(campaign._id, (live) => {
-        const me = findActor(live, actor.key)
-        if (!me) return
+    const rolledAttacks = await MaddoxCampaignMessageModel.exists({ campaignId: campaignObjectId, turnNumber: message.turnNumber, kind: "combat-action", "combatAction.actorKey": action.actorKey, "combatAction.category": "weapons", "combatAction.economy": "action", "combatAction.status": "resolved" })
+    await mutateTactical(campaignObjectId, (live) => {
+        const me = findActor(live, action.actorKey)
+        if (!me || me.kind !== "character") return
         const economy = me.state.economy
         if (action.optionId.startsWith("offhand:")) economy.lightExtraUsed = false
         if (action.optionId.startsWith("cleave:")) economy.cleaveUsed = false
@@ -719,8 +750,36 @@ export async function cancelCombatAction(campaignId: string, actionId: string, u
             else Object.assign(economy, { action: true, attackAction: false, attacksLeft: 0, lightAttack: false, lightWeaponId: null })
         } else economy.action = true
     })
-    await publishGameChanged(campaign._id)
-    return getGameState(campaignId, userId)
+}
+
+/**
+ * DND-59: recalcula a prévia do modo (vantagem/desvantagem e motivos) dos ataques ainda não rolados depois que o estado
+ * do combate mudou (condição, flag, card corrigido pelo mestre): o card já mostra "Vantagem: atacante invisível" antes do
+ * clique. A rolagem recalcula de novo e é a que vale.
+ */
+export async function refreshPendingAttackPreviews(campaignObjectId: Types.ObjectId): Promise<number> {
+    const combat = await findActiveTactical(campaignObjectId)
+    if (!combat) return 0
+    const messages = await MaddoxCampaignMessageModel.find({ campaignId: campaignObjectId, kind: "combat-action", "combatAction.combatId": String(combat._id), "combatAction.status": "pending", "combatAction.rollingStep": null }).lean<MessageDoc[]>()
+    let changed = 0
+    for (const message of messages) {
+        const action = message.combatAction
+        if (!action) continue
+        const attacker = findActor(combat, action.actorKey)
+        if (!attacker) continue
+        const steps = action.steps.map((step) => {
+            if (step.kind !== "attack" || step.status !== "pending" || !step.targetKey) return step
+            const target = findActor(combat, step.targetKey)
+            if (!target) return step
+            const preview = attackMode({ attacker: attacker.state, target: target.state, ranged: Boolean(action.ranged), helped: Boolean(attacker.state.flags.helped), targetKey: target.key, situational: step.situationalMode ?? null })
+            if (preview.mode === step.mode && JSON.stringify(preview.reasons) === JSON.stringify(step.modeReasons ?? [])) return step
+            return { ...step, mode: preview.mode, modeReasons: preview.reasons }
+        })
+        if (steps.every((step, index) => step === action.steps[index])) continue
+        const updated = await MaddoxCampaignMessageModel.updateOne({ _id: message._id, "combatAction.status": "pending", "combatAction.rollingStep": null }, { $set: { "combatAction.steps": steps } })
+        changed += updated.modifiedCount
+    }
+    return changed
 }
 
 /** "Encerrar turno": grava a vez (resumo para o Maddox) e fecha o turno dos jogadores. */

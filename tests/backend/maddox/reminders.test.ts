@@ -52,7 +52,6 @@ vi.mock("ai", () => ({
     dynamicTool: (def: unknown) => def,
     stepCountIs: (count: number) => ({ count }),
     streamText: (options: { instructions: string; messages: { content: string }[]; tools: Record<string, { execute: (input: unknown, meta: unknown) => Promise<unknown> }> }) => {
-        const steps = script.shift() ?? [{ text: "O mundo segue." }]
         calls.push({ instructions: options.instructions, userText: options.messages[0]!.content, toolNames: Object.keys(options.tools) })
         return {
             fullStream: (async function* () {
@@ -61,6 +60,8 @@ vi.mock("ai", () => ({
                     hooks.onStream = null
                     await hook()
                 }
+                // Lido depois do gancho: o roteiro pode depender do que o gancho criou (ex.: o id de um lembrete).
+                const steps = script.shift() ?? [{ text: "O mundo segue." }]
                 if (failNext.value) {
                     failNext.value = false
                     yield { type: "error", error: new Error("provedor fora do ar") }
@@ -172,31 +173,41 @@ describe("DND-25 — Injetar Lembrança", () => {
         expect((await game.getGameState(id, player)).messages.some((message) => message.kind === "reminder" && message.id === line.id)).toBe(true)
     })
 
-    it("a próxima narração considera cada lembrança; guardada vira memória no canal escolhido e a outra fica só para o turno", async () => {
+    it("DND-59: o lembrete é corrigido na hora num job próprio (resposta à mesa); guardado vira memória e o outro fica só para o momento", async () => {
         const { id, owner, player } = await activeTable()
         await start(id, owner)
+        const before = calls.length
+        // O id só existe depois do envio: o roteiro do job do lembrete é montado no começo da geração dele.
+        hooks.onStream = async () => {
+            const [alert] = await remindersOf(id)
+            script.push([
+                {
+                    tools: [{ name: "resolve_reminder", input: { lembranca: String(alert!._id).slice(-6), guardar: true, tipo: "fato", titulo: "Lyra tem Alerta", texto: "Lyra tem o talento Alerta e não é surpreendida.", visibility: "master" } }],
+                    text: "Anotado: Lyra não é surpreendida.",
+                },
+            ])
+        }
         await reminders.submitReminder(id, { texto: "Tenho o talento Alerta: não posso ser surpreendido." }, owner)
-        await reminders.submitReminder(id, { texto: "Estou com o braço ferido." }, player)
-        const [alert, arm] = await remindersOf(id)
-        script.push([
-            {
-                tools: [{ name: "resolve_reminder", input: { lembranca: String(alert!._id).slice(-6), guardar: true, tipo: "fato", titulo: "Lyra tem Alerta", texto: "Lyra tem o talento Alerta e não é surpreendida.", visibility: "master" } }],
-                text: "Lyra percebe o movimento antes de todos.",
-            },
-        ])
-        await game.submitGameAction(id, { kind: "declaration", content: "Lyra vigia o cais." }, owner)
-        await game.submitGameAction(id, { kind: "declaration", content: "Doran espera." }, player)
         await waitForCampaignIdle(id)
-        const prompt = calls.at(-1)!.userText
-        expect(prompt).toContain("## Lembranças dos jogadores (considere nesta narração)")
-        expect(prompt).toContain(`[${String(alert!._id).slice(-6)}] **Lyra**: Tenho o talento Alerta: não posso ser surpreendido.`)
-        expect(prompt).toContain(`[${String(arm!._id).slice(-6)}] **Doran**: Estou com o braço ferido.`)
-        expect(calls.at(-1)!.toolNames).toContain("resolve_reminder")
+        const [alert] = await remindersOf(id)
+        await reminders.submitReminder(id, { texto: "Estou com o braço ferido." }, player)
+        await waitForCampaignIdle(id)
+        const [, arm] = await remindersOf(id)
+        const fixes = calls.slice(before)
+        expect(fixes).toHaveLength(2)
+        expect(fixes[0]!.userText).toContain("# Lembrete de Lyra")
+        expect(fixes[0]!.userText).toContain(`[${String(alert!._id).slice(-6)}] **Lyra** lembra: Tenho o talento Alerta: não posso ser surpreendido.`)
+        expect(fixes[0]!.userText).toContain("Só diga que registrou, aplicou, removeu ou corrigiu algo depois que a ferramenta")
+        expect(fixes[0]!.toolNames).toContain("resolve_reminder")
+        expect(fixes[1]!.userText).toContain(`[${String(arm!._id).slice(-6)}] **Doran** lembra: Estou com o braço ferido.`)
         const [savedAlert, usedArm] = await remindersOf(id)
         expect(savedAlert!.reminder).toMatchObject({ status: "saved", visibility: "master", memoryTitle: "Lyra tem Alerta" })
         expect(usedArm!.reminder).toMatchObject({ status: "discarded" })
         expect(campaignMemoriesStore.all(id)).toEqual([expect.objectContaining({ title: "Lyra tem Alerta", visibility: "master", kind: "fato" })])
-        // Já avaliadas: a narração seguinte não as recebe de novo, e elas não entram na transcrição.
+        // A resposta do Maddox ao lembrete aparece na mesa, ligada a ele.
+        const answer = await MaddoxCampaignMessageModel.findOne({ campaignId: id, kind: "answer", replyToId: alert!._id }).lean()
+        expect(answer?.content).toContain("Lyra não é surpreendida")
+        // Já resolvidos: a narração seguinte não os recebe de novo, e eles não entram na transcrição.
         await game.submitGameAction(id, { kind: "pass" }, owner)
         await game.submitGameAction(id, { kind: "pass" }, player)
         await waitForCampaignIdle(id)
@@ -206,74 +217,76 @@ describe("DND-25 — Injetar Lembrança", () => {
         expect(view.messages.filter((message) => message.kind === "reminder").map((message) => message.reminder!.status)).toEqual(["saved", "discarded"])
     })
 
-    it("enviada durante a narração vale para a seguinte; a geração que falha devolve a lembrança à espera", async () => {
+    it("DND-59: enviado durante a narração, é corrigido logo depois dela; a correção que falha devolve o lembrete à próxima narração", async () => {
         const { id, owner, player } = await activeTable()
         await start(id, owner)
-        // Durante a geração do turno 3: a lembrança chega no meio e espera a próxima narração.
         hooks.onStream = async () => {
             await reminders.submitReminder(id, { texto: "Carrego uma tocha acesa." }, player)
         }
         await game.submitGameAction(id, { kind: "pass" }, owner)
         await game.submitGameAction(id, { kind: "declaration", content: "Doran entra na caverna." }, player)
         await waitForCampaignIdle(id)
-        expect(calls.at(-1)!.userText).not.toContain("tocha")
-        expect((await remindersOf(id))[0]!.reminder).toMatchObject({ status: "pending", jobId: null })
+        const narration = calls.at(-2)!
+        expect(narration.userText).toContain("# Turno")
+        expect(narration.userText).not.toContain("tocha")
+        expect(calls.at(-1)!.userText).toContain("**Doran** lembra: Carrego uma tocha acesa.")
+        expect((await remindersOf(id))[0]!.reminder!.status).toBe("discarded")
 
-        // A geração seguinte falha: a lembrança volta a esperar e só a nova tentativa a avalia.
+        // A correção falha: o lembrete volta a esperar e a próxima narração o considera.
         failNext.value = true
+        await reminders.submitReminder(id, { texto: "Tenho uma corda." }, owner)
+        await waitForCampaignIdle(id)
+        expect((await remindersOf(id))[1]!.reminder).toMatchObject({ status: "pending", jobId: null })
+        const failed = await MaddoxCampaignMessageModel.findOne({ campaignId: id, kind: "answer", replyToId: (await remindersOf(id))[1]!._id }).lean()
+        expect(failed?.error).toBeTruthy()
         await game.submitGameAction(id, { kind: "pass" }, owner)
         await game.submitGameAction(id, { kind: "pass" }, player)
         await waitForCampaignIdle(id)
-        expect(calls.at(-1)!.userText).toContain("Carrego uma tocha acesa.")
-        expect((await remindersOf(id))[0]!.reminder).toMatchObject({ status: "pending", jobId: null })
-        expect((await game.getGameState(id, owner)).messages.find((message) => message.kind === "reminder")!.reminder!.status).toBe("pending")
-
-        await MaddoxCampaignModel.updateOne({ _id: id }, { $set: { "turn.failedAt": new Date(Date.now() - 60_000) } })
-        await game.checkTurn(id, owner)
-        await waitForCampaignIdle(id)
-        expect(calls.at(-1)!.userText).toContain("Carrego uma tocha acesa.")
-        expect((await remindersOf(id))[0]!.reminder!.status).toBe("discarded")
+        expect(calls.at(-1)!.userText).toContain("## Lembranças dos jogadores (considere nesta narração)")
+        expect(calls.at(-1)!.userText).toContain("**Lyra**: Tenho uma corda.")
+        expect((await remindersOf(id))[1]!.reminder!.status).toBe("discarded")
     })
 
-    it("falha ao gravar a situação das lembranças não derruba a narração já gravada (sem narração duplicada)", async () => {
-        const { id, owner, player } = await activeTable()
+    it("falha ao gravar a situação do lembrete não derruba a resposta já gravada; ele volta a esperar", async () => {
+        const { id, owner } = await activeTable()
         await start(id, owner)
-        await reminders.submitReminder(id, { texto: "Tenho um mapa." }, owner)
         const original = MaddoxCampaignMessageModel.updateOne.bind(MaddoxCampaignMessageModel)
         const spy = vi.spyOn(MaddoxCampaignMessageModel, "updateOne").mockImplementation(((filter: Record<string, unknown>, update: { $set?: Record<string, unknown> }, options: never) => {
             if (filter?.["reminder.status"] === "pending" && update?.$set?.["reminder.status"]) throw new Error("banco indisponível")
             return original(filter as never, update as never, options)
         }) as never)
-        await game.submitGameAction(id, { kind: "pass" }, owner)
-        await game.submitGameAction(id, { kind: "pass" }, player)
+        await reminders.submitReminder(id, { texto: "Tenho um mapa." }, owner)
         await waitForCampaignIdle(id)
         spy.mockRestore()
-        const campaign = (await MaddoxCampaignModel.findById(id).lean())!
-        expect(campaign.turn).toMatchObject({ phase: "players", failedAt: null })
-        expect(await MaddoxCampaignMessageModel.countDocuments({ campaignId: id, kind: "narration", turnNumber: campaign.turn.number - 1 })).toBe(1)
-        // A lembrança volta a esperar a próxima narração.
-        expect((await remindersOf(id))[0]!.reminder).toMatchObject({ status: "pending", jobId: null })
+        const [map] = await remindersOf(id)
+        expect(await MaddoxCampaignMessageModel.countDocuments({ campaignId: id, kind: "answer", replyToId: map!._id, error: null })).toBe(1)
+        expect(map!.reminder).toMatchObject({ status: "pending", jobId: null })
     })
 
-    it("a resposta a uma pergunta não consome as lembranças", async () => {
-        const { id, owner, player } = await activeTable()
+    it("DND-59: lembrete já resolvido (ou pego por uma narração) não gera correção duplicada", async () => {
+        const { id, owner } = await activeTable()
         await start(id, owner)
-        await reminders.submitReminder(id, { texto: "Falo élfico." }, player)
-        await game.submitGameAction(id, { kind: "question", content: "O que diz a placa?" }, owner)
+        await reminders.submitReminder(id, { texto: "Falo élfico." }, owner)
         await waitForCampaignIdle(id)
-        expect(calls.at(-1)!.userText).not.toContain("Falo élfico.")
-        expect((await remindersOf(id))[0]!.reminder!.status).toBe("pending")
+        const [elvish] = await remindersOf(id)
+        expect(elvish!.reminder!.status).toBe("discarded")
+        expect(await reminders.claimReminder(new mongoose.Types.ObjectId(id), "outro-job", elvish!._id)).toBeNull()
+        const total = calls.length
+        await game.scheduleReminderFix(new mongoose.Types.ObjectId(id), elvish!._id)
+        await waitForCampaignIdle(id)
+        expect(calls.length).toBe(total)
     })
 
     it("com a rede de memórias fora, a gravação vai para a fila e o aviso mostra 'Guardada como memória'", async () => {
-        const { id, owner, player } = await activeTable()
+        const { id, owner } = await activeTable()
         await start(id, owner)
-        await reminders.submitReminder(id, { texto: "Sou devoto de Tymora." }, owner)
-        const [devotion] = await remindersOf(id)
         const save = vi.spyOn(memoriesModule, "saveCampaignMemory").mockResolvedValueOnce({ saved: true, created: false, pending: true, aviso: "fila" })
-        script.push([{ tools: [{ name: "resolve_reminder", input: { lembranca: String(devotion!._id).slice(-6), guardar: true, titulo: "Fé de Lyra", texto: "Lyra é devota de Tymora." } }], text: "A moeda gira." }])
-        await game.submitGameAction(id, { kind: "pass" }, owner)
-        await game.submitGameAction(id, { kind: "pass" }, player)
+        // O id só existe depois do envio: o roteiro lê o lembrete pendente na hora da geração.
+        hooks.onStream = async () => {
+            const [devotion] = await remindersOf(id)
+            script.unshift([{ tools: [{ name: "resolve_reminder", input: { lembranca: String(devotion!._id).slice(-6), guardar: true, titulo: "Fé de Lyra", texto: "Lyra é devota de Tymora." } }], text: "A moeda gira." }])
+        }
+        await reminders.submitReminder(id, { texto: "Sou devoto de Tymora." }, owner)
         await waitForCampaignIdle(id)
         expect(save).toHaveBeenCalledWith(id, expect.objectContaining({ title: "Fé de Lyra", visibility: "players", kind: "fato" }))
         expect((await remindersOf(id))[0]!.reminder!.status).toBe("saved")

@@ -345,7 +345,7 @@ export const MADDOX_GAME_CHANGED_EVENT = "maddox.game.changed"
  * reação (`combat-reaction`). `rewind` (DND-44) é a linha de aviso "O dono voltou a mesa para o turno X" / "O dono retomou o
  * turno N": nunca é descartada e fica fora da transcrição do narrador, do Opex e da busca do Diário.
  */
-export const MADDOX_GAME_MESSAGE_KINDS = ["narration", "declaration", "pass", "question", "answer", "check", "combat", "combat-action", "combat-roll", "combat-reaction", "reminder", "combat-prep", "rewind", "hit-points", "sheet-change", "level-up", "experience", "chapter", "rest", "rest-request"] as const
+export const MADDOX_GAME_MESSAGE_KINDS = ["narration", "declaration", "pass", "question", "answer", "check", "combat", "combat-action", "combat-roll", "combat-reaction", "reminder", "combat-prep", "rewind", "hit-points", "sheet-change", "combat-fix", "level-up", "experience", "chapter", "rest", "rest-request"] as const
 export type MaddoxGameMessageKind = (typeof MADDOX_GAME_MESSAGE_KINDS)[number]
 
 /** O que o jogador envia no próprio turno. */
@@ -767,6 +767,15 @@ export const MADDOX_REST_PREP_CONSUMPTION_ORIGIN = "maddox-rest-prep"
 export const MADDOX_OPEX_REST_CONSUMPTION_ORIGIN = "maddox-opex-rest"
 
 export const MADDOX_SHEET_FIX_TOOL_NAMES = ["get_character_sheet", "get_character_interview", "update_character_sheet"] as const
+
+/**
+ * DND-59: ferramentas de correção do combate tático na resposta a uma pergunta ou a um lembrete (gravam na hora):
+ * leitura, condição, card pendente, adversário e economia/flags do personagem.
+ */
+/** DND-59: o Rolar do card espera enquanto o mestre responde uma pergunta ou corrige um lembrete. */
+export const MADDOX_MASTER_REVIEWING_MESSAGE = "O mestre está revisando um pedido; role quando a resposta chegar."
+
+export const MADDOX_COMBAT_FIX_TOOL_NAMES = ["get_combat_details", "set_combat_condition", "edit_combat_action", "correct_combatant", "correct_character_turn"] as const
 
 /** DND-51: prazo da resposta do jogador a uma pergunta da preparação do combate; depois, a preparação conclui sem a escolha. */
 export const MADDOX_COMBAT_PREP_ANSWER_TIMEOUT_MS = 3 * 60_000
