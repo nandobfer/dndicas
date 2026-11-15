@@ -378,7 +378,11 @@ describe("Personagem Opex e a ficha da campanha", () => {
         await runOpexLevelUp(t.campaignId, opexStep._id)
         const done = (await campaignOf(t.campaignId)).levelUps!.find((step) => String(step._id) === String(opexStep._id))!
         expect(done).toMatchObject({ status: "done", doneBy: "opex", gains: expect.objectContaining({ toLevel: 2, hp: expect.objectContaining({ method: "roll" }), traits: ["Surto de Ação"] }) })
-        expect((await CharacterSheet.findById(t.members[1]!.sheetId).lean())!.level).toBe(2)
+        const sheet = (await CharacterSheet.findById(t.members[1]!.sheetId).lean())!
+        expect(sheet.level).toBe(2)
+        // PV atual sobe junto com o máximo (DND-64): a ficha cheia (12/12) continua cheia.
+        expect(sheet.hpMax).toBeGreaterThan(12)
+        expect(sheet.hpCurrent).toBe(sheet.hpMax)
         expect(opex.decide).toHaveBeenCalledWith(expect.objectContaining({ prompt: expect.stringContaining("Surto de Ação") }))
     })
 

@@ -1,7 +1,7 @@
 import { z } from "zod"
 import { MADDOX_ABILITIES, MADDOX_SKILLS } from "./check-modifier"
 import { parseDiceExpression } from "./combat-rules"
-import { MADDOX_AC_ORIGINS, MADDOX_COMBAT_PREP_TEXT_CEILING as CEILING, MADDOX_REACTION_TRIGGERS } from "./constants"
+import { MADDOX_AC_ORIGINS, MADDOX_COIN_KEYS, MADDOX_COMBAT_PREP_TEXT_CEILING as CEILING, MADDOX_REACTION_TRIGGERS } from "./constants"
 import { MADDOX_MASTERY_KEYS } from "./weapon-mastery"
 
 /**
@@ -32,6 +32,11 @@ const source = catalogSourceSchema.optional().catch(undefined)
  */
 const choice = z.object({ quote: z.string().trim().min(1).max(1_000) }).optional().catch(undefined)
 const recordId = z.string().trim().min(1).max(40)
+/**
+ * DND-65: moedas por sigla pt-BR (po, pp, pe, pc, pl), só valores inteiros >= 0. O teto, a moeda nos dois lados e o saldo
+ * são conferidos em `applyCoinChange` (a recusa leva o motivo).
+ */
+const coinAmounts = z.object(Object.fromEntries(MADDOX_COIN_KEYS.map((key) => [key, z.number().int().min(0).optional()])) as Record<(typeof MADDOX_COIN_KEYS)[number], z.ZodOptional<z.ZodNumber>>).strict()
 
 /** DND-66: durações do bônus de CA pela lista fechada da ficha. */
 export const MADDOX_SHEET_AC_DURATIONS = ["permanente", "fim-do-combate", "descanso-curto", "descanso-longo", "momento"] as const
@@ -85,6 +90,8 @@ export const combatSheetChangeSchema = z.discriminatedUnion("type", [
     }),
     z.object({ type: z.literal("ac-bonus-remove"), name: text(80).pipe(z.string().min(1)), reason, ref, source, choice }),
     z.object({ type: z.literal("unarmored-defense"), enabled: z.boolean(), base: z.number().int().min(1).max(30).optional().default(10), attributes: z.array(attribute).max(3).optional().default([]), reason, ref, source, choice }),
+    // DND-65: moedas são campo da ficha (`sheet.coins`), nunca item.
+    z.object({ type: z.literal("coins"), add: coinAmounts.optional(), subtract: coinAmounts.optional(), reason, ref, source, choice }),
 ])
 export type CombatSheetChange = z.infer<typeof combatSheetChangeSchema>
 

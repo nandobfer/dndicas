@@ -5,6 +5,7 @@ import { loggerFor } from "@/lib/logger"
 import type { AttributeType } from "@/features/character-sheets/types/character-sheet.types"
 import type { CharacterSheetCollectionName } from "@/features/character-sheets/realtime/character-sheet-pusher"
 import { MADDOX_ABILITY_LABELS } from "../check-modifier"
+import { applyCoinChange, coinChangeText, coinsText, COIN_ITEM_REFUSAL, isCoinItemName, type SheetCoins } from "../coin-rules"
 import { plainText } from "../combat-options"
 import type { CombatSheetChange } from "../combat-prep-schemas"
 import type { CombatPrepChange } from "../combat-types"
@@ -79,7 +80,7 @@ export interface SheetWriteContext {
     requestedBy?: string | null
     characterName: string
     /** Origem: preparação do combate, pedido de ajuste ou "Pergunte ao mestre" (DND-51). */
-    origin: "combat-prep" | "combat-adjust" | "question"
+    origin: "combat-prep" | "combat-adjust" | "question" | "narrator"
 }
 
 export interface SheetWriteResult {
@@ -97,6 +98,8 @@ type Outcome = {
     collection?: { name: CharacterSheetCollectionName; action: "created" | "updated" | "deleted"; recordId: string }
     /** Valor anterior completo para a auditoria (quando `before` é só um resumo). */
     auditBefore?: unknown
+    /** DND-65: não aplicada por regra (o motivo, para o modelo e para o jogador). */
+    refused?: string
 } | null
 
 const abilityLabel = (attribute: string) => MADDOX_ABILITY_LABELS[attribute as AttributeType] ?? attribute
@@ -119,7 +122,7 @@ export async function applySheetChanges(changes: readonly CombatSheetChange[], c
             outcome = { label: describeSheetChange(change), before: "—", after: "—", applied: false }
         }
         if (!outcome) continue
-        result.changes.push({ area: "ficha", label: outcome.label, before: outcome.before, after: outcome.after, reason: change.reason, applied: outcome.applied })
+        result.changes.push({ area: "ficha", label: outcome.label, before: outcome.before, after: outcome.after, reason: change.reason, applied: outcome.applied, ...(outcome.refused ? { refused: outcome.refused } : {}) })
         if (!outcome.applied) continue
         if (outcome.sheet) sheetTouched = true
         if (outcome.collection) collectionEvents.push(outcome.collection)
@@ -186,6 +189,8 @@ export function describeSheetChange(change: CombatSheetChange): string {
             return `Bônus de CA ${change.name} removido`
         case "unarmored-defense":
             return "Defesa sem Armadura"
+        case "coins":
+            return "Moedas"
     }
 }
 
@@ -402,6 +407,8 @@ async function applyOne(change: CombatSheetChange, sheetId: Types.ObjectId, m: M
             if (change.catalogItemId && !catalog) return { label, before: "—", after: "—", applied: false }
             const name = catalog?.name ?? change.name
             if (!name) return { label, before: "—", after: "—", applied: false }
+            // DND-65: moeda é campo da ficha, nunca item.
+            if (!catalog && isCoinItemName(name)) return { label: `Item ${name}`, before: "—", after: "—", applied: false, refused: COIN_ITEM_REFUSAL }
             // Revisão DND-51 (F9): item fora do catálogo que a ficha já tem (pelo nome) ganha quantidade, não uma linha nova.
             const existing = catalog
                 ? await m.CharacterItem.findOne({ sheetId, catalogItemId: catalog._id }).lean<{ _id: Types.ObjectId; quantity: number }>()
@@ -438,6 +445,18 @@ async function applyOne(change: CombatSheetChange, sheetId: Types.ObjectId, m: M
             if ((current.quantity ?? 1) === change.quantity) return null
             const updated = await m.CharacterItem.updateOne({ _id: current._id, quantity: current.quantity }, { $set: { quantity: change.quantity } })
             return { label: `Quantidade de ${plainText(current.name)}`, before: String(current.quantity ?? 1), after: String(change.quantity), applied: updated.modifiedCount > 0, collection: { name: "items", action: "updated", recordId: String(current._id) } }
+        }
+        case "coins": {
+            // DND-65: saldo conferido na regra pura e de novo na gravação (`$gte` em cada moeda subtraída): duas compras
+            // simultâneas nunca deixam saldo negativo.
+            const current = (sheet.coins as SheetCoins | undefined) ?? {}
+            const before = coinsText(current)
+            const coinLabel = `Moedas (${coinChangeText(change)})`
+            const next = applyCoinChange(current, change, context.characterName)
+            if (!next.ok) return { label: coinLabel, before, after: before, applied: false, refused: next.reason }
+            const filter: Record<string, unknown> = { _id: sheetId, ...Object.fromEntries(Object.entries(next.requires).map(([path, min]) => [path, { $gte: min }])) }
+            const updated = await m.CharacterSheet.updateOne(filter, { $inc: next.inc })
+            return { label: coinLabel, before, after: coinsText(next.after), applied: updated.modifiedCount > 0, auditBefore: current, sheet: true }
         }
     }
 }

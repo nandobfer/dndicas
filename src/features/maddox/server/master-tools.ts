@@ -53,8 +53,10 @@ import {
     playerArmorClassRefusal,
     type MaddoxAcDuration,
     type MaddoxAcOrigin,
+    MADDOX_COINS_TOOL_NAME,
     MADDOX_REST_TOOL_NAME,
 } from "../constants"
+import { COIN_ITEM_REFUSAL, isCoinItemName } from "../coin-rules"
 import { SHEET_CHANGE_CONTRACT } from "../sheet-change-contract"
 import { normalizeCatalogName } from "../catalog-markup"
 import { MADDOX_HIT_POINT_OPERATIONS } from "../hit-points-ops"
@@ -226,6 +228,10 @@ async function combatConditionWarning(campaignId: Types.ObjectId, text: string, 
     const labels = missing.map((key) => MADDOX_CONDITION_LABELS[key]).join(", ")
     return `Isto é só texto do Diário: o combate tático NÃO tem ${labels}${characterName ? ` em ${characterName}` : ""}, e a vantagem/desvantagem vem do combate. Para valer, aplique com set_combat_condition (resposta ou lembrete) ou apply_effect (narração); sem isso, não diga que aplicou.`
 }
+
+const coinsInput = z
+    .object(Object.fromEntries(MADDOX_COIN_KEYS.map((key) => [key, z.number().int().min(0).max(MADDOX_COMBAT_COINS_MAX).optional()])) as Record<(typeof MADDOX_COIN_KEYS)[number], z.ZodOptional<z.ZodNumber>>)
+    .describe("po = ouro, pp = prata, pe = electrum, pc = cobre, pl = platina")
 
 export const MADDOX_MASTER_TOOLS: readonly MaddoxMasterTool[] = [
     define({
@@ -541,6 +547,41 @@ export const MADDOX_MASTER_TOOLS: readonly MaddoxMasterTool[] = [
         },
     }),
     define({
+        name: MADDOX_COINS_TOOL_NAME,
+        description: [
+            "Soma ou subtrai MOEDAS na ficha de um personagem jogador (graus com ficha): pagamento, compra, troca, recompensa ou achado fora do fim de combate. O saldo atual está em \"Moedas\" na ficha. Siglas: po (ouro), pp (prata), pe (electrum), pc (cobre), pl (platina).",
+            "Use `somar` e/ou `subtrair` (inteiros >= 0, só as moedas que mudam). Subtrair mais do que o saldo é recusado com o motivo (nada muda): a compra não acontece na história. Troco é explícito na mesma chamada (subtrair 1 po e somar 10 pp). O `motivo` é obrigatório e aparece na mesa.",
+            `Moeda NUNCA vira item do inventário. ${COIN_ITEM_REFUSAL}.`,
+        ].join(" "),
+        readOnly: false,
+        input: z.object({
+            personagem: z.string().min(1).describe("Nome do personagem jogador"),
+            somar: coinsInput.optional().describe("Moedas que entram (ex.: { po: 2 })"),
+            subtrair: coinsInput.optional().describe("Moedas que saem (ex.: { pp: 5 })"),
+            motivo: z.string().min(1).describe("Por que as moedas mudam, curto (os jogadores leem)"),
+        }),
+        async execute(context, input) {
+            const change = { ...(input.somar ? { add: input.somar } : {}), ...(input.subtrair ? { subtract: input.subtrair } : {}) }
+            const reason = clip(input.motivo, MADDOX_TOOL_NAME_MAX * 2)
+            const { questionRun } = await import("./question-runs")
+            // "Pergunte ao mestre" e lembrete: mesmas travas da correção da ficha (o próprio personagem; o dono, qualquer um),
+            // a linha responde à pergunta.
+            if (questionRun(context.jobId)) {
+                const result = await questionSheetCall((tools) => tools.updateCharacterSheetFromQuestion(context.jobId, { personagem: input.personagem, alteracoes: [{ type: "coins", ...change, reason }] }))
+                if (!result.aplicadas.length) throw new MaddoxToolError(result.recusadas.map((item) => item.motivo).join("; ") || result.naoAplicadas.join("; ") || "As moedas não mudaram.")
+                return { saved: true, personagem: result.personagem, moedas: result.aplicadas[0] }
+            }
+            const { changeCharacterCoins, CoinsError } = await import("./coins")
+            try {
+                const result = await changeCharacterCoins({ campaignId: context.campaignId, characterName: input.personagem, change, reason, turnNumber: context.turnNumber })
+                return { saved: true, personagem: result.characterName, antes: result.before, moedas: result.after }
+            } catch (error) {
+                if (error instanceof CoinsError) throw new MaddoxToolError(error.message)
+                throw error
+            }
+        },
+    }),
+    define({
         name: MADDOX_REST_TOOL_NAME,
         description: [
             "Descanso curto ou longo do grupo (ou de alguns personagens), quando a cena permite e os jogadores pedem. Chame ANTES de escrever, já com o desfecho: `concluido` (o descanso chega ao fim) ou `interrompido` (emboscada, alarme… com o motivo em `interrupcao`).",
@@ -771,10 +812,6 @@ function findCharacter(characters: readonly { _id: Types.ObjectId; name: string 
     return target
 }
 
-const coinsInput = z
-    .object(Object.fromEntries(MADDOX_COIN_KEYS.map((key) => [key, z.number().int().min(0).max(MADDOX_COMBAT_COINS_MAX).optional()])) as Record<(typeof MADDOX_COIN_KEYS)[number], z.ZodOptional<z.ZodNumber>>)
-    .describe("po = ouro, pp = prata, pe = electrum, pc = cobre, pl = platina")
-
 export const MADDOX_COMBAT_TOOLS: readonly MaddoxMasterTool[] = [
     define({
         name: "get_combat",
@@ -921,6 +958,8 @@ export const MADDOX_COMBAT_TOOLS: readonly MaddoxMasterTool[] = [
                 const coins = item.moedas ? Object.fromEntries(MADDOX_COIN_KEYS.filter((key) => (item.moedas?.[key] ?? 0) > 0).map((key) => [key, item.moedas![key]!])) : null
                 if (item.tipo === "moedas" && (!coins || !Object.keys(coins).length)) throw new MaddoxToolError("Recompensa em moedas sem valor: informe `moedas` (po, pp, pe, pc ou pl).")
                 if (item.tipo === "item" && !item.item?.trim()) throw new MaddoxToolError("Recompensa do tipo item sem `item`: informe o nome do item.")
+                // DND-65: moeda é campo da ficha, nunca item.
+                if (item.tipo === "item" && isCoinItemName(item.item!)) throw new MaddoxToolError(`Recompensa "${item.item!.trim()}" é moeda, não item: use \`tipo: "moedas"\` com \`moedas\` (po, pp, pe, pc ou pl).`)
                 if (item.tipo === "outro" && !item.descricao?.trim()) throw new MaddoxToolError("Recompensa do tipo outro sem `descricao`.")
                 rewards.push({
                     kind: item.tipo,

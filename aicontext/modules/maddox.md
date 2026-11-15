@@ -2347,6 +2347,32 @@ segura a continuação e a vez abre com card; fila na hora; retomada na leitura,
 `question-combat-fix.test.ts` (`vez` e `resume_combat_turn`), `tests/frontend/maddox/maddox-tactical-combat.test.tsx` e
 `maddox-game.test.tsx`.
 
+## Moedas na ficha (DND-65)
+
+Moeda é **campo da ficha** (`sheet.coins`), nunca item do inventário nem texto da história. Siglas pt-BR (mapa
+`MADDOX_COIN_SHEET_FIELDS`): po ouro → `gp`, **pp prata → `sp`**, pe electrum → `ep`, pc cobre → `cp`, **pl platina → `pp`**.
+
+- **Regra pura** em `coin-rules.ts`: `coinsText` ("11 po, 30 pp" / "nenhuma"), `applyCoinChange` (recusa com motivo quando a
+  subtração passa do saldo; sem troco automático — o troco é explícito na mesma alteração), `coinChangeProblem`
+  (inteiros ≥ 0, teto `MADDOX_COMBAT_COINS_MAX`, ao menos uma moeda, a mesma moeda não soma e subtrai) e `isCoinItemName`
+  ("Peças de prata", "30 po"; não pega "Espada Curta de Prata" nem "Poção de Cura").
+- **Visível ao mestre**: linha `- Moedas:` em "## Ficha" do `loadPrepSheet` (preparação, ajuste e `get_character_sheet`) e
+  `Moedas:` no `sheetSummary` (narração e Personagem Opex).
+- **Uma gravação só**: tipo `{"type":"coins","add":{…},"subtract":{…}}` na lista fechada (`combatSheetChangeSchema`,
+  contrato em `sheet-change-contract.ts`), aplicado em `applySheetChanges` com `$inc` condicional (`$gte` em cada moeda
+  subtraída), auditoria `FichaPersonagem` e `publishSheetPatched`. Recusa por regra volta em `CombatPrepChange.refused`
+  (e em `recusadas` no `update_character_sheet`).
+- **Portas**: preparação/"Pedir ajuste" (`sheetChanges`), `update_character_sheet` (pergunta e lembrete) e a ferramenta do
+  narrador `update_character_coins` (`MADDOX_COINS_TOOL_NAME`; `personagem`, `somar`, `subtrair`, `motivo`). Na narração ela
+  chama `changeCharacterCoins` (`server/coins.ts`, linha `sheet-change` "Moedas de X: antes → depois (motivo)" na fase do
+  mestre); no "Pergunte ao mestre" passa por `updateCharacterSheetFromQuestion` (o próprio personagem; o dono, qualquer um;
+  somar é permitido ao jogador comum — o mestre julga pela transcrição). Recompensa do `end_combat` segue em
+  `applyCombatRewards`.
+- **Moeda nunca é item**: `item-add` fora do catálogo com nome de moeda é recusado (`COIN_ITEM_REFUSAL`) em
+  `applySheetChanges` e antes do limite de equipamento no Pergunte ao mestre; recompensa `tipo: "item"` com nome de moeda no
+  `end_combat` é recusada ("use `tipo: moedas`"). A regra `MADDOX_COINS_RULE` entra nos graus com ficha. Itens de moeda
+  antigos não são convertidos (decisão do dono).
+
 ## Testes
 
 Descanso e exaustão (DND-58): `tests/backend/maddox/rest-rules.test.ts` (tabela, dados de vida, trecho do catálogo, exaustão, teste
@@ -2354,6 +2380,11 @@ contra a morte), `rest-interpret.test.ts` (fonte do catálogo da preparação), 
 dados de vida um a um, turno travado, offline, longo uma vez só, falha → dono, interrompido, recusas do `start_rest`, trocas pela lista
 fechada, Opex e dono por ele, exaustão até a morte; mocka `rest-prep-ai`, `opex-player` e o motor de dados) e
 `tests/frontend/maddox/maddox-rest.test.tsx` (balão).
+
+Moedas (DND-65): `coin-rules.test.ts` (saldo, recusa com motivo, troco, nomes de moeda), `coins.test.ts` (moedas no texto da
+ficha e no resumo, `update_character_coins` na narração e no Pergunte ao mestre, `coins` e item de moeda pela lista fechada,
+saldo insuficiente, entradas inválidas, grau narrativo), `narrator-combat-campaign.test.ts` (recompensa em pp soma uma vez
+só; item com nome de moeda recusado) e `narrator-prompt.test.ts` (regra e lista do MCP).
 
 `tests/backend/maddox/*` (configuração, roteiros, avatar, sessões, rotas, `campaigns.test.ts` com MongoDB em
 memória, `campaign-routes.test.ts`, `grant-maddox-play.test.ts`; Personagens Opex: `opex-interview.test.ts`,

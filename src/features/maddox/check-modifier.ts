@@ -2,6 +2,7 @@ import { getAttributeModifier, getProficiencyBonus, getSavingThrowBonus, getSkil
 import type { AttributeType, CharacterSheet, SkillName } from "@/features/character-sheets/types/character-sheet.types"
 import { exhaustionLevel, exhaustionPenaltyOf } from "./exhaustion-rules"
 import { armorClassBonusLabel, readArmorClassBonuses } from "@/features/character-sheets/utils/armor-class-bonuses"
+import { coinsText } from "./coin-rules"
 import { MADDOX_CHECK_KIND_LABELS, MADDOX_CHECK_MODE_LABELS, type MaddoxCheckKind, type MaddoxCheckMode } from "./constants"
 
 /**
@@ -26,7 +27,7 @@ export const MADDOX_SKILLS = Object.keys(SKILL_ATTRIBUTE_MAP) as SkillName[]
 
 /** Campos da ficha usados nos testes e no resumo do narrador. */
 export type MaddoxCheckSheet = Pick<CharacterSheet, AttributeType | "level" | "proficiencyBonusOverride" | "savingThrows" | "skills"> &
-    Partial<Pick<CharacterSheet, "name" | "class" | "subclass" | "race" | "hpMax" | "hpCurrent" | "hpTemp" | "computedArmorClass" | "exhaustion" | "armorClassBonuses">>
+    Partial<Pick<CharacterSheet, "name" | "class" | "subclass" | "race" | "hpMax" | "hpCurrent" | "hpTemp" | "computedArmorClass" | "exhaustion" | "armorClassBonuses" | "coins">>
 
 export interface MaddoxCheckSpec {
     kind: MaddoxCheckKind
@@ -136,5 +137,7 @@ export function sheetSummary(sheet: MaddoxCheckSheet): string {
         `Atributos: ${abilities}`,
         `Resistências com proficiência: ${saves.length ? saves.join(", ") : "nenhuma"}`,
         `Perícias treinadas: ${skills.length ? skills.join(", ") : "nenhuma"}`,
+        // DND-65: o saldo de moedas da ficha (muda com update_character_coins).
+        ...(sheet.coins ? [`Moedas: ${coinsText(sheet.coins)}`] : []),
     ].join("\n")
 }

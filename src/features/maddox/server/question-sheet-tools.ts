@@ -1,6 +1,7 @@
 import { Types } from "mongoose"
 import { loggerFor } from "@/lib/logger"
 import { normalizeCatalogName } from "../catalog-markup"
+import { COIN_ITEM_REFUSAL, isCoinItemName } from "../coin-rules"
 import { plainText } from "../combat-options"
 import { combatSheetChangeSchema, requiresCatalogSource, type CombatSheetChange } from "../combat-prep-schemas"
 import { freshEconomy, type CombatFlags } from "../combat-rules"
@@ -115,6 +116,11 @@ export async function updateCharacterSheetFromQuestion(jobId: string | undefined
             return
         }
         const change = result.data
+        // DND-65: moeda é campo da ficha, nunca item (antes do limite de equipamento, para o modelo ler o motivo certo).
+        if (change.type === "item-add" && !change.catalogItemId && change.name && isCoinItemName(change.name)) {
+            refused.push({ alteracao: index + 1, motivo: COIN_ITEM_REFUSAL })
+            return
+        }
         if (run.allowedChangeTypes && !run.allowedChangeTypes.includes(change.type)) {
             refused.push({ alteracao: index + 1, motivo: `"${change.type}" não é uma troca depois do descanso (permitidas: ${run.allowedChangeTypes.join(", ")})` })
             return
@@ -148,11 +154,13 @@ export async function updateCharacterSheetFromQuestion(jobId: string | undefined
         await postSheetChangeLine(run, character, applied)
         await run.onSheetChanged?.(applied.map((change) => `${changeText(change)}${change.reason ? ` (${change.reason})` : ""}`))
     }
+    // DND-65: recusas por regra na gravação (saldo de moedas, moeda como item) também voltam com o motivo.
+    for (const change of written.changes) if (!change.applied && change.refused) refused.push({ alteracao: 0, motivo: `${change.label}: ${change.refused}` })
     log.info({ campaignId: run.campaignId, character: character.name, applied: applied.length, refused: refused.length }, "[maddox] ficha corrigida pelo Pergunte ao mestre")
     return {
         personagem: character.name,
         aplicadas: applied.map(changeText),
-        naoAplicadas: written.changes.filter((change) => !change.applied).map((change) => `${changeText(change)} (a ficha mudou ou o registro não existe)`),
+        naoAplicadas: written.changes.filter((change) => !change.applied && !change.refused).map((change) => `${changeText(change)} (a ficha mudou ou o registro não existe)`),
         recusadas: refused,
         ...(screen.refused.length ? { faltaEscolhaDoJogador: screen.refused.map((item) => item.refused), orientacao: "Pergunte ao jogador e grave depois com o trecho da resposta dele em `choice.quote`." } : {}),
     }

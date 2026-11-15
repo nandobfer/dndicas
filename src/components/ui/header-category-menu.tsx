@@ -31,7 +31,7 @@ export function anchorPanelLeft(root: { left: number }, trigger: { left: number 
     const minLeft = margin - root.left
     return Math.round(Math.max(minLeft, Math.min(trigger.left - root.left, maxLeft)))
 }
-const PANEL_ID = "header-category-panel"
+export const PANEL_ID = "header-category-panel"
 
 export const headerNavLinkClass = (active: boolean, open = false) =>
     cn(

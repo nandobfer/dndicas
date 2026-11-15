@@ -3,7 +3,8 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import * as React from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { GlassHeader } from "@/components/ui/glass-header"
-import { CATEGORY_CLOSE_DELAY_MS, PANEL_VIEWPORT_MARGIN, anchorPanelLeft } from "@/components/ui/header-category-menu"
+import { CATEGORY_CLOSE_DELAY_MS, PANEL_ID, PANEL_VIEWPORT_MARGIN, anchorPanelLeft } from "@/components/ui/header-category-menu"
+import { WINDOWS_LAYER_Z } from "@/components/ui/glass-window-bounds"
 
 let pathname = "/"
 let signedIn = true
@@ -58,6 +59,24 @@ describe("GlassHeader (desktop)", () => {
     it("não tem sidebar nem drawer lateral", () => {
         const { container } = render(<GlassHeader />)
         expect(container.querySelector("aside")).toBeNull()
+    })
+
+    it("com o painel de categorias aberto, o header sobe acima da camada das janelas glass (DND-68)", () => {
+        render(<GlassHeader />)
+        const header = screen.getByRole("banner")
+        // Fechado: o header fica abaixo das janelas (z-40 < z-[48]).
+        expect(header.className).toContain("z-40")
+        expect(header.querySelector(`#${PANEL_ID}`)).toBeNull()
+
+        fireEvent.click(desktop().getByRole("button", { name: "Fichas" }))
+
+        // O painel vive dentro do header (sem portal); a variante :has() leva o header a z-[49], acima de z-[48].
+        const panel = desktop().getByRole("region")
+        expect(panel.id).toBe(PANEL_ID)
+        expect(header.contains(panel)).toBe(true)
+        expect(header.className).toContain(`has-[#${PANEL_ID}]:z-[49]`)
+        expect(49).toBeGreaterThan(WINDOWS_LAYER_Z)
+        expect(49).toBeLessThan(50)
     })
 
     it("esconde Campanhas e Administração de quem não tem permissão", () => {

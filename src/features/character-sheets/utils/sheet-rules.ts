@@ -144,6 +144,21 @@ export function getLevelOneHpMax(hitDice: string, constitutionModifier: number):
     return Math.max(1, dieValue + constitutionModifier)
 }
 
+/**
+ * PV do nível 1 sincronizados pelo catálogo (DND-64): o máximo segue a classe e a Constituição, mas o PV atual de quem
+ * tem dano nunca é reposto. Ele é preenchido quando ainda não existe (ficha nova), acompanha o novo máximo quando a ficha
+ * estava cheia e só é rebaixado quando passa do novo máximo; o dano gravado pela campanha ou anotado pelo jogador fica
+ * como está.
+ */
+export function levelOneHitPointsPatch(input: { nextHpMax: number; currentHpMax: number | null; currentHpCurrent: number | null }): { hpMax?: number; hpCurrent?: number } {
+    const patch: { hpMax?: number; hpCurrent?: number } = {}
+    if (input.nextHpMax !== input.currentHpMax) patch.hpMax = input.nextHpMax
+    const current = input.currentHpCurrent
+    const full = current != null && input.currentHpMax != null && current >= input.currentHpMax
+    if (current == null || current > input.nextHpMax || (full && current !== input.nextHpMax)) patch.hpCurrent = input.nextHpMax
+    return patch
+}
+
 /** Ganho de PV ao subir de nível pela média, como o assistente de subir de nível da ficha: ⌈lados/2⌉ + CON (mínimo 1). */
 export function averageHpGain(hitDice: string, constitutionModifier: number): number {
     return Math.max(1, Math.ceil((hitDieSides(hitDice) ?? 8) / 2) + constitutionModifier)

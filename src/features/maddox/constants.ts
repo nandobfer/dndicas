@@ -773,6 +773,8 @@ export function playerArmorClassRefusal(origin: MaddoxAcOrigin, duration: Maddox
     if (origin === "situacao" || MADDOX_AC_PLAYER_TOOL_DURATIONS.includes(duration)) return null
     return `Bônus de CA "${duration}" de ${origin} é regra da ficha: pelo pedido do jogador, grave com update_character_sheet (\"ac-bonus-upsert\") citando a fonte do catálogo lida nesta resposta (\"source\"). Por aqui, só bônus de situação ou com duração rodadas, fim-do-combate, concentracao ou momento.`
 }
+/** DND-65: moedas da ficha (narração, pergunta e lembrete). */
+export const MADDOX_COINS_TOOL_NAME = "update_character_coins"
 /** DND-58: teto de pedidos de troca por personagem num descanso e de idas e voltas do Personagem Opex. */
 export const MADDOX_REST_EXCHANGE_REQUESTS_MAX = 8
 export const MADDOX_REST_OPEX_EXCHANGE_ROUNDS = 2

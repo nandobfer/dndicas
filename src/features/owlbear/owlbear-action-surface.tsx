@@ -1,7 +1,6 @@
 "use client"
 
 import { GlassSelector } from "@/components/ui/glass-selector"
-import { preloadDiceBoxAssets } from "@/features/dice-roller/dice-box-loader"
 import { colors } from "@/lib/config/colors"
 import { Shield, Swords } from "lucide-react"
 import * as React from "react"
@@ -21,10 +20,6 @@ export { OwlbearCatalogAction, OwlbearLegacyAction } from "./owlbear-catalog-act
 export function OwlbearDiceAction() {
     const runtime = useOwlbearRuntime()
     const { session } = useOwlbearSession(runtime)
-
-    React.useEffect(() => {
-        preloadDiceBoxAssets()
-    }, [])
 
     return (
         <OwlbearActionFrame runtime={runtime} actionName="dice" contentClassName="max-w-none">

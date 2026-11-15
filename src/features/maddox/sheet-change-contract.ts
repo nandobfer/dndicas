@@ -9,6 +9,13 @@ export const SHEET_CHANGE_CHOICE_RULE =
 
 export const SHEET_CHANGE_SOURCE_FIELD = '"source":{"ref":"Tipo:id da entidade lida","quote":"trecho exato do texto dela"}'
 
+/** DND-65: moedas da ficha (siglas pt-BR: pp = prata, pl = platina). */
+export const SHEET_CHANGE_COINS_LINE =
+    '{"type":"coins","add":{"po":n,"pp":n,"pe":n,"pc":n,"pl":n},"subtract":{…}} — moedas da ficha (po ouro, pp prata, pe electrum, pc cobre, pl platina; só as que mudam, inteiros >= 0). Subtrair mais do que o saldo é recusado; troco é explícito (subtrair 1 po e somar 10 pp na mesma alteração)'
+
+export const SHEET_CHANGE_COINS_RULE =
+    'Moedas são um CAMPO da ficha ("Moedas" em "## Ficha"): some e subtraia só com "coins". NUNCA crie item com nome de moeda ("Peças de prata", "30 po"): o servidor recusa. Item é objeto; moeda é saldo.'
+
 export const SHEET_CHANGE_CONTRACT = [
     '"sheetChanges": correções na ficha, cada uma com "type", os campos dela e "reason" (motivo curto, falando com o jogador, citando a regra e a fonte). Tipos permitidos:',
     `  - {"type":"ability","attribute":"strength|dexterity|constitution|intelligence|wisdom|charisma","value":1-30,${SHEET_CHANGE_SOURCE_FIELD}}`,
@@ -33,5 +40,7 @@ export const SHEET_CHANGE_CONTRACT = [
     `  - {"type":"ac-bonus-upsert","name":"Escudo da Fé","value":-10..10,"origin":"magia|item|talento|situacao|outro","duration":"permanente|fim-do-combate|descanso-curto|descanso-longo|momento","moment":"até quando (só com momento)"} — bônus de CA nomeado; mesmo nome substitui. Permanente que não é situação leva ${SHEET_CHANGE_SOURCE_FIELD}. Rodadas e concentração: ferramenta add_armor_class_bonus`,
     '  - {"type":"ac-bonus-remove","name":"nome do bônus de CA"}',
     `  - {"type":"unarmored-defense","enabled":true|false,"base":10,"attributes":["constitution"],${SHEET_CHANGE_SOURCE_FIELD}} (Defesa sem Armadura: vale só sem armadura equipada)`,
+    `  - ${SHEET_CHANGE_COINS_LINE}`,
+    SHEET_CHANGE_COINS_RULE,
     `${SHEET_CHANGE_CHOICE_RULE}`,
 ]
