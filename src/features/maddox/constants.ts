@@ -756,6 +756,13 @@ export const MADDOX_COMBAT_PREP_TRAIT_TEXT_MAX = 400
 /** DND-58: ferramenta do descanso (só nas narrações dos graus com ficha) e a da exaustão. */
 export const MADDOX_REST_TOOL_NAME = "start_rest"
 export const MADDOX_EXHAUSTION_TOOL_NAME = "update_character_exhaustion"
+/** DND-66: bônus de CA nomeados na ficha (narração e "Pergunte ao mestre"). */
+export const MADDOX_ARMOR_CLASS_TOOL_NAMES = { add: "add_armor_class_bonus", remove: "remove_armor_class_bonus" } as const
+/** Duração do bônus de CA como o modelo pede (a ferramenta converte para a duração gravada na ficha). */
+export const MADDOX_AC_DURATIONS = ["permanente", "rodadas", "fim-do-combate", "concentracao", "descanso-curto", "descanso-longo", "momento"] as const
+export type MaddoxAcDuration = (typeof MADDOX_AC_DURATIONS)[number]
+export const MADDOX_AC_ORIGINS = ["magia", "item", "talento", "situacao", "outro"] as const
+export type MaddoxAcOrigin = (typeof MADDOX_AC_ORIGINS)[number]
 /** DND-58: teto de pedidos de troca por personagem num descanso e de idas e voltas do Personagem Opex. */
 export const MADDOX_REST_EXCHANGE_REQUESTS_MAX = 8
 export const MADDOX_REST_OPEX_EXCHANGE_ROUNDS = 2

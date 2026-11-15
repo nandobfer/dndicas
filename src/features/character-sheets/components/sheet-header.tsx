@@ -176,7 +176,7 @@ export function useSheetHeaderSections({ sheet, form, items = [], isReadOnly = f
     armorClassBonusSources,
   })
 
-  const armorClassBonus = watch("armorClassBonus") ?? sheet.armorClassBonus ?? null
+  const armorClassBonuses = watch("armorClassBonuses") ?? sheet.armorClassBonuses ?? []
   const hpHealCap = hpMax > 0 ? hpMax : 0
   const parsedHpAdjustment = parseInt(hpAdjustmentValue, 10)
   const isHpAdjustmentValid = Number.isFinite(parsedHpAdjustment) && parsedHpAdjustment > 0
@@ -464,10 +464,10 @@ export function useSheetHeaderSections({ sheet, form, items = [], isReadOnly = f
     <ArmorClassConfigModal
       open={isArmorClassConfigOpen}
       onOpenChange={setIsArmorClassConfigOpen}
-      armorClassBonus={armorClassBonus}
+      armorClassBonuses={armorClassBonuses}
       unarmoredDefense={unarmoredDefense}
       isReadOnly={isReadOnly}
-      onArmorClassBonusChange={(value) => patchField("armorClassBonus", value)}
+      onArmorClassBonusesChange={(value) => patchField("armorClassBonuses", value)}
       onUnarmoredDefenseChange={(value) => patchField("unarmoredDefense", value)}
     />
   )

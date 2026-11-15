@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { armorClassBonusListSchema, type ArmorClassBonus } from "../utils/armor-class-bonuses"
 
 const relativeImageUrlSchema = z.string().startsWith("/api/upload?key=")
 const imageUrlSchema = z.union([z.string().url(), relativeImageUrlSchema])
@@ -96,7 +97,8 @@ export interface CharacterSheet {
     /** Exaustão (DND-58): 0–6; −2 por nível nos testes de d20 da mesa Maddox; 6 = morte. */
     exhaustion: number
     armorClassOverride: number | null
-    armorClassBonus: number | null
+    /** Bônus de CA nomeados (DND-66): nome, valor, origem e duração; o total soma todos. */
+    armorClassBonuses: ArmorClassBonus[]
     unarmoredDefense: UnarmoredDefenseConfig
     initiativeOverride: number | null
     initiativeProficiency: boolean
@@ -404,7 +406,7 @@ export const PatchSheetSchema = z.object({
     deathSavesFailure: z.number().int().min(0).max(3).optional(),
     exhaustion: z.number().int().min(0).max(6).optional(),
     armorClassOverride: z.number().int().nullable().optional(),
-    armorClassBonus: z.number().int().nullable().optional(),
+    armorClassBonuses: armorClassBonusListSchema.optional(),
     unarmoredDefense: z.object({
         enabled: z.boolean(),
         base: z.number().int().min(1).max(30),

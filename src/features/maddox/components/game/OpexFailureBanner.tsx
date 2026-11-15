@@ -4,6 +4,7 @@ import { useState } from "react"
 import { AlertTriangle, Loader2, RefreshCw, SkipForward } from "lucide-react"
 import { Button } from "@/components/ui/opex/button"
 import { ConfirmDialog } from "@/components/ui/opex/confirm-dialog"
+import { IconAction } from "@/components/ui/opex/icon-action"
 import type { MaddoxGameStateDto } from "../../game-types"
 
 type Actor = NonNullable<MaddoxGameStateDto["turn"]["opexActor"]>
@@ -23,9 +24,7 @@ export function OpexFailureBanner({ actor, retrying, skipping, onRetry, onSkip }
             <Button size="sm" variant="outline" className="h-7" onClick={onRetry} disabled={retrying || skipping}>
                 {retrying ? <Loader2 className="animate-spin" aria-hidden /> : <RefreshCw aria-hidden />} Tentar de novo
             </Button>
-            <Button size="sm" variant="ghost" className="h-7" onClick={() => setConfirming(true)} disabled={retrying || skipping}>
-                <SkipForward aria-hidden /> Pular
-            </Button>
+            <IconAction icon={SkipForward} label={`Pular a vez de ${actor.characterName}`} className="h-7 w-7 text-destructive hover:text-destructive" disabledReason={retrying ? "Aguarde a nova tentativa terminar." : null} busy={skipping} onClick={() => setConfirming(true)} />
             <ConfirmDialog
                 open={confirming}
                 onOpenChange={setConfirming}

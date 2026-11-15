@@ -207,11 +207,17 @@ export async function loadPrepSheet(state: TacticalCharacterState, campaignId?: 
         classText: `${String(sheet.class ?? "")} ${String(sheet.subclass ?? "")}`,
         features: [String(sheet.classFeatures ?? ""), String(sheet.speciesTraits ?? ""), String(sheet.featuresNotes ?? ""), ...traits.map((trait) => trait.name), ...feats.map((feat) => feat.name)],
     })
+    // DND-66: a CA com a conta (armadura, DES, itens e os bônus nomeados com a duração).
+    const armorSummary = (await (await import("./armor-class-bonuses")).loadArmorClassSummaries([String(sheetId)])).get(String(sheetId))
+    const { readArmorClassBonuses, armorClassBonusLabel } = await import("@/features/character-sheets/utils/armor-class-bonuses")
+    const acBonuses = readArmorClassBonuses((sheet as Record<string, unknown>).armorClassBonuses)
+    const armorText = `${armorSummary ? `${armorSummary.value} (${armorSummary.formula})` : "—"} · bônus de CA: ${acBonuses.map(armorClassBonusLabel).join("; ") || "nenhum"} · Defesa sem Armadura: ${(sheet as { unarmoredDefense?: { enabled?: boolean } }).unarmoredDefense?.enabled ? "ligada" : "desligada"}`
     const sections = [
         "## Ficha",
         `- Classe: ${html("class") || "(sem classe)"}${html("subclass") ? ` (${html("subclass")})` : ""} · Nível ${level} · Espécie: ${html("race") || "—"} · Origem: ${html("origin") || "—"}`,
         `- Atributos: ${abilities}`,
         `- Bônus de proficiência: ${signed(prof)}`,
+        `- CA: ${armorText}`,
         `- Salvaguardas proficientes: ${saves.join(", ") || "nenhuma"}`,
         `- Perícias: ${skills.join(", ") || "nenhuma"}`,
         `- Proficiências com armas: ${html("weaponProficiencies") || "—"}`,

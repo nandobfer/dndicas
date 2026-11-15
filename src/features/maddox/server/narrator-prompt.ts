@@ -1,5 +1,5 @@
 import { memoriesSection } from "@/features/ai/memories-prompt"
-import { MADDOX_ACTION_OPTIONS_MAX, MADDOX_CATALOG_TOOL_NAMES, MADDOX_COMBAT_DIFFICULTY_DEFAULT, MADDOX_COMBAT_DIFFICULTY_LEVEL_DEFS, MADDOX_DEFAULT_DENSITY, MADDOX_DENSITY_LEVEL_DEFS, MADDOX_CHECK_RIGORS, MADDOX_CHECK_ROUNDS_MAX, MADDOX_COMBAT_LONG_TURNS, MADDOX_COMBAT_RIGORS, MADDOX_DECLARATION_VALIDATION_RIGORS, MADDOX_PROFILE_SECTIONS, MADDOX_COMBAT_FIX_TOOL_NAMES, MADDOX_SHEET_FIX_TOOL_NAMES, MADDOX_SHEET_RIGORS, MADDOX_TACTICAL_COMBAT_RIGORS, MADDOX_TOOL_TEXT_GUIDE, MADDOX_WORLD_CATALOG_RIGORS, type MaddoxCampaignMemoryKind, type MaddoxCombatDifficultyLevel, type MaddoxDensityLevel, type MaddoxGameMessageKind, type MaddoxQuestStatus, type MaddoxRigorLevel, type MaddoxVisibility } from "../constants"
+import { MADDOX_ACTION_OPTIONS_MAX, MADDOX_CATALOG_TOOL_NAMES, MADDOX_COMBAT_DIFFICULTY_DEFAULT, MADDOX_COMBAT_DIFFICULTY_LEVEL_DEFS, MADDOX_DEFAULT_DENSITY, MADDOX_DENSITY_LEVEL_DEFS, MADDOX_CHECK_RIGORS, MADDOX_CHECK_ROUNDS_MAX, MADDOX_COMBAT_LONG_TURNS, MADDOX_COMBAT_RIGORS, MADDOX_DECLARATION_VALIDATION_RIGORS, MADDOX_PROFILE_SECTIONS, MADDOX_COMBAT_FIX_TOOL_NAMES, MADDOX_SHEET_FIX_TOOL_NAMES, MADDOX_ARMOR_CLASS_TOOL_NAMES, MADDOX_SHEET_RIGORS, MADDOX_TACTICAL_COMBAT_RIGORS, MADDOX_TOOL_TEXT_GUIDE, MADDOX_WORLD_CATALOG_RIGORS, type MaddoxCampaignMemoryKind, type MaddoxCombatDifficultyLevel, type MaddoxDensityLevel, type MaddoxGameMessageKind, type MaddoxQuestStatus, type MaddoxRigorLevel, type MaddoxVisibility } from "../constants"
 import { CATALOG_CITATION_RULE, rigorBlock } from "./interview-prompt"
 import { MADDOX_PROGRESSION_TOOL_NAMES, MADDOX_MILESTONE_TRIGGER_LABELS, type MaddoxMilestoneTrigger, type MaddoxProgressionMode } from "../constants"
 import { checkSucceeded } from "../check-modifier"
@@ -134,6 +134,16 @@ export function tacticalCombatRule(rigor: MaddoxRigorLevel): string {
  * PV dos personagens fora do combate tático (DND-49), nos graus com ficha: a ficha é a fonte; a recuperação narrada
  * passa pela ferramenta, senão o personagem entra no próximo combate ainda a 0 PV.
  */
+/**
+ * DND-66: bônus de CA nomeados na ficha. Narrar não muda a CA: sem a ferramenta, o ataque seguinte usa a CA da ficha.
+ */
+export const MADDOX_ARMOR_CLASS_RULE = [
+    "## Bônus de CA",
+    `- Magia, item, talento ou situação que muda a CA de um personagem jogador (Escudo da Fé +2, Armadura Arcana, cobertura parcial +2, três quartos +5) só vale depois de \`${MADDOX_ARMOR_CLASS_TOOL_NAMES.add}\` com nome, valor, origem e duração. Nunca diga que a CA mudou sem o retorno dela: sem a ferramenta, o ataque seguinte é comparado com a CA antiga.`,
+    "- Magia de concentração usa `duracao: \"concentracao\"` com o `conjurador` (sai sozinha quando ele perde ou troca a concentração); efeito curto usa `rodadas`; o que dura a luta toda usa `fim-do-combate`. Os bônus com duração saem sozinhos; o de `momento` você remove quando o prazo chegar.",
+    `- O efeito acabou antes (cobertura deixada para trás, magia dissipada): \`${MADDOX_ARMOR_CLASS_TOOL_NAMES.remove}\` pelo nome.`,
+].join("\n")
+
 export const MADDOX_HIT_POINTS_RULE = [
     "## PV dos personagens",
     "- Os PV ficam na ficha. Antes de narrar um personagem a 0 PV acordando, agindo ou se recuperando (cura, estabilização, primeiros socorros), chame `update_character_hit_points` com a operação pela regra e o motivo; sem isso, ele continua a 0 PV na ficha e entra no próximo combate caído.",
@@ -343,7 +353,7 @@ function toolsBlock(mode: NarratorToolMode): string | null {
     if (mode.kind === "ai-sdk") return null
     return [
         "## Ferramentas desta narração",
-        `- As ferramentas de anotações da campanha estão no servidor MCP \`${mode.server}\` (get_campaign_state, update_campaign_state, list_npcs, get_npc, save_npc, search_memories, save_memory, update_character_state, update_character_hit_points, update_character_exhaustion, resolve_reminder${mode.checks ? ", request_check" : ""}${mode.rest ? ", start_rest" : ""}${mode.combat ? ", get_combat, start_combat, update_combat, end_combat" : ""}${mode.tactical ? ", monster_action, apply_effect, request_damage_roll, offer_reaction" : ""}${mode.sceneImages ? ", request_scene_image" : ""}${mode.actionOptions ? ", suggest_actions" : ""}, promover_npc_opex, desfazer_npc_opex, gravar_memoria_npc_opex${mode.opexNpcs ? ", consultar_npc_opex" : ""}${mode.sheetFix ? `, ${MADDOX_SHEET_FIX_TOOL_NAMES.join(", ")}` : ""}${mode.combatFix ? `, ${MADDOX_COMBAT_FIX_TOOL_NAMES.join(", ")}` : ""}${mode.progression?.length ? `, ${mode.progression.join(", ")}` : ""}, ${MADDOX_CATALOG_TOOL_NAMES.search}, ${MADDOX_CATALOG_TOOL_NAMES.get}).`,
+        `- As ferramentas de anotações da campanha estão no servidor MCP \`${mode.server}\` (get_campaign_state, update_campaign_state, list_npcs, get_npc, save_npc, search_memories, save_memory, update_character_state, update_character_hit_points, update_character_exhaustion, add_armor_class_bonus, remove_armor_class_bonus, resolve_reminder${mode.checks ? ", request_check" : ""}${mode.rest ? ", start_rest" : ""}${mode.combat ? ", get_combat, start_combat, update_combat, end_combat" : ""}${mode.tactical ? ", monster_action, apply_effect, request_damage_roll, offer_reaction" : ""}${mode.sceneImages ? ", request_scene_image" : ""}${mode.actionOptions ? ", suggest_actions" : ""}, promover_npc_opex, desfazer_npc_opex, gravar_memoria_npc_opex${mode.opexNpcs ? ", consultar_npc_opex" : ""}${mode.sheetFix ? `, ${MADDOX_SHEET_FIX_TOOL_NAMES.join(", ")}` : ""}${mode.combatFix ? `, ${MADDOX_COMBAT_FIX_TOOL_NAMES.join(", ")}` : ""}${mode.progression?.length ? `, ${mode.progression.join(", ")}` : ""}, ${MADDOX_CATALOG_TOOL_NAMES.search}, ${MADDOX_CATALOG_TOOL_NAMES.get}).`,
         `- Em TODA chamada a essas ferramentas, envie o campo \`turno\` exatamente com este valor: \`${mode.turnToken}\`.`,
         "- Não use outras ferramentas (arquivos, terminal, web): a campanha vive só nessas anotações.",
     ].join("\n")
@@ -727,7 +737,7 @@ function taskBody(task: NarratorTask): string {
  */
 export const MADDOX_SHEET_FIX_TASK_RULES = [
     "## Correções pedidas pelo jogador",
-    `Se o jogador pedir para corrigir a ficha, as ações, os PV ou o estado do personagem, CORRIJA de fato (não só narre): leia a ficha com \`${MADDOX_SHEET_FIX_TOOL_NAMES[0]}\` e o que ele escolheu na entrevista com \`${MADDOX_SHEET_FIX_TOOL_NAMES[1]}\`, consulte a regra no catálogo e grave com \`${MADDOX_SHEET_FIX_TOOL_NAMES[2]}\` (atributos, atributo de conjuração, truques e magias, ataques, talentos, características, itens, espaços de magia e cargas), \`update_character_hit_points\` (PV) e \`update_character_state\` (como o personagem está na história, fora do combate tático: texto do Diário, que não muda nenhum dado). Depois diga ao jogador, em uma ou duas frases, o que mudou.`,
+    `Se o jogador pedir para corrigir a ficha, as ações, os PV ou o estado do personagem, CORRIJA de fato (não só narre): leia a ficha com \`${MADDOX_SHEET_FIX_TOOL_NAMES[0]}\` e o que ele escolheu na entrevista com \`${MADDOX_SHEET_FIX_TOOL_NAMES[1]}\`, consulte a regra no catálogo e grave com \`${MADDOX_SHEET_FIX_TOOL_NAMES[2]}\` (atributos, atributo de conjuração, truques e magias, ataques, talentos, características, itens, espaços de magia e cargas), \`update_character_hit_points\` (PV), \`${MADDOX_ARMOR_CLASS_TOOL_NAMES.add}\`/\`${MADDOX_ARMOR_CLASS_TOOL_NAMES.remove}\` (bônus de CA temporários: magia, cobertura, situação) e \`update_character_state\` (como o personagem está na história, fora do combate tático: texto do Diário, que não muda nenhum dado). Depois diga ao jogador, em uma ou duas frases, o que mudou.`,
     "Toda correção de regra leva a fonte do catálogo (`source`: a entidade lida e o trecho exato dela).",
     "NUNCA escolha pelo jogador o que a regra manda ele escolher (o atributo de conjuração de uma lista como \"Inteligência, Sabedoria ou Carisma\", os truques ou a magia escolhidos de uma lista). Grave a escolha só quando ele a disse, com o trecho literal da mensagem dele em `choice.quote`. Se ele ainda não disse, PERGUNTE e não grave: a resposta dele chega como uma nova pergunta nesta conversa.",
     "Se faltar um dado para corrigir (qual truque, qual item, quanto), pergunte antes de gravar. A correção nunca gasta a Ação do personagem nem fecha o turno.",
@@ -739,7 +749,7 @@ export const MADDOX_SHEET_FIX_TASK_RULES = [
  */
 export const MADDOX_COMBAT_FIX_TASK_RULES = [
     "## Correções do combate tático (há um combate em andamento)",
-    `Tudo do combate muda SÓ por estas ferramentas, que gravam na hora: leia com \`${MADDOX_COMBAT_FIX_TOOL_NAMES[0]}\`; condição (inclusive Invisível do Esconder-se, com \`esconderse: true\` e \`cd\` = total da Furtividade) com \`${MADDOX_COMBAT_FIX_TOOL_NAMES[1]}\`; card de ação ainda não rolado (vantagem/desvantagem da situação, alvo, cancelar) com \`${MADDOX_COMBAT_FIX_TOOL_NAMES[2]}\`; PV, CA ou "fora de combate" de adversário com \`${MADDOX_COMBAT_FIX_TOOL_NAMES[3]}\`; Ação, Ação bônus, Reação, ataques e marcas (Esquivar, Desengajar, Disparada, Ajudado) de personagem com \`${MADDOX_COMBAT_FIX_TOOL_NAMES[4]}\`. PV de personagem jogador: \`update_character_hit_points\`.`,
+    `Tudo do combate muda SÓ por estas ferramentas, que gravam na hora: leia com \`${MADDOX_COMBAT_FIX_TOOL_NAMES[0]}\`; condição (inclusive Invisível do Esconder-se, com \`esconderse: true\` e \`cd\` = total da Furtividade) com \`${MADDOX_COMBAT_FIX_TOOL_NAMES[1]}\`; card de ação ainda não rolado (vantagem/desvantagem da situação, alvo, cancelar) com \`${MADDOX_COMBAT_FIX_TOOL_NAMES[2]}\`; PV, CA ou "fora de combate" de adversário com \`${MADDOX_COMBAT_FIX_TOOL_NAMES[3]}\`; Ação, Ação bônus, Reação, ataques e marcas (Esquivar, Desengajar, Disparada, Ajudado) de personagem com \`${MADDOX_COMBAT_FIX_TOOL_NAMES[4]}\`. PV de personagem jogador: \`update_character_hit_points\`. CA de personagem jogador (Escudo da Fé, cobertura): \`${MADDOX_ARMOR_CLASS_TOOL_NAMES.add}\`/\`${MADDOX_ARMOR_CLASS_TOOL_NAMES.remove}\`, que gravam na ficha e valem no próximo ataque.`,
     "Se o jogador aponta que o estado está errado e a regra confirma (ex.: venceu a Furtividade e não está Invisível; o card vai rolar sem a vantagem devida), corrija o estado E o card pendente agora, antes da rolagem. A vantagem e a desvantagem das condições o servidor aplica sozinho no card; use o `modo` do card só para a situação (terreno, surpresa, ajuda narrada).",
     "Rolagem já feita é definitiva: nunca diga que ela não vale nem peça para rolar de novo. O que você corrigir vale dali em diante.",
     `Sobre o card de ações (Ação, Ação bônus, Encerrar turno) ou de quem é a vez: só afirme o que \`${MADDOX_COMBAT_FIX_TOOL_NAMES[0]}\` devolveu em \`vez\` — nunca diga que o card está aberto ou que a vez começou sem essa leitura. Se \`vez.aberta\` for false e o motivo mandar retomar, chame \`${MADDOX_COMBAT_FIX_TOOL_NAMES[5]}\` e diga só o que ela devolveu.`,
@@ -769,6 +779,7 @@ export const MADDOX_REST_RULE = [
     "- Concluído: o servidor prepara as fichas pela regra e pelo catálogo, os jogadores rolam os dados de vida (curto) e pedem as trocas que a classe permite; você só narra o descanso. Não use durante um combate.",
     "## Exaustão",
     "- A exaustão (0 a 6) fica na ficha: cada nível tira 2 de todo teste de d20, e no nível 6 o personagem morre. Quando a história causar ou aliviar exaustão (marcha forçada, fome, frio, magia), chame `update_character_exhaustion` com a variação e o motivo. O descanso longo concluído já tira 1 nível.",
+    MADDOX_ARMOR_CLASS_RULE,
 ].join("\n")
 
 // ── Transcrição recente ────────────────────────────────────────────────────────

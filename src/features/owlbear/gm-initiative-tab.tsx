@@ -7,6 +7,7 @@ import { toast } from "sonner"
 import { cn } from "@/core/utils"
 import { GlassImage } from "@/components/ui/glass-image"
 import type { CharacterSheetFull } from "@/features/character-sheets/types/character-sheet.types"
+import { sumArmorClassBonuses } from "@/features/character-sheets/utils/armor-class-bonuses"
 import { NpcPreview } from "@/features/monsters/components/npc-preview"
 import { rarityColors } from "@/lib/config/colors"
 import { getHpBarColor, hpPercent } from "./hp-bar-utils"
@@ -81,7 +82,7 @@ function getPlayerArmorClass(sheet: CharacterSheetFull) {
     if (typeof sheet.armorClassOverride === "number") return sheet.armorClassOverride
 
     const dexterityModifier = Math.floor((sheet.dexterity - 10) / 2)
-    return 10 + dexterityModifier + (sheet.armorClassBonus ?? 0)
+    return 10 + dexterityModifier + sumArmorClassBonuses(sheet.armorClassBonuses)
 }
 
 function NpcAvatar({ npc }: { npc: OwlbearRoomNpc }) {

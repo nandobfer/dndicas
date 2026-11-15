@@ -2,8 +2,8 @@
 
 import { memberAvatarContext } from "../../constants"
 import { useState } from "react"
-import { Crown, Dices, SkipForward, Users } from "lucide-react"
-import { Button } from "@/components/ui/opex/button"
+import { Crown, Dices, Shield, SkipForward, Users } from "lucide-react"
+import { IconAction } from "@/components/ui/opex/icon-action"
 import { ConfirmDialog } from "@/components/ui/opex/confirm-dialog"
 import { GlassCard as Card, GlassCardContent as CardContent, GlassCardHeader as CardHeader, GlassCardTitle as CardTitle } from "@/components/ui/glass-card"
 import { rarityColors } from "@/lib/config/colors"
@@ -12,6 +12,7 @@ import { MADDOX_SEAT_LABELS, seatStatus, type MaddoxSeatStatus } from "../../gam
 import type { MaddoxGamePresence } from "../../hooks/useMaddoxGame"
 import { MemberAvatar, OpexChip, RarityChip } from "../campaigns/campaign-visuals"
 import { XpBar } from "../campaigns/XpBar"
+import { CalcTooltip } from "@/features/character-sheets/components/calc-tooltip"
 
 /** Cor de raridade de cada situação no turno. */
 export const SEAT_COLORS: Record<MaddoxSeatStatus, string> = {
@@ -56,8 +57,8 @@ export function TurnPanel({ state, presence, color, skipping, onSkip, rollingFor
                         const seat = seatStatus(participant, state, presence)
                         const online = presence.online.has(participant.userId)
                         return (
-                            <li key={participant.memberId} className="flex flex-wrap items-center gap-2.5 py-2.5" data-testid={`seat-${participant.memberId}`}>
-                                <div className="relative">
+                            <li key={participant.memberId} className="flex items-start gap-2.5 py-2.5" data-testid={`seat-${participant.memberId}`}>
+                                <div className="relative shrink-0">
                                     <MemberAvatar name={participant.characterName ?? participant.name} imageUrl={participant.portraitUrl} color={color} context={memberAvatarContext({ opex: participant.opex, role: participant.role, playerName: participant.name })} className="h-9 w-9" />
                                     {presence.available && !participant.opex && (
                                         <span
@@ -68,33 +69,34 @@ export function TurnPanel({ state, presence, color, skipping, onSkip, rollingFor
                                         />
                                     )}
                                 </div>
-                                <div className="min-w-0 flex-1">
-                                    <p className="flex items-center gap-1.5 truncate text-sm font-medium text-white">
-                                        {participant.characterName || (participant.opex ? "Personagem Opex em criação" : "Personagem ainda não criado")}
+                                <div className="min-w-0 flex-1 space-y-1">
+                                    <p className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 break-words text-sm font-medium leading-snug text-white" data-testid="seat-character-name">
+                                        <span className="min-w-0 break-words">{participant.characterName || (participant.opex ? "Personagem Opex em criação" : "Personagem ainda não criado")}</span>
                                         {participant.opex && <OpexChip />}
                                     </p>
-                                    <p className="flex items-center gap-1 truncate text-xs text-white/60">
-                                        {participant.role === "owner" && <Crown className="h-3 w-3" style={{ color: rarityColors.legendary }} aria-label="Dono" />}
-                                        {participant.name}
-                                        {participant.memberId === state.me.memberId ? " · você" : ""}
+                                    <p className="flex flex-wrap items-center gap-1 break-words text-xs text-white/60">
+                                        {participant.role === "owner" && <Crown className="h-3 w-3 shrink-0" style={{ color: rarityColors.legendary }} aria-label="Dono" />}
+                                        <span className="min-w-0 break-words">
+                                            {participant.name}
+                                            {participant.memberId === state.me.memberId ? " · você" : ""}
+                                        </span>
                                     </p>
+                                    {(participant.armorClass || !participant.opex) && (
+                                        <div className="flex flex-wrap items-center gap-1.5">
+                                            {participant.armorClass && <ArmorClassChip armorClass={participant.armorClass} characterName={participant.characterName ?? participant.name} />}
+                                            {!participant.opex && <RarityChip color={SEAT_COLORS[seat]}>{MADDOX_SEAT_LABELS[seat]}</RarityChip>}
+                                        </div>
+                                    )}
                                     <XpBar xp={participant.xp} color={color} />
                                 </div>
-                                {!participant.opex && <RarityChip color={SEAT_COLORS[seat]}>{MADDOX_SEAT_LABELS[seat]}</RarityChip>}
-                                {canRollFor &&
-                                    participant.memberId !== state.me.memberId &&
-                                    state.turn.pendingChecks
-                                        .filter((check) => check.memberId === participant.memberId)
-                                        .map((check) => (
-                                            <Button key={check.checkId} size="sm" variant="ghost" onClick={() => setConfirmingRoll({ checkId: check.checkId, characterName: check.characterName })} aria-label={`Rolar no lugar de ${check.characterName}`} disabled={rollingFor}>
-                                                <Dices aria-hidden /> Rolar no lugar
-                                            </Button>
-                                        ))}
-                                {canSkip && participant.eligible && !participant.declared && (
-                                    <Button size="sm" variant="ghost" onClick={() => setConfirming(participant)} aria-label={`Pular ${participant.characterName ?? participant.name}`} disabled={skipping}>
-                                        <SkipForward aria-hidden /> Pular
-                                    </Button>
-                                )}
+                                <div className="flex shrink-0 items-center gap-0.5">
+                                    {canRollFor &&
+                                        participant.memberId !== state.me.memberId &&
+                                        state.turn.pendingChecks
+                                            .filter((check) => check.memberId === participant.memberId)
+                                            .map((check) => <IconAction key={check.checkId} icon={Dices} label={`Rolar no lugar de ${check.characterName}`} busy={rollingFor} onClick={() => setConfirmingRoll({ checkId: check.checkId, characterName: check.characterName })} />)}
+                                    {canSkip && participant.eligible && !participant.declared && <IconAction icon={SkipForward} label={`Pular a vez de ${participant.characterName ?? participant.name}`} busy={skipping} onClick={() => setConfirming(participant)} />}
+                                </div>
                             </li>
                         )
                     })}
@@ -130,5 +132,25 @@ export function TurnPanel({ state, presence, color, skipping, onSkip, rollingFor
                 }}
             />
         </Card>
+    )
+}
+
+/** DND-66: CA do personagem (valor grande) com a conta por parcela no tooltip — cada bônus nomeado pelo nome. */
+function ArmorClassChip({ armorClass, characterName }: { armorClass: NonNullable<MaddoxGameParticipantDto["armorClass"]>; characterName: string }) {
+    const description = armorClass.parts.map((part) => `${part.label} ${part.value}`).join(", ")
+    return (
+        <CalcTooltip formula={armorClass.formula} parts={armorClass.parts} result={String(armorClass.value)}>
+            <span
+                tabIndex={0}
+                role="img"
+                aria-label={`CA de ${characterName}: ${armorClass.value}${description ? ` (${description})` : ""}`}
+                data-testid="seat-armor-class"
+                className="inline-flex items-center gap-1 rounded-md border border-white/15 bg-white/[0.06] px-1.5 py-0.5 text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            >
+                <Shield className="h-3.5 w-3.5 text-white/70" aria-hidden />
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-white/60">CA</span>
+                <span className="text-base font-bold leading-none tabular-nums">{armorClass.value}</span>
+            </span>
+        </CalcTooltip>
     )
 }

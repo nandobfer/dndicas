@@ -358,6 +358,15 @@ export interface MonsterActionInput {
     reacao?: boolean
 }
 
+/** A CA da ficha agora (bônus nomeados recém-gravados), também na cópia de trabalho para o `get_combat`. */
+async function refreshCharacterArmorClass(workspace: TacticalWorkspace, key: string, sheetId: string | null): Promise<void> {
+    const sheet = workspace.sheets[key]
+    if (!sheet || !sheetId) return
+    const { loadArmorClass } = await import("./armor-class-bonuses")
+    const current = await loadArmorClass(sheetId)
+    if (current !== null) sheet.armorClass = current
+}
+
 /** Ataque, salvaguarda ou outra ação de um adversário: o servidor rola e aplica (na cópia). */
 export async function monsterAction(campaignId: Types.ObjectId, jobId: string, turnNumber: number, input: MonsterActionInput): Promise<Record<string, unknown>> {
     const workspace = await workspaceOf(campaignId, jobId, turnNumber)
@@ -378,6 +387,8 @@ export async function monsterAction(campaignId: Types.ObjectId, jobId: string, t
         const ranged = action.ranged
         const computed = attackMode({ attacker: attacker.state, target: target.state, ranged, helped: Boolean(attacker.state.flags.helped) })
         const mode = combineModes(computed.mode === "advantage" || asked === "advantage", computed.mode === "disadvantage" || asked === "disadvantage")
+        // DND-66: a CA do personagem é relida da ficha NA HORA (bônus aplicado no meio deste job ou por uma pergunta).
+        if (target.kind === "character") await refreshCharacterArmorClass(workspace, target.key, target.state.sheetId)
         const ac = target.kind === "character" ? (workspace.sheets[target.key]?.armorClass ?? 10) + (target.state.flags.shield ? 5 : 0) : target.state.stats.ac
         const attackRoll = await rollExpression(d20Expression(action.bonus ?? 0), { mode, label: `${attacker.name} · ${action.name}`, modifierParts: monsterAttackParts(action.bonus ?? 0) })
         // DND-49: a Maestria Drenar vale para a PRÓXIMA jogada de ataque do adversário.
@@ -644,6 +655,9 @@ export async function tacticalView(campaignId: Types.ObjectId, jobId: string | u
     const combat = workspace?.combat ?? (await findActiveTactical(campaignId))
     if (!combat) return null
     const sheets = workspace?.sheets ?? {}
+    // DND-66: CA da ficha agora, com a conta (bônus nomeados pelo nome).
+    const { loadArmorClassSummaries } = await import("./armor-class-bonuses")
+    const armor = await loadArmorClassSummaries(combat.tactical.characters.map((state) => state.sheetId).filter((id): id is string => Boolean(id)))
     return {
         titulo: combat.title,
         fase: combat.tactical.phase,
@@ -660,7 +674,7 @@ export async function tacticalView(campaignId: Types.ObjectId, jobId: string | u
             if (actor.state.flags.slowed) conditions.push(`Lentidão de ${actor.state.flags.slowed.byName} (−3 m de deslocamento)`)
             if (actor.kind === "character") {
                 const hp = sheets[actor.key]
-                return { nome: actor.name, tipo: "personagem", iniciativa: slot.total, ...(hp ? { pv: `${hp.hp}/${hp.hpMax}`, ca: hp.armorClass } : {}), condicoes: conditions, ...(actor.state.dead ? { morto: true } : actor.state.hpZero ? { morrendo: !actor.state.stable, estavel: actor.state.stable } : {}), ...(actor.state.concentration ? { concentracao: actor.state.concentration.spell } : {}) }
+                return { nome: actor.name, tipo: "personagem", iniciativa: slot.total, ...(hp ? { pv: `${hp.hp}/${hp.hpMax}`, ca: (actor.state.sheetId ? armor.get(actor.state.sheetId)?.value : undefined) ?? hp.armorClass } : {}), ...(actor.state.sheetId && armor.get(actor.state.sheetId) ? { contaDaCA: armor.get(actor.state.sheetId)!.formula } : {}), ...(actor.state.flags.shield ? { escudoReacao: "+5 de CA (Escudo) até o começo do próximo turno" } : {}), condicoes: conditions, ...(actor.state.dead ? { morto: true } : actor.state.hpZero ? { morrendo: !actor.state.stable, estavel: actor.state.stable } : {}), ...(actor.state.concentration ? { concentracao: actor.state.concentration.spell } : {}) }
             }
             const stats = actor.state.stats
             // DND-42: a descrição (ex.: "bêbado, desvantagem nos ataques") volta a cada bloco para o Maddox manter a penalidade da ficção.

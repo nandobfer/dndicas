@@ -1,5 +1,6 @@
 import mongoose, { Schema, Document } from "mongoose"
 import type { AttributeType, SkillName } from "../types/character-sheet.types"
+import type { ArmorClassBonus } from "../utils/armor-class-bonuses"
 
 export interface ICharacterSheet extends Document {
     _id: mongoose.Types.ObjectId
@@ -46,7 +47,7 @@ export interface ICharacterSheet extends Document {
     deathSavesFailure: number
     exhaustion: number
     armorClassOverride: number | null
-    armorClassBonus: number | null
+    armorClassBonuses: ArmorClassBonus[]
     unarmoredDefense: { enabled: boolean; base: number; attributes: AttributeType[] }
     initiativeOverride: number | null
     initiativeProficiency: boolean
@@ -153,7 +154,8 @@ const CharacterSheetSchema = new Schema<ICharacterSheet>(
         deathSavesFailure: { type: Number, default: 0, min: 0, max: 3 },
         exhaustion: { type: Number, default: 0, min: 0, max: 6 },
         armorClassOverride: { type: Number, default: null },
-        armorClassBonus: { type: Number, default: null },
+        // DND-66: bônus de CA nomeados (validados por `armorClassBonusSchema` em quem grava).
+        armorClassBonuses: { type: Schema.Types.Mixed, default: () => [] },
         unarmoredDefense: {
             type: new Schema(
                 {

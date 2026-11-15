@@ -134,6 +134,7 @@ async function applyStart(campaign: CampaignRef, turnNumber: number, event: Extr
             (await linkCombatant(campaign._id, { ...item, name: item.individual, quantity: 1, registerNpc: item.registerNpc && item.quantity <= 1 })).npcId,
         )
         if (!plan) return null
+        await (await import("./armor-class-bonuses")).staleCombatArmorClassBonuses(campaign._id, plan.combatId)
         extra.push(...plan.initiativeMessages)
         return { event: "start", combatId: plan.combatId }
     }
@@ -142,6 +143,7 @@ async function applyStart(campaign: CampaignRef, turnNumber: number, event: Extr
     try {
         const created = await MaddoxCombatModel.create({ campaignId: campaign._id, status: "active", title: event.title, location: event.location, startedTurn: turnNumber, combatants })
         log.info({ campaignId: String(campaign._id), combatId: String(created._id), turnNumber, combatants: combatants.length }, "[maddox] combate começou")
+        await (await import("./armor-class-bonuses")).staleCombatArmorClassBonuses(campaign._id, created._id)
         return { event: "start", combatId: created._id }
     } catch (error) {
         // Índice único parcial: outro início venceu a corrida — o combate ativo é o dele (o card já existe).
@@ -308,6 +310,8 @@ async function afterCombatEnded(campaign: CampaignRef, combat: IMaddoxCombat, tu
     await step("characters", async () => {
         for (const state of combat.characterOutcomes) await MaddoxCharacterModel.updateOne({ _id: state.characterId, campaignId: campaign._id }, { $set: { currentState: state.condition, currentStatePublic: true } })
     })
+    // DND-66: bônus de CA "até o fim do combate", por rodadas ou por concentração saem com o combate.
+    await step("armor-class-bonuses", async () => (await import("./armor-class-bonuses")).endCombatArmorClassBonuses(campaign._id, combat._id))
     await step("memory", () => saveCombatMemory(campaign._id, combat, turnNumber))
     await step("rewards", () => applyCombatRewards(campaign, combat._id))
     await step("image", () => onCombatEnded(combat))

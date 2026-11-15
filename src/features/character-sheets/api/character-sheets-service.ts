@@ -147,7 +147,7 @@ export async function getAllSheetsForAdmin(search?: string, page = 1, limit = 10
                             hpCurrent: 1,
                             hpMax: 1,
                             armorClassOverride: 1,
-                            armorClassBonus: 1,
+                            armorClassBonuses: 1,
                             unarmoredDefense: 1,
                             createdAt: 1,
                             updatedAt: 1,
@@ -188,7 +188,7 @@ export async function getAllSheetsForAdmin(search?: string, page = 1, limit = 10
         hpCurrent?: number | null
         hpMax?: number | null
         armorClassOverride?: number | null
-        armorClassBonus?: number | null
+        armorClassBonuses?: CharacterSheetType["armorClassBonuses"] | null
         unarmoredDefense?: CharacterSheetType["unarmoredDefense"] | null
         createdAt: Date | string
         updatedAt: Date | string
@@ -214,7 +214,7 @@ export async function getAllSheetsForAdmin(search?: string, page = 1, limit = 10
             wisdom: item.wisdom ?? 10,
             charisma: item.charisma ?? 10,
             armorClassOverride: item.armorClassOverride ?? null,
-            armorClassBonus: item.armorClassBonus ?? null,
+            armorClassBonuses: item.armorClassBonuses ?? [],
             unarmoredDefense: item.unarmoredDefense ?? null,
         } as CharacterSheetType, equippedItems)
 

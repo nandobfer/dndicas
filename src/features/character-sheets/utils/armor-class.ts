@@ -1,5 +1,6 @@
 import type { CharacterItem, CharacterSheet } from "../types/character-sheet.types"
-import { getArmorClass } from "./dnd-calculations"
+import { armorClassBonusParts } from "./armor-class-bonuses"
+import { getArmorClass, type CalcResult } from "./dnd-calculations"
 
 /**
  * CA calculada da ficha a partir dos itens equipados (armadura base, escudos e bônus), a mesma conta da listagem de fichas.
@@ -7,7 +8,7 @@ import { getArmorClass } from "./dnd-calculations"
  */
 
 export type ArmorClassSheet = Pick<CharacterSheet, "strength" | "dexterity" | "constitution" | "intelligence" | "wisdom" | "charisma"> &
-    Partial<Pick<CharacterSheet, "armorClassOverride" | "armorClassBonus" | "unarmoredDefense">>
+    Partial<Pick<CharacterSheet, "armorClassOverride" | "armorClassBonuses" | "unarmoredDefense">>
 
 export type ArmorClassItem = Pick<CharacterItem, "name" | "equipped"> &
     Partial<Pick<CharacterItem, "catalogItemType" | "catalogAcType" | "catalogAc" | "catalogAcBonus" | "catalogArmorType">>
@@ -24,6 +25,11 @@ function armorClassBonusValue(item: ArmorClassItem): number | null {
 
 /** `items` são os itens da própria ficha (os não equipados são ignorados). */
 export function computeSheetArmorClass(sheet: ArmorClassSheet, items: readonly ArmorClassItem[]): number {
+    return computeSheetArmorClassCalc(sheet, items).value
+}
+
+/** A mesma conta com as parcelas (base, DES, itens e cada bônus nomeado) para o tooltip (DND-66). */
+export function computeSheetArmorClassCalc(sheet: ArmorClassSheet, items: readonly ArmorClassItem[]): CalcResult {
     const equippedArmor = items.find((item) => item.equipped && item.catalogItemType === "armadura" && item.catalogAcType === "base" && item.catalogAc != null) ?? null
     const armorClassBonusSources = items
         .filter((item) => item.equipped)
@@ -34,8 +40,8 @@ export function computeSheetArmorClass(sheet: ArmorClassSheet, items: readonly A
         sheet.armorClassOverride ?? null,
         equippedArmor ? { name: stripHtml(equippedArmor.name) || "Armadura", ac: equippedArmor.catalogAc ?? null, armorType: equippedArmor.catalogArmorType ?? null } : null,
         armorClassBonusSources,
-        sheet.armorClassBonus ?? null,
+        armorClassBonusParts(sheet.armorClassBonuses),
         sheet.unarmoredDefense ?? null,
         { strength: sheet.strength, dexterity: sheet.dexterity, constitution: sheet.constitution, intelligence: sheet.intelligence, wisdom: sheet.wisdom, charisma: sheet.charisma },
-    ).value
+    )
 }

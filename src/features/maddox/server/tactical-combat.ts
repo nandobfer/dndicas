@@ -92,7 +92,10 @@ export async function saveTactical(combat: TacticalCombat): Promise<TacticalComb
         { returnDocument: "after" },
     ).lean<IMaddoxCombat>()
     if (!saved || !isTactical(saved)) throw new DomainError(409, "O combate mudou enquanto você agia. Tente de novo.", "COMBAT_CHANGED")
-    return normalizeTactical(saved)
+    const normalized = normalizeTactical(saved)
+    // DND-66: bônus de CA por rodadas ou concentração vencem logo depois da gravação que mudou a rodada ou a concentração.
+    await (await import("./armor-class-bonuses")).expireCombatArmorClassBonuses(normalized)
+    return normalized
 }
 
 /** Carrega, muda e grava (até 3 tentativas em corrida). `mutate` só muda o objeto; efeitos fora do combate vêm depois. */

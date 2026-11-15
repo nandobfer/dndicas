@@ -1,4 +1,5 @@
 import { useMemo } from "react"
+import { armorClassBonusParts } from "../utils/armor-class-bonuses"
 import {
     getProficiencyBonus,
     getAttributeModifier,
@@ -65,7 +66,7 @@ export function useCharacterCalculations(sheet: CharacterSheet, opts?: UseCharac
             sheet.armorClassOverride,
             opts?.equippedArmor,
             opts?.armorClassBonusSources,
-            sheet.armorClassBonus,
+            armorClassBonusParts(sheet.armorClassBonuses),
             sheet.unarmoredDefense,
             attributes,
         )
