@@ -109,10 +109,12 @@ export async function applyLevelUp(sheetId: string, choices: LevelUpChoices, act
     const resources = await nextResourceCharges(ctx, fields, target, nextScores)
     const slots = nextSpellSlots(ctx, target, subclass)
     const hpMax = Math.max(1, Number(ctx.sheet.hpMax ?? 0) + hpGain + hpExtra)
+    const hpCurrent = levelUpHpCurrent(ctx.sheet.hpCurrent ?? null, hpMax, hpMax - Number(ctx.sheet.hpMax ?? 0))
     const set: Record<string, unknown> = {
         level: target,
-        // Como o wizard da ficha sempre fez: o PV máximo sobe e o atual fica como está.
+        // O PV máximo sobe e o atual sobe junto, preservando o dano já sofrido (DND-64).
         hpMax,
+        ...(hpCurrent !== null ? { hpCurrent } : {}),
         classFeatures: fields.classFeatures,
         speciesTraits: fields.speciesTraits,
         featuresNotes: fields.featuresNotes,
@@ -180,8 +182,8 @@ export async function applyLevelUp(sheetId: string, choices: LevelUpChoices, act
         entidade: LEVEL_UP_AUDIT_ENTITY,
         entidadeId: String(sheetObjectId),
         acao: AcaoAuditoria.ATUALIZAR,
-        antes: { level: current, hpMax: ctx.sheet.hpMax ?? null },
-        depois: { level: target, by: actor.by, ...(actor.context ?? {}), gains },
+        antes: { level: current, hpMax: ctx.sheet.hpMax ?? null, hpCurrent: ctx.sheet.hpCurrent ?? null },
+        depois: { level: target, by: actor.by, ...(actor.context ?? {}), hpCurrent, gains },
     }).catch((error: unknown) => log.warn({ err: error instanceof Error ? error.message : String(error), sheetId }, "[ficha] falha ao auditar a subida de nível"))
     await publishLevelUp(String(sheetObjectId), events)
     return { gains }
@@ -207,4 +209,14 @@ async function publishLevelUp(sheetId: string, events: { name: "spells" | "attac
     } catch (error) {
         log.warn({ err: error instanceof Error ? error.message : String(error), sheetId }, "[ficha] falha ao avisar a subida de nível em tempo real")
     }
+}
+
+/**
+ * PV atual depois da subida (DND-64): sobe o mesmo tanto que o máximo, sem passar dele. Nulo continua nulo (vale o máximo)
+ * e 0 continua 0: o personagem caído não se levanta por subir de nível, só por cura ou descanso.
+ */
+export function levelUpHpCurrent(current: number | null, hpMax: number, increase: number): number | null {
+    if (current === null) return null
+    if (current <= 0) return current
+    return Math.min(hpMax, current + Math.max(0, increase))
 }

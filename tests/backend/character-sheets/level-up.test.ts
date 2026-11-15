@@ -223,17 +223,17 @@ describe("opções do próximo nível", () => {
 })
 
 describe("aplicar a subida", () => {
-    it("PV pela média, magia nova e traço: grava tudo, mantém o PV atual e audita", async () => {
+    it("PV pela média, magia nova e traço: grava tudo, sobe o PV atual junto (dano preservado) e audita", async () => {
         const f = await fixture()
         const id = await wizardSheet(f, 1, ["luz", "raio", "maos", "escudo", "misseis", "sono", "armadura"])
         const { gains } = await applyLevelUp(id, { targetLevel: 2, hp: { method: "average" }, spells: [String(f.spells.detectar)] }, { userId: "dono", by: "player" })
         expect(gains).toMatchObject({ fromLevel: 1, toLevel: 2, hp: { method: "average", gain: 5, hpMax: 13 }, traits: ["Erudito"], spells: ["Detectar Magia"] })
         const sheet = await CharacterSheet.findById(id).lean()
-        expect(sheet).toMatchObject({ level: 2, hpMax: 13, hpCurrent: 5 })
+        expect(sheet).toMatchObject({ level: 2, hpMax: 13, hpCurrent: 10 })
         expect(sheet!.spellSlots).toEqual({ "1": { total: 3, used: 1 } })
         expect(sheet!.classFeatures).toContain("Erudito")
         expect(await CharacterSpell.countDocuments({ sheetId: id, catalogSpellId: f.spells.detectar })).toBe(1)
-        expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({ entidade: "FichaPersonagem", entidadeId: id, acao: "ATUALIZAR" }))
+        expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({ entidade: "FichaPersonagem", entidadeId: id, acao: "ATUALIZAR", antes: expect.objectContaining({ hpMax: 8, hpCurrent: 5 }), depois: expect.objectContaining({ hpCurrent: 10 }) }))
         expect(sheetPusher.publishSheetPatched).toHaveBeenCalled()
     })
 
@@ -287,7 +287,7 @@ describe("aplicar a subida", () => {
         expect(gains.feat).toEqual({ name: "Aumento no Valor de Atributo", attributes: { intelligence: 1, constitution: 1 } })
         const sheet = await CharacterSheet.findById(id).lean()
         // Média do d6 (3) + CON (+2) = 5; CON 15→16 sobe o modificador de 2 para 3: +1 por nível (4).
-        expect(sheet).toMatchObject({ level: 4, intelligence: 20, constitution: 16, hpMax: 20 + 5 + 4 })
+        expect(sheet).toMatchObject({ level: 4, intelligence: 20, constitution: 16, hpMax: 20 + 5 + 4, hpCurrent: 5 + 5 + 4 })
         expect(sheet!.featuresNotes).toContain("Aumento no Valor de Atributo")
     })
 
@@ -311,6 +311,23 @@ describe("aplicar a subida", () => {
         const { gains } = await applyLevelUp(id, { targetLevel: 2, hp: { method: "roll" }, spells }, { userId: "dono", by: "opex" }, { rollDie })
         expect(rollDie).toHaveBeenCalledWith(6)
         expect(gains.hp).toEqual({ method: "roll", gain: 3, die: 1, hpMax: 11 })
+        expect((await CharacterSheet.findById(id).lean())!.hpCurrent).toBe(8)
+    })
+
+    it("PV atual: nulo continua nulo (vale o máximo), cheio continua cheio e 0 continua 0", async () => {
+        const f = await fixture()
+        const known = ["luz", "raio", "maos", "escudo", "misseis", "sono", "armadura"] as const
+        const choices = { targetLevel: 2, hp: { method: "average" as const }, spells: [String(f.spells.detectar)] }
+        const cases = [
+            { hpCurrent: null, expected: null },
+            { hpCurrent: 8, expected: 13 },
+            { hpCurrent: 0, expected: 0 },
+        ]
+        for (const { hpCurrent, expected } of cases) {
+            const id = await wizardSheet(f, 1, [...known], { hpCurrent })
+            await applyLevelUp(id, choices, { userId: "dono", by: "player" })
+            expect((await CharacterSheet.findById(id).lean())).toMatchObject({ hpMax: 13, hpCurrent: expected })
+        }
     })
 
     it("troca uma magia conhecida quando o Maddox permite", async () => {

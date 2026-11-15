@@ -150,14 +150,20 @@ function LevelUpSections({ sheetId, options, form, rolling, onRolling, onChange 
                     <div>
                         <p className="text-[10px] font-black uppercase tracking-[0.35em] text-white/45">PV máximo</p>
                         <p className="mt-1 text-2xl font-black text-white">
-                            {options.hpMax} -&gt; {options.hpMax + gain}
+                            {options.hpMax} -&gt; {gain === null ? "?" : options.hpMax + gain}
                         </p>
-                        <p className="text-sm text-white/70">
-                            Ganho de PV: <span className="font-bold text-white">{gain}</span>
-                        </p>
+                        {form.hpMethod === null ? (
+                            <p className="text-sm font-medium text-emerald-100" data-testid="level-up-hp-choose">
+                                Escolha como ganhar PV: a média ou a rolagem do dado de vida.
+                            </p>
+                        ) : (
+                            <p className="text-sm text-white/70">
+                                Ganho de PV: <span className="font-bold text-white">{gain ?? "?"}</span>. O PV atual sobe o mesmo tanto.
+                            </p>
+                        )}
                     </div>
                     <GlassSelector<"average" | "roll">
-                        value={form.hpMethod}
+                        value={form.hpMethod ?? undefined}
                         onChange={(value) => {
                             const method = value as "average" | "roll"
                             onChange({ hpMethod: method, ...(method === "average" ? { hpDie: null } : {}) })

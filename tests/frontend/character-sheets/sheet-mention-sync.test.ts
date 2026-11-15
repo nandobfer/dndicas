@@ -10,6 +10,7 @@ import type { CharacterClass } from "@/features/classes/types/classes.types"
 import type { ResolvedSubclass } from "@/features/character-sheets/utils/mention-sync"
 import { mapCatalogAttributeToSheetAttribute, mapSpellSlotsForLevel } from "@/features/character-sheets/utils/mention-sync"
 import { getAvailableSpellSlotLevels } from "@/features/character-sheets/utils/spell-slots"
+import { levelOneHitPointsPatch } from "@/features/character-sheets/utils/sheet-rules"
 
 describe("getLevelOneHpMax", () => {
     it("uses the full class hit die plus Constitution modifier", () => {
@@ -18,6 +19,30 @@ describe("getLevelOneHpMax", () => {
 
     it("never returns less than 1 hit point", () => {
         expect(getLevelOneHpMax("d6", -10)).toBe(1)
+    })
+})
+
+describe("PV do nível 1 na sincronização (DND-64)", () => {
+    it("abrir a ficha com dano (12/30) não mexe no PV atual: nada entra no patch", () => {
+        expect(levelOneHitPointsPatch({ nextHpMax: 30, currentHpMax: 30, currentHpCurrent: 12 })).toEqual({})
+    })
+
+    it("PV atual 0 (caído no combate) continua 0", () => {
+        expect(levelOneHitPointsPatch({ nextHpMax: 30, currentHpMax: 30, currentHpCurrent: 0 })).toEqual({})
+    })
+
+    it("ficha nova (PV atual nulo) recebe o máximo; com o valor gravado, não recebe de novo", () => {
+        expect(levelOneHitPointsPatch({ nextHpMax: 12, currentHpMax: null, currentHpCurrent: null })).toEqual({ hpMax: 12, hpCurrent: 12 })
+        expect(levelOneHitPointsPatch({ nextHpMax: 12, currentHpMax: 12, currentHpCurrent: 12 })).toEqual({})
+    })
+
+    it("troca de classe recalcula o máximo e mantém o número do PV atual", () => {
+        expect(levelOneHitPointsPatch({ nextHpMax: 24, currentHpMax: 30, currentHpCurrent: 12 })).toEqual({ hpMax: 24 })
+        expect(levelOneHitPointsPatch({ nextHpMax: 30, currentHpMax: 24, currentHpCurrent: 24 })).toEqual({ hpMax: 30 })
+    })
+
+    it("o PV atual só baixa quando passa do novo máximo", () => {
+        expect(levelOneHitPointsPatch({ nextHpMax: 24, currentHpMax: 30, currentHpCurrent: 30 })).toEqual({ hpMax: 24, hpCurrent: 24 })
     })
 })
 

@@ -35,7 +35,7 @@ import {
 } from "../utils/mention-sync"
 import { useCharacterCalculations } from "./use-character-calculations"
 import { buildBoundResourceCharge, syncResourceChargeRows } from "../utils/resource-charges"
-import { getLevelOneHpMax } from "../utils/sheet-rules"
+import { getLevelOneHpMax, levelOneHitPointsPatch } from "../utils/sheet-rules"
 
 interface UseSheetMentionSyncProps {
     sheet: CharacterSheet
@@ -317,8 +317,7 @@ export function useSheetMentionSync({ sheet, form, isReadOnly = false }: UseShee
                 assignIfChanged(patch, "hitDiceTotal", nextHitDice, currentHitDiceTotal)
             }
             if (nextLevelOneHpMax != null) {
-                assignIfChanged(patch, "hpMax", nextLevelOneHpMax, currentHpMax)
-                assignIfChanged(patch, "hpCurrent", nextLevelOneHpMax, currentHpCurrent)
+                Object.assign(patch, levelOneHitPointsPatch({ nextHpMax: nextLevelOneHpMax, currentHpMax, currentHpCurrent }))
             }
 
             // ── Saving throws (class-contributed, ownership-aware) ──────────────

@@ -81,6 +81,8 @@ const caster = (): LevelUpOptions => ({
     scores: { strength: 8, dexterity: 14, constitution: 14, intelligence: 17, wisdom: 12, charisma: 10 },
 })
 
+const chooseAverage = () => fireEvent.click(within(screen.getByTestId("level-up-hp")).getByRole("button", { name: "Média (5)" }))
+
 function renderWizard(onOpenChange = vi.fn(), onDone = vi.fn()) {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     render(
@@ -98,9 +100,25 @@ beforeEach(() => {
 })
 
 describe("LevelUpWizard", () => {
+    it("PV sem escolha marcada: avisa e não envia até o jogador escolher a média ou a rolagem", async () => {
+        mocks.options = { ...caster(), subclass: { required: false, options: [], current: null }, spells: null }
+        renderWizard()
+        expect(screen.getByText("13 -> ?")).toBeInTheDocument()
+        expect(screen.getByTestId("level-up-hp-choose")).toHaveTextContent("Escolha como ganhar PV")
+        fireEvent.click(screen.getByRole("button", { name: "Confirmar" }))
+        expect(screen.getByRole("alert")).toHaveTextContent("Escolha como ganhar PV: a média ou a rolagem do dado de vida.")
+        expect(mocks.mutateAsync).not.toHaveBeenCalled()
+        chooseAverage()
+        expect(screen.getByText("13 -> 18")).toBeInTheDocument()
+        expect(screen.getByTestId("level-up-hp")).toHaveTextContent("O PV atual sobe o mesmo tanto.")
+        fireEvent.click(screen.getByRole("button", { name: "Confirmar" }))
+        await waitFor(() => expect(mocks.mutateAsync).toHaveBeenCalledWith(expect.objectContaining({ hp: { method: "average" } })))
+    })
+
     it("mostra PV, subclasse, traços, magias e recursos; sem a subclasse, avisa e não envia", async () => {
         renderWizard()
         expect(screen.getByText("Nível 2 -> 3")).toBeInTheDocument()
+        chooseAverage()
         expect(screen.getByText("13 -> 18")).toBeInTheDocument()
         expect(screen.getByTestId("level-up-spells")).toHaveTextContent("Até o 2º círculo")
         expect(screen.getByTestId("level-up-resources")).toHaveTextContent("Recuperação Arcana")
@@ -113,6 +131,7 @@ describe("LevelUpWizard", () => {
 
     it("subclasse, truque, magias com limite e troca opcional: envia as escolhas e fecha", async () => {
         const { onOpenChange, onDone } = renderWizard()
+        chooseAverage()
         fireEvent.click(within(screen.getByTestId("level-up-subclass")).getByRole("option", { name: "Evocador" }))
         expect(mocks.subclassArgs.at(-1)).toBe("sub-1")
         expect(await screen.findByText("Traço t-2")).toBeInTheDocument()
@@ -152,6 +171,7 @@ describe("LevelUpWizard", () => {
         mocks.mutateAsync.mockRejectedValueOnce(new Error("A ficha mudou de nível enquanto isso. Abra o wizard de novo."))
         renderWizard()
         expect(screen.queryByTestId("level-up-spells")).not.toBeInTheDocument()
+        chooseAverage()
         fireEvent.click(within(screen.getByTestId("level-up-feat")).getByRole("option", { name: "Aumento no Valor de Atributo" }))
         fireEvent.click(screen.getByRole("button", { name: "Confirmar" }))
         expect(screen.getByRole("alert")).toHaveTextContent("Distribua +2 em um atributo ou +1 em dois.")

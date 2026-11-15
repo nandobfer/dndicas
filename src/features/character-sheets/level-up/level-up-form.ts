@@ -7,7 +7,8 @@ import type { LevelUpChoices, LevelUpOptions } from "./level-up-types"
  */
 
 export interface LevelUpFormState {
-    hpMethod: "average" | "roll"
+    /** Como ganhar PV; nulo até o jogador escolher (a média não vem marcada: DND-64). */
+    hpMethod: "average" | "roll" | null
     /** Resultado do dado rolado na tela (sem CON). */
     hpDie: number | null
     subclassId: string | null
@@ -19,12 +20,13 @@ export interface LevelUpFormState {
     swapAdd: string | null
 }
 
-export const emptyLevelUpForm = (): LevelUpFormState => ({ hpMethod: "average", hpDie: null, subclassId: null, featId: null, featAttributes: {}, cantrips: [], spells: [], swapRemove: null, swapAdd: null })
+export const emptyLevelUpForm = (): LevelUpFormState => ({ hpMethod: null, hpDie: null, subclassId: null, featId: null, featAttributes: {}, cantrips: [], spells: [], swapRemove: null, swapAdd: null })
 
 export const ATTRIBUTE_LABELS: Record<AttributeType, string> = { strength: "Força", dexterity: "Destreza", constitution: "Constituição", intelligence: "Inteligência", wisdom: "Sabedoria", charisma: "Carisma" }
 
 /** O que falta para confirmar (`null` = pronto). */
 export function levelUpMissing(options: LevelUpOptions, form: LevelUpFormState): string | null {
+    if (form.hpMethod === null) return "Escolha como ganhar PV: a média ou a rolagem do dado de vida."
     if (form.hpMethod === "roll" && form.hpDie === null) return "Role o dado de vida ou escolha a média."
     if (options.subclass.required && !form.subclassId) return `Escolha uma subclasse para confirmar o nível ${options.targetLevel}.`
     if (options.feat) {
@@ -64,8 +66,9 @@ export function toggleLimited(list: readonly string[], id: string, limit: number
     return next.length > limit ? next.slice(next.length - limit) : next
 }
 
-/** Ganho de PV mostrado na tela (média ou dado + CON, mínimo 1). */
-export function previewHpGain(options: LevelUpOptions, form: LevelUpFormState): number {
-    if (form.hpMethod === "roll" && form.hpDie !== null) return Math.max(1, form.hpDie + options.constitutionModifier)
-    return options.hpAverage
+/** Ganho de PV mostrado na tela (média ou dado + CON, mínimo 1); `null` enquanto o jogador não escolheu ou não rolou. */
+export function previewHpGain(options: LevelUpOptions, form: LevelUpFormState): number | null {
+    if (form.hpMethod === "roll") return form.hpDie !== null ? Math.max(1, form.hpDie + options.constitutionModifier) : null
+    if (form.hpMethod === "average") return options.hpAverage
+    return null
 }
