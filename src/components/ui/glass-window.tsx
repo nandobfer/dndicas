@@ -111,12 +111,21 @@ export function GlassWindow({
     const isMobileMinimized = isMinimized && isMobile
     const isDesktopWindow = !isMinimized && !isMobile
 
+    const sizeRef = React.useRef(size)
+    sizeRef.current = size
+
     const measureBounds = React.useCallback(() => {
         if (typeof window === "undefined") return
-        // offsetWidth ignora o scale da animação de entrada; getBoundingClientRect mediria a janela encolhida.
+        // Depois de um redimensionamento manual a largura é um número: usa a largura pretendida (limitada ao
+        // maxWidth de 90vw), porque a largura animada pelo spring ainda está no meio do caminho e prenderia o X
+        // num limite errado. Senão, offsetWidth, que ignora o scale da animação de entrada.
+        const intendedWidth = sizeRef.current.width
+        const windowWidth = typeof intendedWidth === "number"
+            ? Math.min(intendedWidth, window.innerWidth * 0.9)
+            : windowRef.current?.offsetWidth ?? 0
         const next = getWindowDragBounds({
             viewportWidth: window.innerWidth,
-            windowWidth: windowRef.current?.offsetWidth ?? 0,
+            windowWidth,
             headerBottom: getHeaderBottom(),
         })
         setBounds((prev) => (
@@ -168,6 +177,7 @@ export function GlassWindow({
         // offsetWidth/offsetHeight dão o tamanho real em px mesmo quando o tamanho é "auto" ou em vw/vh.
         const startWidth = windowRef.current?.offsetWidth || 450
         const startHeight = windowRef.current?.offsetHeight || 300
+        let lastWidth = startWidth
         const viewportWidth = window.innerWidth
         const maxHeight = Math.max(0, window.innerHeight - bounds.top)
 
@@ -191,7 +201,9 @@ export function GlassWindow({
             
             const newHeight = Math.max(minH, Math.min(startHeight + (moveEvent.clientY - startY), maxHeight))
             
-            setSize({ width: newWidth, height: newHeight })
+            lastWidth = newWidth
+            sizeRef.current = { width: newWidth, height: newHeight }
+            setSize(sizeRef.current)
             if (corner === "bl") {
                 lastPosX = newPosX
                 setPos(prev => ({ ...prev, x: newPosX }))
@@ -205,7 +217,9 @@ export function GlassWindow({
             document.removeEventListener("pointermove", onPointerMove)
             document.removeEventListener("pointerup", onPointerUp)
             if (corner === "bl" && lastPosX !== startPosX) {
-                onPositionChangeRef.current?.(clampWindowPosition({ x: lastPosX, y: 0 }, boundsRef.current))
+                // Limite com a largura final pretendida: o offsetWidth medido ainda pode estar no meio da animação.
+                const finalBounds = getWindowDragBounds({ viewportWidth, windowWidth: lastWidth, headerBottom: boundsRef.current.top })
+                onPositionChangeRef.current?.(clampWindowPosition({ x: lastPosX, y: 0 }, finalBounds))
             }
             measureBounds()
         }

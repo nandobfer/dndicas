@@ -669,6 +669,11 @@ breadcrumb no header.
   e o minimizar sempre clicáveis) e o que abre de dentro dela continua por cima. Não suba a camada das janelas
   para `z-50` ou mais: os overlays abertos de dentro da janela passariam a ficar atrás dela. Também não suba os
   FABs acima de `z-[48]`.
+- **Painel de categorias do header:** ele não usa portal e vive dentro do `<header>` (`z-40`, que cria o próprio
+  contexto de empilhamento). Por isso o header usa `has-[#header-category-panel]:z-[49]`: só enquanto o painel está
+  aberto, o header inteiro sobe acima das janelas (`z-[48]`) e continua abaixo dos overlays (`z-50`). Fechado, ele
+  volta a `z-40`. Como o topo das janelas fica travado no fim do header, subir o header não cobre nenhuma janela. O
+  menu mobile e o menu do usuário usam portal (`z-[60]`/`z-[61]`) e não precisam disso.
 - O container (`data-testid="glass-windows-layer"`) é `pointer-events-none` e não tem `overflow-hidden` (a sombra
   não é cortada nas bordas); a janela tem `pointer-events: auto`. A barra de minimizadas
   (`data-testid="glass-windows-taskbar"`) começa na borda esquerda também no desktop (o recuo da antiga sidebar
@@ -681,6 +686,9 @@ breadcrumb no header.
   a janela passa pela mesma correção. A altura máxima é `calc(100dvh − fim do header)`.
 - **Redimensionamento:** o canto inferior-direito não passa da borda direita; o inferior-esquerdo mantém a borda
   direita parada e leva o X no máximo até 0; a altura não passa da parte de baixo da tela.
+  Depois de um redimensionamento manual, os limites usam a largura pretendida (limitada a 90vw), não o
+  `offsetWidth`, porque a largura é animada por spring e a medida ainda está no meio do caminho. O X gravado ao fim
+  do redimensionamento pelo canto esquerdo também usa a largura final.
 - **Mobile** (< 768 px) não mudou: a janela ocupa a largura abaixo do header, sem arraste.
 - Testes: `tests/frontend/components/glass-window-bounds.test.ts` e `glass-window.test.tsx`. Eles verificam as
   regras e as classes, mas não o leiaute real; a conferência no navegador (bordas, sombra, sobreposição com header e
