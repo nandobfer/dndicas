@@ -2229,10 +2229,13 @@ oportunidade; no combate, o nível vem da ficha (`exhaustionOfSheet`).
 Caso real: o Maddox disse "Registrei a condição em Lizwan" depois de gravar só texto (`update_character_state`), o combate seguiu sem
 `invisible` e o ataque saiu normal; depois ele "anulou" a rolagem em prosa. Correções:
 
-- **Estado ou silêncio:** `MADDOX_STATE_OR_SILENCE_RULE` (`narrator-prompt.ts`) entra em toda resposta a pergunta e a lembrete: só
+- **Estado ou silêncio (decisão do dono: prompt + retorno das ferramentas, sem bloquear a resposta):**
+  `MADDOX_STATE_OR_SILENCE_RULE` (`narrator-prompt.ts`) entra em toda resposta a pergunta e a lembrete: só
   afirmar mudança depois do retorno sem erro da ferramenta. `update_character_state` e `update_campaign_state` devolvem `aviso` quando
   o texto cita uma condição (`mentionedConditions`, `combat-rules.ts`) que o combate tático em andamento não tem. A regra da ficha
-  (`MADDOX_SHEET_FIX_TASK_RULES`) diz que `update_character_state` é só texto do Diário.
+  (`MADDOX_SHEET_FIX_TASK_RULES`) diz que `update_character_state` é só texto do Diário. Diagnóstico (só log): com `combatFix`, a resposta que
+  afirma ter registrado/removido uma condição (`unbackedConditionClaims`) sem nenhum `set_combat_condition` bem-sucedido no job
+  (`QuestionRun.conditionWrites`) gera o aviso `[maddox] resposta afirma condição do combate que não foi gravada`.
 - **Correção do combate na hora** (`server/question-combat-tools.ts`, nomes `MADDOX_COMBAT_FIX_TOOL_NAMES`): com combate tático
   ativo, a resposta (pergunta ou lembrete) recebe `combatFix` (`buildMaddoxAiTools` / lista do MCP) e a seção
   `MADDOX_COMBAT_FIX_TASK_RULES`. Só funcionam dentro do `questionRun(jobId)`; qualquer membro pode pedir, o mestre decide.
@@ -2240,9 +2243,11 @@ Caso real: o Maddox disse "Registrei a condição em Lizwan" depois de gravar s�
   - `set_combat_condition { alvo, condicao, remover?, duracaoRodadas?, esconderse?, cd?, motivo }` — regra pura
     `applyConditionChange` (a mesma do `apply_effect`, que também ganhou `esconderse`/`cd`).
   - `edit_combat_action { card? | ator?, modo?, alvo?, cancelar?, motivo }` — só card `pending` com `rollingStep: null`; `modo`
-    grava `situationalMode` no passo de ataque (entra em `attackMode` como `situational`); `cancelar` usa `cancelPendingAction`
-    (`byMaster`), que devolve a economia.
-  - `correct_combatant { adversario, pv?, ca?, foraDeCombate?, motivo }` e `correct_character_turn { personagem, acao?, acaoBonus?,
+    grava `situationalMode` no passo de ataque (entra em `attackMode` como `situational`); `cancelar` usa `cancelPendingAction`,
+    que devolve a economia — card que já gastou espaço de magia, carga ou item no envio (`cancellable: false`) é recusado
+    (o recurso não volta, então nem o mestre cancela).
+  - `correct_combatant { adversario, pv?, ca?, foraDeCombate?, motivo }` (a linha pública mostra o PV exato só com
+    `showEnemyHp`/`showAllyHp`; senão a faixa; a CA nunca — o número fica no retorno, na auditoria e no log) e `correct_character_turn { personagem, acao?, acaoBonus?,
     reacao?, ataquesRestantes?, esquivando?, desengajado?, disparada?, ajudado?, motivo }`.
   - Cada correção grava via `mutateTactical`, chama `refreshPendingAttackPreviews` (a prévia do card pendente já mostra
     "Vantagem: atacante invisível"), cria a linha pública `kind: "combat-fix"` (`CombatFixLine.tsx`; na transcrição do narrador
@@ -2258,7 +2263,7 @@ Caso real: o Maddox disse "Registrei a condição em Lizwan" depois de gravar s�
   Rolagem gravada é definitiva: a regra do combate tático proíbe dizer que ela "não vale".
 - **Esconder-se:** `CombatCondition.dc` = CD para ser encontrado; `hiddenCondition(dc)`, `isHiddenCondition` e
   `conditionDisplayLabel` ("Invisível (Esconder-se · CD 15)", usado no DTO da iniciativa e no `get_combat`) em `combat-rules.ts`. O card
-  `standard:hide` grava `dc = total`. Antes da luta (`server/stealth-start.ts`): `start_combat` aceita `escondidos`/`revelados`;
+  `standard:hide` grava `dc = total`. `esconderse: true` (`apply_effect`/`set_combat_condition`) não substitui uma Invisível de outra origem (magia). Antes da luta (`server/stealth-start.ts`): `start_combat` aceita `escondidos`/`revelados`;
   `loadStealthChecks` lê os testes de Furtividade `rolled` desde o fim do último combate e no máximo `STEALTH_START_LOOKBACK_TURNS` (5)
   turnos atrás; `decideStealthStart` aplica o sucesso do turno do combate sozinho, o de turno anterior só com o nome em `escondidos`
   (se ainda faz sentido na ficção), e tira os `revelados`. O plano vai em `tactical.hidden` do rascunho e `createTacticalCombat` põe a

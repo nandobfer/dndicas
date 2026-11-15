@@ -25,14 +25,14 @@ const NOT_IN_QUESTION = 'Esta ferramenta só funciona na resposta a uma pergunta
 
 interface FixContext {
     run: QuestionRun
-    campaign: Pick<IMaddoxCampaign, "_id" | "rigor" | "turn">
+    campaign: Pick<IMaddoxCampaign, "_id" | "rigor" | "turn" | "showEnemyHp" | "showAllyHp">
     combat: TacticalCombat
 }
 
 async function fixContext(jobId: string | undefined): Promise<FixContext> {
     const run = questionRun(jobId)
     if (!run) throw new QuestionCombatError(NOT_IN_QUESTION)
-    const campaign = await MaddoxCampaignModel.findById(run.campaignId).select("rigor turn").lean<Pick<IMaddoxCampaign, "_id" | "rigor" | "turn">>()
+    const campaign = await MaddoxCampaignModel.findById(run.campaignId).select("rigor turn showEnemyHp showAllyHp").lean<Pick<IMaddoxCampaign, "_id" | "rigor" | "turn" | "showEnemyHp" | "showAllyHp">>()
     if (!campaign || !MADDOX_TACTICAL_COMBAT_RIGORS.includes(campaign.rigor)) throw new QuestionCombatError("Esta campanha não usa combate tático.")
     const combat = await findActiveTactical(campaign._id)
     if (!combat) throw new QuestionCombatError("Não há combate tático em andamento: nada a corrigir no combate.")
@@ -155,6 +155,7 @@ export async function setCombatCondition(jobId: string | undefined, input: SetCo
         return { line: change.line, changed: change.changed, name: target.name, conditions: target.state.conditions.map(conditionDisplayLabel) }
     })
     if (!outcome.changed) return { aplicado: false, resultado: outcome.line, condicoes: outcome.conditions, nota: "Nada mudou no combate: diga isso ao jogador." }
+    context.run.conditionWrites = (context.run.conditionWrites ?? 0) + 1
     const line = `${outcome.line}${!input.remover && input.duracaoRodadas ? ` por ${input.duracaoRodadas} rodada(s)` : ""} — ${input.motivo.trim()}`
     await commitFix(context, "set_combat_condition", line, { target: outcome.name, condition: key, remove: Boolean(input.remover) })
     return { aplicado: true, resultado: line, condicoes: outcome.conditions, nota: "Gravado no combate: o card e a ficha já mostram. Só agora diga ao jogador que aplicou." }
@@ -189,9 +190,11 @@ export async function editCombatAction(jobId: string | undefined, input: EditAct
     if (action.rollingStep !== null && action.rollingStep !== undefined) throw new QuestionCombatError("Este card está sendo rolado agora: não dá mais para corrigir.")
     const reason = input.motivo.trim()
     if (input.cancelar) {
+        // Magia, carga e item já foram gastos no envio: cancelar devolveria só a economia e o recurso se perderia.
+        if (!(action as IMaddoxCombatAction & { cancellable?: boolean }).cancellable) throw new QuestionCombatError("Este card já gastou espaço de magia, carga ou item no envio: não dá para cancelar. Corrija o modo ou o alvo, ou deixe o jogador rolar.")
         const { cancelPendingAction } = await import("./tactical-actions")
         try {
-            await cancelPendingAction(context.campaign._id, card, { byMaster: true })
+            await cancelPendingAction(context.campaign._id, card)
         } catch (error) {
             if (error instanceof DomainError) throw new QuestionCombatError(error.message)
             throw error
@@ -248,27 +251,31 @@ export async function correctCombatant(jobId: string | undefined, input: Correct
         const actor = actorOf(combat, input.adversario)
         if (actor.kind !== "combatant") throw new QuestionCombatError(`${actor.name} é um personagem jogador: os PV dele mudam com update_character_hit_points.`)
         const stats = actor.state.stats
+        // A linha pública respeita o que a mesa pode ver: PV exato só com a opção da campanha ligada; a CA nunca.
+        const showHp = actor.combatant.side === "aliado" ? Boolean(context.campaign.showAllyHp) : Boolean(context.campaign.showEnemyHp)
         const parts: string[] = []
+        let hpChanged = false
         if (input.pv !== undefined) {
             stats.hp = Math.max(0, Math.min(stats.hpMax, Math.round(input.pv)))
-            parts.push(`PV ${stats.hp}/${stats.hpMax}`)
+            hpChanged = true
             if (input.foraDeCombate === undefined) actor.state.defeated = stats.hp <= 0
         }
         if (input.ca !== undefined) {
             stats.ac = Math.max(1, Math.round(input.ca))
-            parts.push(`CA ${stats.ac}`)
+            parts.push("CA corrigida")
         }
         if (input.foraDeCombate !== undefined) {
             actor.state.defeated = input.foraDeCombate
             if (!input.foraDeCombate && stats.hp <= 0) stats.hp = 1
-            parts.push(input.foraDeCombate ? "fora de combate" : "de volta à luta")
+            hpChanged = true
         }
         actor.combatant.condition = actor.state.defeated ? "caído" : HP_BAND_LABELS[hpBand(stats.hp, stats.hpMax)].toLowerCase()
+        if (hpChanged) parts.unshift(actor.state.defeated ? "fora de combate" : showHp ? `PV ${stats.hp}/${stats.hpMax}` : `PV: ${actor.combatant.condition}`)
         return { name: actor.name, parts, hp: stats.hp, hpMax: stats.hpMax, ac: stats.ac, defeated: actor.state.defeated }
     })
     const line = `${outcome.name}: ${outcome.parts.join(", ")} — ${input.motivo.trim()}`
     await commitFix(context, "correct_combatant", line, { target: outcome.name, hp: outcome.hp, ac: outcome.ac, defeated: outcome.defeated })
-    return { aplicado: true, resultado: line, pv: `${outcome.hp}/${outcome.hpMax}`, ca: outcome.ac, foraDeCombate: outcome.defeated }
+    return { aplicado: true, resultado: line, pv: `${outcome.hp}/${outcome.hpMax}`, ca: outcome.ac, foraDeCombate: outcome.defeated, nota: "A linha pública mostra só o que a mesa pode ver (PV exato só com a opção da campanha; a CA nunca)." }
 }
 
 // ── Economia e flags do personagem ────────────────────────────────────────────

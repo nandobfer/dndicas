@@ -689,7 +689,7 @@ export const aiMaddoxMaster: MaddoxMaster = {
             playerTexts,
         })
         try {
-            return await generate(
+            const text = await generate(
                 {
                     campaignId: context.campaignId,
                     jobId: context.jobId,
@@ -701,6 +701,13 @@ export const aiMaddoxMaster: MaddoxMaster = {
                 },
                 sink,
             )
+            // DND-59 (diagnóstico): a resposta afirma uma condição que nenhuma ferramenta gravou nesta resposta.
+            if (combatFix) {
+                const { unbackedConditionClaims } = await import("../combat-rules")
+                const claimed = unbackedConditionClaims(text, runs.questionRun(context.jobId)?.conditionWrites ?? 0)
+                if (claimed.length) log.warn({ campaignId: context.campaignId, jobId: context.jobId, questionId: context.questionId, conditions: claimed }, "[maddox] resposta afirma condição do combate que não foi gravada")
+            }
+            return text
         } finally {
             runs.closeQuestionRun(context.jobId)
         }

@@ -719,20 +719,20 @@ export async function cancelCombatAction(campaignId: string, actionId: string, u
     const message = await MaddoxCampaignMessageModel.findOne({ _id: new Types.ObjectId(actionId), campaignId: campaign._id, kind: "combat-action", memberId: member._id }).lean<MessageDoc & { combatAction: IMaddoxCombatAction & { cancellable?: boolean } }>()
     const action = message?.combatAction
     if (!message || !action) throw new DomainError(404, "Ação não encontrada", "NOT_FOUND")
-    await cancelPendingAction(campaign._id, { ...message, combatAction: { ...action, actorKey: actor.key } }, { byMaster: false })
+    await cancelPendingAction(campaign._id, { ...message, combatAction: { ...action, actorKey: actor.key } })
     await publishGameChanged(campaign._id)
     return getGameState(campaignId, userId)
 }
 
 /**
- * Cancela um card de ação ainda não rolado e devolve a economia. `byMaster` (DND-59, correção pelo "Pergunte ao mestre"):
- * o mestre cancela também o card que o jogador não poderia (magia, cargas, itens) — o espaço e a carga só são gastos na
- * rolagem, então nada mais volta. Lança 409 quando um passo já foi rolado ou está sendo rolado.
+ * Cancela um card de ação ainda não rolado e devolve a economia (pelo jogador e, desde a DND-59, pela correção do mestre).
+ * Card que já gastou espaço de magia, carga ou item no envio (`cancellable: false`) não é cancelado por ninguém: só a
+ * economia voltaria, e o recurso ficaria perdido. Lança 409 quando um passo já foi rolado ou está sendo rolado.
  */
-export async function cancelPendingAction(campaignObjectId: Types.ObjectId, message: MessageDoc, options: { byMaster: boolean }): Promise<void> {
+export async function cancelPendingAction(campaignObjectId: Types.ObjectId, message: MessageDoc): Promise<void> {
     const action = message.combatAction as (IMaddoxCombatAction & { cancellable?: boolean }) | null
     if (!action) throw new DomainError(404, "Ação não encontrada", "NOT_FOUND")
-    if (action.status !== "pending" || (!options.byMaster && !action.cancellable) || action.steps.some((item) => item.status === "done")) throw new DomainError(409, "Esta ação já não pode ser cancelada.", "ACTION_NOT_CANCELLABLE")
+    if (action.status !== "pending" || !action.cancellable || action.steps.some((item) => item.status === "done")) throw new DomainError(409, "Esta ação já não pode ser cancelada.", "ACTION_NOT_CANCELLABLE")
     const cancelled = await MaddoxCampaignMessageModel.updateOne({ _id: message._id, "combatAction.status": "pending", $or: [{ "combatAction.rollingStep": null }, { "combatAction.rollingAt": { $lt: staleClaimCutoff() } }] }, { $set: { "combatAction.status": "cancelled", "combatAction.rollingStep": null, "combatAction.rollingAt": null, "combatAction.summary": actionSummary({ ...action, status: "cancelled" }) } })
     if (cancelled.modifiedCount === 0) throw new DomainError(409, "Esta ação já não pode ser cancelada.", "ACTION_NOT_CANCELLABLE")
     // A ação Atacar volta inteira quando nenhum ataque foi rolado nela; senão, só o ataque cancelado volta.

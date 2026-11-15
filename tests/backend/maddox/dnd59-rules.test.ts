@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { applyConditionChange, attackMode, conditionDisplayLabel, hiddenCondition, isHiddenCondition, mentionedConditions, rollMatchesMode } from "@/features/maddox/combat-rules"
+import { applyConditionChange, attackMode, conditionDisplayLabel, hiddenCondition, isHiddenCondition, mentionedConditions, rollMatchesMode, unbackedConditionClaims } from "@/features/maddox/combat-rules"
 import { buildNarratorInstructions, MADDOX_COMBAT_FIX_TASK_RULES, MADDOX_STATE_OR_SILENCE_RULE, narratorTaskText, tacticalCombatRule } from "@/features/maddox/server/narrator-prompt"
 
 /** DND-59: regras puras da condição gravada, do modo do ataque e do prompt "estado ou silêncio". */
@@ -43,6 +43,19 @@ describe("DND-59 — condição gravada", () => {
         expect(applyConditionChange(first.conditions, { key: "prone", remove: true }, { name: "Goblin" })).toMatchObject({ conditions: [], line: "Goblin não está mais Caído", changed: true })
         expect(applyConditionChange([], { key: "prone", remove: true }, { name: "Goblin" })).toMatchObject({ line: "Goblin já não estava Caído", changed: false })
         expect(applyConditionChange([], { key: "poisoned" }, { name: "Esqueleto", immunities: ["poisoned"] })).toMatchObject({ conditions: [], line: "Esqueleto é imune a Envenenado", changed: false })
+    })
+
+    it("Esconder-se não substitui a Invisível de magia (que não sai com o ataque); substitui a de outro Esconder-se", () => {
+        const spell = [{ key: "invisible" as const, untilRound: 5, source: "Invisibilidade" }]
+        expect(applyConditionChange(spell, { key: "invisible", hidden: true, hiddenDc: 14 }, { name: "Lizwan" })).toEqual({ conditions: spell, line: "Lizwan já está Invisível (Invisibilidade): o Esconder-se não substitui essa condição", changed: false })
+        expect(applyConditionChange([hiddenCondition(12)], { key: "invisible", hidden: true, hiddenDc: 18 }, { name: "Lizwan" }).conditions).toEqual([hiddenCondition(18)])
+    })
+
+    it("diagnóstico: resposta que afirma ter registrado uma condição sem nenhuma gravação na resposta", () => {
+        const claim = "Registrei a condição em Lizwan: Invisível até ela atacar."
+        expect(unbackedConditionClaims(claim, 0)).toEqual(["invisible"])
+        expect(unbackedConditionClaims(claim, 1)).toEqual([])
+        expect(unbackedConditionClaims("Invisível vale vantagem nos seus ataques.", 0)).toEqual([])
     })
 
     it("condições citadas no texto livre (com acento, gênero e plural)", () => {

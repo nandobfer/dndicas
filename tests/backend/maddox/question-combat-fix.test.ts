@@ -254,6 +254,20 @@ describe("DND-59 — correções do combate pelo Pergunte ao mestre", () => {
         expect(await fixLines(id)).toEqual(["Card de Kael (Espada) cancelado; a ação volta — o alvo estava errado"])
     })
 
+    it("card que já gastou espaço de magia, carga ou item no envio não é cancelado pelo mestre (o recurso não se perde)", async () => {
+        const { id, kael } = await scene()
+        const sword = await swordOf(id, kael.userId)
+        await actions.submitCombatAction(id, { economy: "action", optionId: sword.id, targets: ["npc:gob"] }, kael.userId)
+        // Como um card de magia de 1º círculo: o envio já gastou o espaço e o card nasce sem "cancelar".
+        await MaddoxCampaignMessageModel.updateOne({ _id: (await lastAction(id))._id }, { $set: { "combatAction.cancellable": false, "combatAction.spellLevel": 1 } })
+        const run = await openRun(id, kael.userId)
+        await expect(fixTools.editCombatAction(run.jobId, { ator: "Kael", cancelar: true, motivo: "errou a magia" })).rejects.toThrow("Este card já gastou espaço de magia, carga ou item no envio: não dá para cancelar.")
+        run.close()
+        expect((await lastAction(id)).combatAction!.status).toBe("pending")
+        expect((await stateOf(id, kael.actorKey)).economy.action).toBe(false)
+        expect(await fixLines(id)).toEqual([])
+    })
+
     it("card sendo rolado não é corrigido", async () => {
         const { id, kael } = await scene()
         const sword = await swordOf(id, kael.userId)
@@ -269,10 +283,18 @@ describe("DND-59 — correções do combate pelo Pergunte ao mestre", () => {
         const run = await openRun(id, kael.userId)
         expect(await fixTools.correctCombatant(run.jobId, { adversario: "Goblin", pv: 3, ca: 14, motivo: "o golpe anterior acertou" })).toMatchObject({ aplicado: true, pv: "3/7", ca: 14, foraDeCombate: false })
         expect((await enemyOf(id, "npc:gob")).tactical!.stats).toMatchObject({ hp: 3, ac: 14 })
+        // PV dos inimigos oculto (padrão): a linha pública traz só a faixa, nunca o número nem a CA.
+        const hiddenLine = (await fixLines(id)).at(-1)!
+        expect(hiddenLine).toBe(`Goblin: PV: ${(await enemyOf(id, "npc:gob")).condition}, CA corrigida — o golpe anterior acertou`)
+        expect(hiddenLine).not.toMatch(/3\/7|14/)
         expect(await fixTools.correctCombatant(run.jobId, { adversario: "Goblin", pv: 0, motivo: "caiu" })).toMatchObject({ foraDeCombate: true })
         expect((await enemyOf(id, "npc:gob")).condition).toBe("caído")
         expect(await fixTools.correctCombatant(run.jobId, { adversario: "Goblin", foraDeCombate: false, motivo: "levantou" })).toMatchObject({ pv: "1/7", foraDeCombate: false })
         await expect(fixTools.correctCombatant(run.jobId, { adversario: "Kael", pv: 1, motivo: "x" })).rejects.toThrow("update_character_hit_points")
+        // Com a opção "mostrar PV dos inimigos", a linha traz o PV exato (a CA continua fora).
+        await MaddoxCampaignModel.updateOne({ _id: id }, { $set: { showEnemyHp: true } })
+        await fixTools.correctCombatant(run.jobId, { adversario: "Rato", pv: 2, ca: 11, motivo: "mordido" })
+        expect((await fixLines(id)).at(-1)).toBe("Rato: PV 2/5, CA corrigida — mordido")
         run.close()
     })
 

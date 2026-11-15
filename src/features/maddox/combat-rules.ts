@@ -401,6 +401,9 @@ export function applyConditionChange(
     }
     if (options.immunities?.includes(change.key)) return { conditions: [...conditions], line: `${options.name} é imune a ${label}`, changed: false }
     const hidden = change.key === "invisible" && (change.hidden || typeof change.hiddenDc === "number")
+    // Invisível de outra origem (magia) vale mais que o Esconder-se e não sai com o ataque: não é substituída.
+    const other = hidden ? conditions.find((condition) => condition.key === "invisible" && !isHiddenCondition(condition)) : undefined
+    if (other) return { conditions: [...conditions], line: `${options.name} já está ${conditionDisplayLabel(other)}${other.source ? ` (${other.source})` : ""}: o Esconder-se não substitui essa condição`, changed: false }
     const next: CombatCondition = hidden
         ? { ...hiddenCondition(typeof change.hiddenDc === "number" ? change.hiddenDc : null), untilRound: change.untilRound ?? null }
         : { key: change.key, untilRound: change.untilRound ?? null, ...(change.source ? { source: change.source.slice(0, 80) } : {}) }
@@ -433,4 +436,17 @@ const CONDITION_STEMS: Record<MaddoxConditionKey, RegExp> = {
 export function mentionedConditions(text: string): MaddoxConditionKey[] {
     const folded = foldText(text)
     return (Object.keys(CONDITION_STEMS) as MaddoxConditionKey[]).filter((key) => CONDITION_STEMS[key].test(folded))
+}
+
+const CLAIM_VERBS = /\b(registrei|apliquei|coloquei|marquei|adicionei|anotei|gravei|removi|tirei|retirei)\b/
+
+/**
+ * DND-59 (só diagnóstico): a resposta afirma ter registrado/removido uma condição do combate, mas nenhuma condição foi
+ * gravada nesta resposta? Devolve as condições citadas (vazio = nada a apontar). A regra que impede a afirmação é do
+ * prompt ("estado ou silêncio"); isto só alimenta o log para achar os casos em que o modelo a ignorou.
+ */
+export function unbackedConditionClaims(text: string, conditionWrites: number): MaddoxConditionKey[] {
+    if (conditionWrites > 0) return []
+    if (!CLAIM_VERBS.test(foldText(text))) return []
+    return mentionedConditions(text)
 }
