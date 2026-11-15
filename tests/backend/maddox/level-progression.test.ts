@@ -584,6 +584,40 @@ describe("DND-70: XP de adversário fora do catálogo e XP no Pergunte ao mestre
         expect(await xpOf(t.members[0]!)).toBe(0)
     })
 
+    it("falha no meio da XP oficial (2ª ficha): quem ficou sem recebe pela pendência; quem já recebeu não recebe de novo", async () => {
+        const t = await table({ mode: "experiencia", rigor: "rigoroso" })
+        const goblin = new Types.ObjectId()
+        await mongoose.connection.collection("monsters").insertOne({ _id: goblin, name: "Goblin", challengeRating: "1/4", status: "active" })
+        const combat = await beastCombat(t, {
+            title: "Goblins",
+            combatants: [{ name: "Goblin", nameKey: "goblin", side: "inimigo", quantity: 2, outcome: "morto", tactical: { defeated: true, stats: { source: "catalog", monsterId: String(goblin) } } }],
+            tactical: { characters: t.members.map((member) => ({ characterId: String(member.characterId), name: member.name, left: false })) },
+        })
+        const original = CharacterSheet.collection.findOneAndUpdate.bind(CharacterSheet.collection)
+        let calls = 0
+        const spy = vi.spyOn(CharacterSheet.collection, "findOneAndUpdate").mockImplementation(((...args: Parameters<typeof original>) => {
+            calls += 1
+            if (calls === 2) return Promise.reject(new Error("falha transitória"))
+            return original(...args)
+        }) as never)
+        await expect(grantCombatExperience(t.campaignId, (await MaddoxCombatModel.findById(combat._id).lean())!, 34)).rejects.toThrow("falha transitória")
+        spy.mockRestore()
+        expect(await xpOf(t.members[0]!)).toBe(33)
+        expect(await xpOf(t.members[1]!)).toBe(0)
+        expect(await xpOf(t.members[2]!)).toBe(0)
+        expect((await MaddoxCombatModel.findById(combat._id).lean())!.experiencePending).toMatchObject({ adversaries: [{ name: "Goblin", quantity: 2 }], characterIds: [String(t.members[1]!.characterId), String(t.members[2]!.characterId)], credited: ["Nala"] })
+        const { pendingCombatExperience } = await import("@/features/maddox/server/combat-experience")
+        const pending = await pendingCombatExperience(t.campaignId)
+        expect(pending).toEqual([expect.objectContaining({ combatId: String(combat._id), characterNames: ["Uther", "Vaelyra"], credited: ["Nala"], legacy: false })])
+        const { progressionTaskLines } = await import("@/features/maddox/server/narrator-prompt")
+        expect(progressionTaskLines({ milestone: null, levelUps: [], pendingCombatXp: pending })).toContain("Nala já recebeu a XP oficial deste combate: não conceda de novo")
+        await answer(t, (jobId) => runMaddoxTool(tool("grant_experience"), { campaignId: t.campaignId, turnNumber: 35, jobId }, { personagens: ["grupo"], valor: 33, motivo: "XP oficial dos goblins que faltou.", combate: String(combat._id) }), 0, true)
+        expect(await xpOf(t.members[0]!)).toBe(33)
+        expect(await xpOf(t.members[1]!)).toBe(33)
+        expect(await xpOf(t.members[2]!)).toBe(33)
+        await expect(pendingCombatExperience(t.campaignId)).resolves.toEqual([])
+    })
+
     it("se nem a pendência grava, o claim perde a marca de processamento e o combate volta a ser pendência recuperável", async () => {
         const t = await table({ mode: "experiencia", rigor: "rigoroso" })
         const combat = await beastCombat(t)

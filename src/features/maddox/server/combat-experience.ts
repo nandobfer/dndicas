@@ -86,7 +86,7 @@ export async function grantCombatExperience(campaignId: Types.ObjectId, combat: 
     if (!claimed.modifiedCount) return none
     const context = { campaignId: String(campaignId), combatId: String(combat._id) }
     const allDefeated = () => combat.combatants.filter(defeated).map((combatant) => ({ name: combatant.name, quantity: quantityOf(combatant) }))
-    let applied = 0
+    const credited = new Set<string>()
     let breakdown: CombatExperienceBreakdown | null = null
     try {
         breakdown = await combatExperienceBreakdown(combat)
@@ -102,7 +102,7 @@ export async function grantCombatExperience(campaignId: Types.ObjectId, combat: 
         const share = Math.floor(breakdown.catalogXp / participants.length)
         let granted = 0
         if (share > 0) {
-            const result = await grantExperience(campaignId, participants.map((character) => ({ characterId: character.characterId, amount: share })), combatExperienceReason(combat), "combat", turnNumber, { combatId: combat._id, onSheetUpdated: () => (applied += 1) })
+            const result = await grantExperience(campaignId, participants.map((character) => ({ characterId: character.characterId, amount: share })), combatExperienceReason(combat), "combat", turnNumber, { combatId: combat._id, onSheetUpdated: (characterId) => credited.add(String(characterId)) })
             granted = result.total
         }
         // A parte oficial que dividiu para 0 também vira pendência: o mestre decide o valor, nada some em silêncio.
@@ -113,11 +113,18 @@ export async function grantCombatExperience(campaignId: Types.ObjectId, combat: 
     } catch (error) {
         // DND-70 (revisão 2): falha depois do claim nunca deixa o combate sem desfecho. Sem ficha somada, todos os derrotados
         // viram pendência para o mestre; com parte das fichas já somada, só os sem ND (a parte oficial não se repete).
-        const pending = applied ? (breakdown?.missing ?? []) : allDefeated()
+        const applied = credited.size
+        const participants = participantsOf(combat)
+        const remaining = participants.filter((character) => !credited.has(String(character.characterId)))
+        // Parte das fichas somada e parte não: quem ficou sem a parte oficial recebe pela pendência (todos os derrotados);
+        // quem já recebeu fica de fora. Todos somados: só os sem ND ficam pendentes.
+        const partial = applied > 0 && remaining.length > 0
+        const pending = !applied || partial ? allDefeated() : (breakdown?.missing ?? [])
+        const extra = partial ? { characterIds: remaining.map((character) => String(character.characterId)), credited: participants.filter((character) => credited.has(String(character.characterId))).map((character) => character.name) } : {}
         log.error({ ...context, applied, pending: pending.map((item) => item.name), err: error instanceof Error ? error.message : String(error) }, "[maddox] XP do fim do combate falhou; o que faltou vira pendência para o mestre")
         if (pending.length) {
             try {
-                await markExperiencePending(campaignId, combat, pending, turnNumber)
+                await markExperiencePending(campaignId, combat, pending, turnNumber, extra)
             } catch (markError) {
                 // Nem a pendência gravou: tira a marca do processamento e o combate volta a ser pendência recuperável.
                 log.error({ ...context, err: markError instanceof Error ? markError.message : String(markError) }, "[maddox] pendência da XP do combate não gravada")
@@ -128,8 +135,8 @@ export async function grantCombatExperience(campaignId: Types.ObjectId, combat: 
     }
 }
 
-async function markExperiencePending(campaignId: Types.ObjectId, combat: IMaddoxCombat, adversaries: { name: string; quantity: number }[], turnNumber: number) {
-    await MaddoxCombatModel.updateOne({ _id: combat._id }, { $set: { experiencePending: { adversaries, turnNumber, at: new Date() } } })
+async function markExperiencePending(campaignId: Types.ObjectId, combat: IMaddoxCombat, adversaries: { name: string; quantity: number }[], turnNumber: number, extra: { characterIds?: string[]; credited?: string[] } = {}) {
+    await MaddoxCombatModel.updateOne({ _id: combat._id }, { $set: { experiencePending: { adversaries, turnNumber, at: new Date(), ...extra } } })
     await MaddoxCampaignMessageModel.create({
         campaignId,
         turnNumber,
@@ -153,6 +160,8 @@ export interface PendingCombatExperience {
     /** Personagens que participaram (recebem a XP). */
     characterIds: string[]
     characterNames: string[]
+    /** Já receberam a parte oficial antes de uma falha (não recebem de novo). */
+    credited: string[]
     /** Combate encerrado antes da DND-70 sem XP gravada (a automação "queimou" o combate). */
     legacy: boolean
 }
@@ -161,10 +170,17 @@ const pendingOf = (combat: CombatRow, legacy: boolean): PendingCombatExperience 
     combatId: String(combat._id),
     title: combat.title,
     adversaries: legacy ? combat.combatants.filter(defeated).map((combatant) => ({ name: combatant.name, quantity: quantityOf(combatant) })) : (combat.experiencePending?.adversaries ?? []),
-    characterIds: participantsOf(combat).map((character) => String(character.characterId)),
-    characterNames: participantsOf(combat).map((character) => character.name),
+    ...receiversOf(combat, legacy),
+    credited: legacy ? [] : (combat.experiencePending?.credited ?? []),
     legacy,
 })
+
+/** Quem recebe a XP pendente: os participantes, menos os já creditados numa falha no meio da XP oficial. */
+function receiversOf(combat: CombatRow, legacy: boolean) {
+    const only = legacy ? null : (combat.experiencePending?.characterIds ?? null)
+    const receivers = participantsOf(combat).filter((character) => !only || only.includes(String(character.characterId)))
+    return { characterIds: receivers.map((character) => String(character.characterId)), characterNames: receivers.map((character) => character.name) }
+}
 
 /** Etapa automática parada há mais que isto (o processo caiu depois do claim) vira pendência recuperável. */
 export const MADDOX_XP_PROCESSING_STALE_MS = 10 * 60_000

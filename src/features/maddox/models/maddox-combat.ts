@@ -98,6 +98,10 @@ export interface IMaddoxCombatExperiencePending {
     adversaries: { name: string; quantity: number }[]
     turnNumber: number
     at: Date
+    /** Falha no meio da XP oficial: só estes participantes ainda recebem (os demais já ganharam a parte oficial). */
+    characterIds?: string[]
+    /** Nomes de quem já recebeu a parte oficial antes da falha (a tarefa avisa o mestre). */
+    credited?: string[]
 }
 
 export interface IMaddoxCombatExperienceResolved {
