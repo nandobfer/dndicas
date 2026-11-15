@@ -6,6 +6,7 @@ import { DiceRollerProvider } from "@/features/dice-roller/components/dice-roll-
 import { DiceRollerFab } from "@/features/dice-roller/components/dice-roller-fab"
 import { WindowProvider } from "@/core/context/window-context"
 import { requestDiceRoll } from "@/features/dice-roller/dice-api"
+import { getDiceBoxPoolStats, resetDiceBoxPoolForTests, warmDiceBoxPool } from "@/features/dice-roller/dice-box-loader"
 import { colors } from "@/lib/config/colors"
 
 const diceBoxMocks = vi.hoisted(() => ({
@@ -31,6 +32,7 @@ const requestDiceRollMock = vi.mocked(requestDiceRoll)
 describe("DiceRollerPanel", () => {
     beforeEach(() => {
         vi.clearAllMocks()
+        resetDiceBoxPoolForTests()
         diceBoxMocks.dicePositions.length = 0
         diceBoxMocks.initialize.mockResolvedValue(undefined)
         diceBoxMocks.roll.mockResolvedValue([])
@@ -114,6 +116,7 @@ describe("DiceRollerPanel", () => {
     })
 
     afterEach(() => {
+        resetDiceBoxPoolForTests()
         globalThis.__DNDICAS_DICE_BOX_LOADER__ = undefined
     })
 
@@ -490,7 +493,8 @@ describe("DiceRollerPanel", () => {
     })
 
     it("keeps the numeric result visible when the 3D stage cannot initialize", async () => {
-        diceBoxMocks.initialize.mockRejectedValueOnce(new Error("WebGL unavailable"))
+        // Sem `Once`: o painel monta o palco duas vezes no primeiro render, e o motor do segundo também precisa falhar.
+        diceBoxMocks.initialize.mockRejectedValue(new Error("WebGL unavailable"))
 
         render(<DiceRollerPanel />)
 
@@ -909,6 +913,48 @@ describe("DiceRollerPanel", () => {
             await waitFor(() => expect(diceBoxMocks.roll).toHaveBeenLastCalledWith("1d20@11!!"))
             expect(screen.queryByTestId("dice-loading-ellipsis")).not.toBeInTheDocument()
             await act(async () => animation.resolve([]))
+        })
+    })
+
+    describe("motores aquecidos (DND-61)", () => {
+        const roll = { rollId: "warm-1", label: "Perícia", terms: [{ dice: "d20" as const, quantity: 1, results: [11] }], mode: "normal" as const, selectedD20: { kept: 11, reason: "normal" as const }, diceTotal: 11, modifier: 2, total: 13, createdAt: "2026-01-01T00:00:00.000Z" }
+        const inline = { preset: { label: "Perícia", terms: [{ dice: "d20" as const, quantity: 1 }], modifier: 2, mode: "normal" as const, source: "sheet" as const }, hideConfigurationControls: true, appearance: "inline" as const, stageVariant: "bare" as const, stageSize: "compact" as const, stageVisibility: "roll" as const }
+
+        it("com o motor aquecido, o palco monta pronto, sem o '...'", async () => {
+            await warmDiceBoxPool(1)
+            diceBoxMocks.constructor.mockClear()
+            render(<DiceRollerPanel />)
+            expect(screen.getByTestId("dice-visual-stage")).toBeInTheDocument()
+            expect(screen.queryByTestId("dice-loading-ellipsis")).not.toBeInTheDocument()
+            expect(diceBoxMocks.constructor).not.toHaveBeenCalled()
+        })
+
+        it("duas superfícies rolando juntas usam os motores do pool, sem criar outro", async () => {
+            await warmDiceBoxPool(2)
+            diceBoxMocks.constructor.mockClear()
+            render(
+                <>
+                    <DiceRollerPanel {...inline} rollButtonLabel="Rolar perícia" rollRequest={async () => roll} />
+                    <DiceRollerPanel {...inline} rollButtonLabel="Rolar ataque" rollRequest={async () => ({ ...roll, rollId: "warm-2" })} />
+                </>
+            )
+            fireEvent.click(screen.getByRole("button", { name: "Rolar perícia" }))
+            fireEvent.click(screen.getByRole("button", { name: "Rolar ataque" }))
+            await waitFor(() => expect(diceBoxMocks.roll).toHaveBeenCalledTimes(2))
+            expect(diceBoxMocks.constructor).not.toHaveBeenCalled()
+            expect(getDiceBoxPoolStats()).toEqual({ idle: 0, warming: 0, inUse: 2 })
+        })
+
+        it("o palco que sai devolve o motor ao pool para a próxima rolagem", async () => {
+            await warmDiceBoxPool(1)
+            diceBoxMocks.constructor.mockClear()
+            const { unmount } = render(<DiceRollerPanel />)
+            expect(getDiceBoxPoolStats().inUse).toBe(1)
+            unmount()
+            expect(getDiceBoxPoolStats()).toEqual({ idle: 1, warming: 0, inUse: 0 })
+            render(<DiceRollerPanel />)
+            expect(screen.queryByTestId("dice-loading-ellipsis")).not.toBeInTheDocument()
+            expect(diceBoxMocks.constructor).not.toHaveBeenCalled()
         })
     })
 })
