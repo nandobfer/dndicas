@@ -7,7 +7,7 @@ import { loggerFor } from "@/lib/logger"
 import { User } from "@/features/users/models/user"
 import { MADDOX_CAMPAIGN_MEMORY_KINDS, type MaddoxCampaignMemoryKind, type MaddoxCampaignStateField } from "../constants"
 import type { MaddoxSceneImagesSettings } from "../schemas"
-import { MaddoxCampaignMemberModel, MaddoxCampaignMessageModel, MaddoxCharacterModel, MaddoxNpcModel, MaddoxSceneImageModel, type IMaddoxCharacter, type IMaddoxNpc, type IMaddoxSceneImage } from "../models"
+import { MaddoxCampaignMemberModel, MaddoxCampaignMessageModel, MaddoxCharacterModel, MaddoxNpcModel, MaddoxSceneImageModel, type IMaddoxCampaign, type IMaddoxCharacter, type IMaddoxNpc, type IMaddoxSceneImage } from "../models"
 import { accentInsensitivePattern, excerptAround } from "../journal-search"
 import { hiddenPlayerActionsFilter } from "../player-actions-visibility"
 import { maddoxJournalImagesSchema, maddoxJournalMemoriesSchema, maddoxJournalNpcsSchema, maddoxJournalSearchSchema, type MaddoxJournalImageKind } from "../journal-schemas"
@@ -25,7 +25,8 @@ import type {
     MaddoxJournalSummaryDto,
     MaddoxJournalChapterDto,
 } from "../journal-types"
-import { loadMembership } from "./campaigns"
+import { isMemberReadyToPlay, loadMembership } from "./campaigns"
+import { loadXpProgress } from "./experience-progress"
 import { isOpexUserId } from "./opex-members"
 import { MADDOX_OPEX_LABEL } from "../constants"
 
@@ -192,9 +193,10 @@ export async function listJournalMemories(campaignId: string, input: unknown, us
     return { items: result.items.map(memoryDto), nextCursor: result.nextCursor }
 }
 
-type PartyCharacter = Pick<IMaddoxCharacter, "_id" | "name" | "portraitUrl" | "profile" | "currentState" | "currentStatePublic">
+type PartyCharacter = Pick<IMaddoxCharacter, "_id" | "name" | "portraitUrl" | "profile" | "currentState" | "currentStatePublic" | "sheetId" | "interview">
 
-async function partyMembers(campaignId: Types.ObjectId): Promise<MaddoxJournalPartyMemberDto[]> {
+/** `xpOf` (DND-63): campanha cuja barra de XP entra no grupo; sem ela (busca), o grupo vem sem a barra. */
+async function partyMembers(campaignId: Types.ObjectId, xpOf?: Pick<IMaddoxCampaign, "rigor" | "progression">): Promise<MaddoxJournalPartyMemberDto[]> {
     const members = await MaddoxCampaignMemberModel.find({ campaignId, status: "joined", characterId: { $ne: null } })
         .sort({ joinedAt: 1, createdAt: 1 })
         .select("userId characterId")
@@ -203,12 +205,13 @@ async function partyMembers(campaignId: Types.ObjectId): Promise<MaddoxJournalPa
     const userIds = members.map((member) => member.userId).filter((id) => Types.ObjectId.isValid(id))
     const [characters, users] = await Promise.all([
         MaddoxCharacterModel.find({ _id: { $in: members.map((member) => member.characterId) } })
-            .select("name portraitUrl profile currentState currentStatePublic")
+            .select("name portraitUrl profile currentState currentStatePublic sheetId interview.status")
             .lean<PartyCharacter[]>(),
         userIds.length ? User.find({ _id: { $in: userIds } }).select("name username").lean<{ _id: Types.ObjectId; name?: string; username?: string }[]>() : Promise.resolve([]),
     ])
     const byId = new Map(characters.map((character) => [String(character._id), character]))
     const names = new Map(users.map((user) => [String(user._id), user.name?.trim() || user.username || "Usuário"]))
+    const xpByCharacter = xpOf ? await loadXpProgress(xpOf, characters.map((character) => ({ _id: character._id, sheetId: character.sheetId ?? null, ready: isMemberReadyToPlay(character) }))) : null
     return members.flatMap((member) => {
         const character = byId.get(String(member.characterId))
         if (!character) return []
@@ -224,6 +227,7 @@ async function partyMembers(campaignId: Types.ObjectId): Promise<MaddoxJournalPa
                 profile,
                 // Condição antiga (antes do Maddox 9, rascunho interno do mestre) só aparece depois de regravada.
                 currentState: character.currentStatePublic ? (character.currentState ?? "") : "",
+                ...(xpByCharacter ? { xp: xpByCharacter.get(String(character._id)) ?? null } : {}),
             },
         ]
     })
@@ -296,7 +300,7 @@ export async function listJournalImages(campaignId: string, input: unknown, user
 
 export async function listJournalParty(campaignId: string, userId: string): Promise<MaddoxJournalPartyMemberDto[]> {
     const campaign = await loadJournalCampaign(campaignId, userId)
-    return partyMembers(campaign._id)
+    return partyMembers(campaign._id, campaign)
 }
 
 // ── Busca ──────────────────────────────────────────────────────────────────────

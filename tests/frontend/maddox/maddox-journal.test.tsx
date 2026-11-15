@@ -358,6 +358,18 @@ describe("Diário da campanha (Maddox 9) — tela", () => {
         expect(within(lyra).getByTestId("journal-member-state")).toHaveTextContent("Sem registro do Maddox ainda.")
     })
 
+    it("grupo (DND-63): barra de XP só no personagem que tem a XP no payload", async () => {
+        routes["/maddox/campaigns/c1/journal/party"] = () => [
+            { memberId: "m1", playerName: "Marina", characterId: "ch1", characterName: "Aldric", portraitUrl: null, profile: {}, currentState: "", xp: { level: 5, value: 12_300, floor: 6_500, next: 14_000, missing: 1_700, percent: 77 } },
+            { memberId: "m2", playerName: "Ana", characterId: "ch2", characterName: "Lyra", portraitUrl: null, profile: {}, currentState: "", xp: null },
+        ]
+        await renderJournal("aba=grupo")
+        const aldric = await screen.findByTestId("journal-member-m1")
+        expect(within(aldric).getByRole("progressbar", { name: "12.300 XP · faltam 1.700 para o nível 6" })).toHaveAttribute("aria-valuenow", "77")
+        expect(within(screen.getByTestId("journal-member-m2")).queryByTestId("xp-bar")).toBeNull()
+        expect(screen.getAllByTestId("xp-bar")).toHaveLength(1)
+    })
+
     it("trocar de aba atualiza a URL", async () => {
         await renderJournal()
         fireEvent.click(screen.getByRole("tab", { name: /Grupo/ }))

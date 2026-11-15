@@ -20,6 +20,7 @@ import { worldCatalogOf } from "../world-catalog"
 import { notifyCampaignChanged } from "./campaign-realtime"
 import { isOpexMember, realUserIds } from "./opex-members"
 import { isOpexRunning } from "./opex-runtime"
+import { xpProgressEnabled, xpProgressOf } from "./experience-progress"
 
 /**
  * Campanhas Maddox (Maddox 1 e 2; a mesa do Maddox 3 fica em `./game`): lista, criação, lobby, link de convite, esboço de personagem e a
@@ -47,8 +48,11 @@ function objectId(id: string, message = NOT_FOUND): Types.ObjectId {
     return new Types.ObjectId(id)
 }
 
-function characterDto(character: CharacterDoc | undefined, sheetSlugs: Map<string, string>): MaddoxCampaignCharacterDto | null {
+type SheetSummary = { slug: string; level?: number; experience?: unknown }
+
+function characterDto(character: CharacterDoc | undefined, sheets: Map<string, SheetSummary>, withXp: boolean): MaddoxCampaignCharacterDto | null {
     if (!character) return null
+    const sheet = character.sheetId ? sheets.get(String(character.sheetId)) : undefined
     const profile = character.profile instanceof Map ? Object.fromEntries(character.profile) : { ...(character.profile ?? {}) }
     return {
         id: String(character._id),
@@ -57,7 +61,9 @@ function characterDto(character: CharacterDoc | undefined, sheetSlugs: Map<strin
         portraitStatus: character.portrait?.status ?? null,
         interviewStatus: character.interview?.status ?? "pending",
         profile,
-        sheetSlug: character.sheetId ? (sheetSlugs.get(String(character.sheetId)) ?? null) : null,
+        sheetSlug: sheet?.slug ?? null,
+        // Barra de XP (DND-63): só nível e XP saem da ficha.
+        xp: xpProgressOf(withXp, isMemberReadyToPlay(character), sheet),
     }
 }
 
@@ -152,11 +158,11 @@ async function buildDtos(campaigns: CampaignDoc[], userId: string): Promise<(Omi
         await expireStaleCharacterPortraits(characters)
     }
     const sheetIds = characters.map((character) => character.sheetId).filter((id): id is Types.ObjectId => Boolean(id))
-    const sheetSlugs = new Map<string, string>()
+    const sheetSummaries = new Map<string, SheetSummary>()
     if (sheetIds.length) {
         const { CharacterSheet } = await import("@/features/character-sheets/models/character-sheet")
-        const sheets = await CharacterSheet.find({ _id: { $in: sheetIds } }).select("slug").lean<{ _id: Types.ObjectId; slug: string }[]>()
-        for (const sheet of sheets) sheetSlugs.set(String(sheet._id), sheet.slug)
+        const sheets = await CharacterSheet.find({ _id: { $in: sheetIds } }).select("slug level experience").lean<({ _id: Types.ObjectId } & SheetSummary)[]>()
+        for (const { _id, ...sheet } of sheets) sheetSummaries.set(String(_id), sheet)
     }
     const characterById = new Map(characters.map((character) => [String(character._id), character]))
     // Combate narrativo em andamento (Maddox 6): só nas campanhas ativas.
@@ -165,6 +171,7 @@ async function buildDtos(campaigns: CampaignDoc[], userId: string): Promise<(Omi
     const combatTitle = new Map(combats.map((combat) => [String(combat.campaignId), combat.title]))
     return campaigns.map((campaign) => {
         const own = members.filter((member) => String(member.campaignId) === String(campaign._id))
+        const withXp = xpProgressEnabled(campaign)
         const dtos: MaddoxCampaignMemberDto[] = own
             .map((member) => {
                 const user = users.get(member.userId)
@@ -180,7 +187,7 @@ async function buildDtos(campaigns: CampaignDoc[], userId: string): Promise<(Omi
                     avatarUrl: opex ? null : (user?.avatarUrl ?? null),
                     role: member.role,
                     joinedAt: iso(member.joinedAt),
-                    character: characterDto(character, sheetSlugs),
+                    character: characterDto(character, sheetSummaries, withXp),
                     ready: isMemberReadyToPlay(character),
                 }
             })

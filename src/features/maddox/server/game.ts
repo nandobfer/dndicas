@@ -1271,6 +1271,9 @@ export async function getGameState(campaignId: string, userId: string): Promise<
     const eligible = idSet(campaign.turn?.eligibleMemberIds)
     const declared = idSet(campaign.turn?.declaredMemberIds)
     const playersTurn = campaign.status === "active" && campaign.turn?.phase === "players"
+    // Barra de XP (DND-63): só no modo Experiência; da ficha saem só nível e XP.
+    const { loadXpProgress } = await import("./experience-progress")
+    const xpByCharacter = await loadXpProgress(campaign, members.flatMap(({ character }) => (character ? [{ _id: character._id, sheetId: character.sheetId ?? null, ready: isMemberReadyToPlay(character) }] : [])))
     const participants: MaddoxGameParticipantDto[] = members
         .map(({ member, character }) => ({
             memberId: String(member._id),
@@ -1283,6 +1286,7 @@ export async function getGameState(campaignId: string, userId: string): Promise<
             ready: isMemberReadyToPlay(character),
             eligible: playersTurn && eligible.has(String(member._id)),
             declared: playersTurn && declared.has(String(member._id)),
+            xp: character ? (xpByCharacter.get(String(character._id)) ?? null) : null,
         }))
         .sort((a, b) => (a.role === "owner" ? 0 : a.opex ? 2 : 1) - (b.role === "owner" ? 0 : b.opex ? 2 : 1))
     const mine = participants.find((participant) => participant.memberId === String(loaded.member._id))

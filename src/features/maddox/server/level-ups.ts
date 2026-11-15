@@ -9,14 +9,13 @@ import {
     MADDOX_LEVEL_UP_FAILED_MESSAGE,
     MADDOX_MILESTONE_TRIGGERS,
     MADDOX_PROGRESSION_DEFAULT,
-    MADDOX_SHEET_RIGORS,
     type MaddoxMilestoneTrigger,
     type MaddoxProgressionMode,
-    type MaddoxRigorLevel,
 } from "../constants"
 import type { MaddoxExperienceCardDto, MaddoxLevelUpCardDto, MaddoxLevelUpStepDto } from "../game-types"
 import { MaddoxCampaignMemberModel, MaddoxCampaignMessageModel, MaddoxCampaignModel, MaddoxCharacterModel, MaddoxCombatModel, type IMaddoxCampaign, type IMaddoxLevelUp } from "../models"
 import { takeDraftProgression } from "./game-live"
+import { hasLevels, progressionModeOf } from "./progression-mode"
 
 /**
  * Progressão de nível das Campanhas Maddox (DND-56) — SOMENTE servidor. Só nos graus com ficha.
@@ -35,13 +34,7 @@ type CampaignDoc = IMaddoxCampaign
 
 export class ProgressionRefusal extends Error {}
 
-export const hasLevels = (rigor: MaddoxRigorLevel) => MADDOX_SHEET_RIGORS.includes(rigor)
-
-/** Modo de progressão (`null` nos graus sem ficha). Campanhas sem o campo ficam em "marco". */
-export function progressionModeOf(campaign: Pick<IMaddoxCampaign, "rigor" | "progression">): MaddoxProgressionMode | null {
-    if (!hasLevels(campaign.rigor)) return null
-    return campaign.progression?.mode ?? MADDOX_PROGRESSION_DEFAULT
-}
+export { hasLevels, progressionModeOf }
 
 export const isMilestoneTrigger = (value: string): value is MaddoxMilestoneTrigger => (MADDOX_MILESTONE_TRIGGERS as readonly string[]).includes(value)
 

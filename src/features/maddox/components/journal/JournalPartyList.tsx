@@ -4,6 +4,7 @@ import { HeartPulse, UserRound, Users } from "lucide-react"
 import { useMaddoxJournalParty } from "../../hooks/useMaddoxJournal"
 import { MemberAvatar, OpexChip } from "../campaigns/campaign-visuals"
 import { CharacterProfileSections } from "../campaigns/CharacterProfileDialog"
+import { XpBar } from "../campaigns/XpBar"
 import { journalAnchor } from "./journal-links"
 import { JournalItemCard, JournalListState, JournalText } from "./JournalLists"
 import { useJournalHash, useScrollToAnchor } from "./use-journal-hash-target"
@@ -26,7 +27,7 @@ export function JournalPartyList({ campaignId, color, myMemberId }: { campaignId
                     <JournalItemCard key={member.memberId} anchor={anchor} highlighted={target === anchor} color={color} testId={`journal-member-${member.memberId}`}>
                         <header className="flex items-center gap-3">
                             <MemberAvatar name={member.characterName} imageUrl={member.portraitUrl} color={color} context={whose} className="h-12 w-12 shrink-0" />
-                            <div className="min-w-0">
+                            <div className="min-w-0 flex-1">
                                 <h3 className="flex flex-wrap items-center gap-1.5 break-words text-base font-semibold text-white">
                                     {member.characterName}
                                     {member.opex && <OpexChip />}
@@ -34,6 +35,7 @@ export function JournalPartyList({ campaignId, color, myMemberId }: { campaignId
                                 <p className="flex items-center gap-1 text-xs text-white/60">
                                     <UserRound className="h-3 w-3" aria-hidden /> {whose}
                                 </p>
+                                <XpBar xp={member.xp} color={color} />
                             </div>
                         </header>
                         <section className="space-y-1 rounded-lg border border-white/10 bg-white/[0.03] p-3" data-testid="journal-member-state">

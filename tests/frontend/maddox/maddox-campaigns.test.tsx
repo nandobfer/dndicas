@@ -748,6 +748,23 @@ describe("página da campanha (lobby)", () => {
     })
 })
 
+describe("página da campanha: barra de XP (DND-63)", () => {
+    it("Participantes mostra a barra só na linha do personagem com XP no payload", async () => {
+        const xp = { level: 5, value: 12_300, floor: 6_500, next: 14_000, missing: 1_700, percent: 77 }
+        const members = [
+            member("m1", "u-owner", "Marina Dona", "owner", { id: "ch0", name: "Kael", portraitUrl: null, portraitStatus: null, interviewStatus: "done", profile: {}, sheetSlug: null, xp: null }),
+            member("m2", "u-ana", "Ana Jogadora", "player", { id: "ch1", name: "Lyra", portraitUrl: null, portraitStatus: null, interviewStatus: "done", profile: {}, sheetSlug: "lyra", xp }),
+        ]
+        get.mockImplementation(async (url: string) => (url.endsWith("/invite") ? ok({ token: TOKEN, rotatedAt: null }) : ok(detail({ members, progression: "experiencia" }))))
+        renderWithQueryClient(<CampaignPage campaignId="c1" />)
+        const list = await screen.findByRole("list", { name: "Participantes" })
+        const rowOf = (name: string) => within(list).getByText(name).closest("li")!
+        expect(within(rowOf("Lyra")).getByRole("progressbar", { name: "12.300 XP · faltam 1.700 para o nível 6" })).toHaveAttribute("aria-valuenow", "77")
+        expect(within(rowOf("Kael")).queryByTestId("xp-bar")).toBeNull()
+        expect(within(list).getAllByTestId("xp-bar")).toHaveLength(1)
+    })
+})
+
 describe("convite", () => {
     const preview = { campaignId: "c1", name: "Brumas de Valdrenn", rigor: "equilibrado" as const, status: "lobby" as const, coverUrl: null, ownerName: "Marina Dona", memberCount: 2, alreadyMember: false, inviteOpen: true }
 

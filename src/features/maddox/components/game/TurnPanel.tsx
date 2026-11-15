@@ -11,6 +11,7 @@ import type { MaddoxGameParticipantDto, MaddoxGameStateDto } from "../../game-ty
 import { MADDOX_SEAT_LABELS, seatStatus, type MaddoxSeatStatus } from "../../game-view"
 import type { MaddoxGamePresence } from "../../hooks/useMaddoxGame"
 import { MemberAvatar, OpexChip, RarityChip } from "../campaigns/campaign-visuals"
+import { XpBar } from "../campaigns/XpBar"
 
 /** Cor de raridade de cada situação no turno. */
 export const SEAT_COLORS: Record<MaddoxSeatStatus, string> = {
@@ -77,6 +78,7 @@ export function TurnPanel({ state, presence, color, skipping, onSkip, rollingFor
                                         {participant.name}
                                         {participant.memberId === state.me.memberId ? " · você" : ""}
                                     </p>
+                                    <XpBar xp={participant.xp} color={color} />
                                 </div>
                                 {!participant.opex && <RarityChip color={SEAT_COLORS[seat]}>{MADDOX_SEAT_LABELS[seat]}</RarityChip>}
                                 {canRollFor &&
