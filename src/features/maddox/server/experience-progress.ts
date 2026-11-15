@@ -1,11 +1,12 @@
 import type { Types } from "mongoose"
-import { MADDOX_PROGRESSION_DEFAULT, MADDOX_SHEET_RIGORS, type MaddoxProgressionMode, type MaddoxRigorLevel } from "../constants"
 import type { MaddoxXpProgressDto } from "../campaign-types"
 import { experienceProgress } from "../experience-progress"
+import type { IMaddoxCampaign } from "../models"
+import { progressionModeOf } from "./progression-mode"
 
-/** Campanha com barra de XP (DND-63): grau com ficha e progressão "experiencia". */
-export function xpProgressEnabled(campaign: { rigor: MaddoxRigorLevel; progression?: { mode?: MaddoxProgressionMode | null } | null }): boolean {
-    return MADDOX_SHEET_RIGORS.includes(campaign.rigor) && (campaign.progression?.mode ?? MADDOX_PROGRESSION_DEFAULT) === "experiencia"
+/** Campanha com barra de XP (DND-63): a mesma regra da concessão de XP (`progressionModeOf` em "experiencia"). */
+export function xpProgressEnabled(campaign: Pick<IMaddoxCampaign, "rigor" | "progression">): boolean {
+    return progressionModeOf(campaign) === "experiencia"
 }
 
 export interface XpCharacter {
@@ -15,23 +16,33 @@ export interface XpCharacter {
     ready: boolean
 }
 
+export type XpSheet = { level?: number; experience?: unknown }
+
+/**
+ * Elegibilidade única da barra: campanha em modo Experiência, personagem pronto e com ficha carregada. Da ficha saem
+ * só o nível e a XP.
+ */
+export function xpProgressOf(withXp: boolean, ready: boolean, sheet: XpSheet | null | undefined): MaddoxXpProgressDto | null {
+    return withXp && ready && sheet ? experienceProgress(sheet.experience, sheet.level) : null
+}
+
 /**
  * Barra de XP por personagem (id do personagem → progresso). Mapa vazio fora do modo Experiência; personagem sem
- * ficha ou com entrevista em andamento fica fora. Da ficha saem só o nível e a XP.
+ * ficha ou com entrevista em andamento fica fora.
  */
-export async function loadXpProgress(campaign: Parameters<typeof xpProgressEnabled>[0], characters: readonly XpCharacter[]): Promise<Map<string, MaddoxXpProgressDto>> {
+export async function loadXpProgress(campaign: Pick<IMaddoxCampaign, "rigor" | "progression">, characters: readonly XpCharacter[]): Promise<Map<string, MaddoxXpProgressDto>> {
     const result = new Map<string, MaddoxXpProgressDto>()
-    if (!xpProgressEnabled(campaign)) return result
-    const eligible = characters.filter((character): character is XpCharacter & { sheetId: Types.ObjectId } => character.ready && Boolean(character.sheetId))
+    const withXp = xpProgressEnabled(campaign)
+    const eligible = withXp ? characters.filter((character): character is XpCharacter & { sheetId: Types.ObjectId } => character.ready && Boolean(character.sheetId)) : []
     if (!eligible.length) return result
     const { CharacterSheet } = await import("@/features/character-sheets/models/character-sheet")
     const sheets = await CharacterSheet.find({ _id: { $in: eligible.map((character) => character.sheetId) } })
         .select("level experience")
-        .lean<{ _id: Types.ObjectId; level?: number; experience?: unknown }[]>()
+        .lean<({ _id: Types.ObjectId } & XpSheet)[]>()
     const bySheet = new Map(sheets.map((sheet) => [String(sheet._id), sheet]))
     for (const character of eligible) {
-        const sheet = bySheet.get(String(character.sheetId))
-        if (sheet) result.set(String(character._id), experienceProgress(sheet.experience, sheet.level))
+        const progress = xpProgressOf(withXp, character.ready, bySheet.get(String(character.sheetId)))
+        if (progress) result.set(String(character._id), progress)
     }
     return result
 }

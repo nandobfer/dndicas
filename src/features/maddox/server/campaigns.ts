@@ -20,8 +20,7 @@ import { worldCatalogOf } from "../world-catalog"
 import { notifyCampaignChanged } from "./campaign-realtime"
 import { isOpexMember, realUserIds } from "./opex-members"
 import { isOpexRunning } from "./opex-runtime"
-import { xpProgressEnabled } from "./experience-progress"
-import { experienceProgress } from "../experience-progress"
+import { xpProgressEnabled, xpProgressOf } from "./experience-progress"
 
 /**
  * Campanhas Maddox (Maddox 1 e 2; a mesa do Maddox 3 fica em `./game`): lista, criação, lobby, link de convite, esboço de personagem e a
@@ -64,7 +63,7 @@ function characterDto(character: CharacterDoc | undefined, sheets: Map<string, S
         profile,
         sheetSlug: sheet?.slug ?? null,
         // Barra de XP (DND-63): só nível e XP saem da ficha.
-        xp: withXp && sheet && isMemberReadyToPlay(character) ? experienceProgress(sheet.experience, sheet.level) : null,
+        xp: xpProgressOf(withXp, isMemberReadyToPlay(character), sheet),
     }
 }
 
