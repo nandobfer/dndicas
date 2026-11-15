@@ -3,6 +3,22 @@ import type { MaddoxCampaignStatus, MaddoxCombatDifficultyLevel, MaddoxCharacter
 
 /** DTOs das Campanhas Maddox (Maddox 1). */
 
+/** Progresso de XP do personagem (DND-63): só no modo Experiência e com ficha; `null` nos demais casos. */
+export interface MaddoxXpProgressDto {
+    /** Nível da ficha (1–20). */
+    level: number
+    /** XP atual. */
+    value: number
+    /** Limiar do nível atual. */
+    floor: number
+    /** Limiar do próximo nível; `null` no nível 20. */
+    next: number | null
+    /** Quanto falta para o próximo nível; `null` no nível 20. */
+    missing: number | null
+    /** Progresso entre o limiar do nível atual e o do próximo (0–100). */
+    percent: number
+}
+
 export interface MaddoxCampaignCharacterDto {
     id: string
     /** Vazio até a entrevista combinar o nome (a tela mostra `MADDOX_CHARACTER_UNNAMED_LABEL`). */
@@ -15,6 +31,8 @@ export interface MaddoxCampaignCharacterDto {
     profile: Record<string, string>
     /** Ficha D&D criada pela entrevista (rigor Equilibrado ou acima): `/sheets/<slug>`. */
     sheetSlug: string | null
+    /** Barra de XP (DND-63): só no modo Experiência, com ficha e entrevista concluída. */
+    xp?: MaddoxXpProgressDto | null
 }
 
 /** Situação do Personagem Opex no lobby (DND-26). */

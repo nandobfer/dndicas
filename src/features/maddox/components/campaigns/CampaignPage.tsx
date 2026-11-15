@@ -23,6 +23,7 @@ import { InvitePanel } from "./InvitePanel"
 import { CharacterProfileDialog } from "./CharacterProfileDialog"
 import { journalHref } from "../journal/journal-links"
 import { CampaignStoryCard } from "./CampaignStoryCard"
+import { XpBar } from "./XpBar"
 import { InterviewChip, MemberAvatar, OpexChip, CombatDifficultyChip, DensityChip, RarityChip, RigorChip, StartingLevelChip, StartingStageLine, StatusChip, WorldCatalogLines, rigorColor } from "./campaign-visuals"
 import { rarityColors } from "@/lib/config/colors"
 
@@ -246,6 +247,7 @@ function CampaignView({ campaign, userId }: { campaign: MaddoxCampaignDetailDto;
                                                 {member.userId === userId ? " · você" : ""}
                                             </p>
                                         )}
+                                        <XpBar xp={member.character?.xp} color={color} />
                                         {member.kind === "opex" && member.opex && <OpexStatusLine member={member} campaignId={campaign.id} isOwner={isOwner} open={campaign.inviteOpen} retrying={opexActions.retryInterview.isPending} onRetry={() => opexActions.retryInterview.mutate(member.id)} />}
                                     </div>
                                     {member.character && <InterviewChip status={member.character.interviewStatus} />}

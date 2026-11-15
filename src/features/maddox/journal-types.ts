@@ -1,3 +1,4 @@
+import type { MaddoxXpProgressDto } from "./campaign-types"
 import type { MaddoxCampaignMemoryKind, MaddoxNpcStatus, MaddoxQuestStatus, MaddoxRigorLevel, MaddoxCampaignStatus, MaddoxSceneImageSource } from "./constants"
 
 /**
@@ -48,6 +49,8 @@ export interface MaddoxJournalPartyMemberDto {
     profile: Record<string, string>
     /** Condição atual na história (mantida pelo Maddox). */
     currentState: string
+    /** Barra de XP (DND-63): só no modo Experiência, com ficha e entrevista concluída. */
+    xp?: MaddoxXpProgressDto | null
 }
 
 export interface MaddoxJournalSummaryDto {

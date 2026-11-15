@@ -1,3 +1,4 @@
+import type { MaddoxXpProgressDto } from "./campaign-types"
 import type { CalcPart } from "@/features/character-sheets/utils/dnd-calculations"
 import type { AttributeType, SkillName } from "@/features/character-sheets/types/character-sheet.types"
 import type { DiceRollResponse } from "@/features/dice-roller/types"
@@ -447,6 +448,8 @@ export interface MaddoxGameParticipantDto {
     eligible: boolean
     /** Já declarou ou passou neste turno. */
     declared: boolean
+    /** Barra de XP (DND-63): só no modo Experiência, com ficha e entrevista concluída. */
+    xp?: MaddoxXpProgressDto | null
 }
 
 export interface MaddoxGameStateDto {
