@@ -22,7 +22,7 @@ O dice roller fornece rolagens manuais e originadas de ficha/Owlbear com resulta
 - O standby usa internals encapsulados em helper para criar e fixar o mesh sem iniciar `animateThrow`. A simulação de física síncrona foi removida do standby para evitar bloqueio da thread principal (CPU), utilizando posicionamento matemático e rotações aleatórias.
 - Depois de fixar a face maxima, o standby reposiciona os meshes em grade estatica da esquerda para a direita, quebrando linha quando necessario.
 - Os assets de textura necessarios da Dice Box ficam em `public/textures/` para atender ao `assetPath: "/"` usado pela lib.
-- Uma estratégia de **Preload Agressivo** é executada no `DiceRollerProvider` (global), instanciando um `DiceBox` oculto no boot da aplicação para aquecer o cache do navegador (WASM, modelos 3D e shaders).
+- **Preload global e pool de motores (DND-61):** o `DiceBoxPreloader` do root layout (`src/app/layout.tsx`) aquece os motores `DiceBox` em background no boot do app inteiro (site e Owlbear), e os palcos reaproveitam os motores já aquecidos de um pool. Detalhes na seção "Preload global e pool de motores 3D".
 - Ao voltar para standby depois de uma rolagem, a stage limpa o canvas 3D anterior sem iniciar nova fisica/animacao.
 - A Dice Box usa `baseScale: 67` para manter os dados menores dentro da janela do roller.
 - Vantagem/desvantagem em `1d20` renderiza dois d20 visuais com papeis `kept` e `discarded`.
@@ -71,8 +71,34 @@ O dice roller foi refatorado de um modal convencional para uma janela flutuante 
 ### Responsive container query layout
 O painel do roller (`DiceRollerPanel`) monitora sua própria largura de contêiner usando um `ResizeObserver`. Se a largura do contêiner for menor que `800px` (como no tamanho padrão inicial ou quando o usuário redimensiona a janela para dimensões mais estreitas), os controles de seleção e modificadores são empilhados verticalmente abaixo da stage 3D e do resumo de resultados. Se o contêiner for mais largo que `800px`, os elementos mudam dinamicamente para um layout de duas colunas lado a lado.
 
-### Aggressive 3D assets preloading and physics-free standby
-Para eliminar o atraso percebido ao abrir o painel de dados, a aplicação realiza um preload agressivo dos recursos 3D (`DiceBox`). Ao montar o `DiceRollerProvider`, uma instância oculta do motor é inicializada em background usando `requestIdleCallback`, forçando o download e cache de assets pesados (WebAssembly do motor físico, modelos 3D dos dados e texturas). Adicionalmente, a renderização de dados em "standby" (dados aguardando na mesa) foi otimizada para ser puramente matemática: a simulação física síncrona foi removida, eliminando o congelamento da thread principal (Main Thread). Os dados são posicionados em grade e recebem rotações aleatórias instantâneas, garantindo que o painel apareça de forma imediata e fluida para o usuário.
+### Preload global e pool de motores 3D (DND-61)
+Fonte: `src/features/dice-roller/dice-box-loader.ts`.
+
+- **Boot:** `DiceBoxPreloader` (`components/dice-box-preloader.tsx`) fica montado em `src/app/layout.tsx` e chama `preloadDiceBoxAssets()` uma vez por documento, o que cobre `(dashboard)`, `owlbear/*` e as outras rotas. Nem o `DiceRollerProvider` nem as superfícies do Owlbear chamam o preload por conta própria.
+- **Agendamento:** o aquecimento espera o `load` da página, depois `DICE_BOX_PRELOAD_DELAY_MS` (1500 ms) e então um `requestIdleCallback` com `timeout: DICE_BOX_IDLE_TIMEOUT_MS` (2000 ms; sem a API, cai num `setTimeout`). Assim ele não disputa as requisições iniciais.
+- **Ordem:** aquece um motor (o que baixa módulo, Three, Cannon WASM, texturas e sons) e, em outro idle, o de reserva. Nunca roda dois `initialize` ao mesmo tempo.
+- **Quando não roda:** chamadas repetidas não agendam outra vez. O preload fica desligado só no servidor e nos testes (`__DNDICAS_DICE_BOX_LOADER__`); em qualquer navegador ele roda, inclusive com economia de dados ligada.
+- **Pool:** guarda motores parados (fora da tela, 450×260), motores aquecendo e motores em uso.
+  - O alvo é `DICE_BOX_WARM_TARGET = 2` motores parados ou aquecendo.
+  - O teto é `DICE_BOX_MAX_IDLE = 2` motores parados.
+- **`acquireWarmDiceBox()` (síncrona):** tira um motor parado ou devolve `null`.
+- **`getSharedDiceBox()`:** busca nesta ordem e, em todos os casos, agenda a reposição da reserva em idle:
+  1. um motor parado;
+  2. um motor que está aquecendo (pega a mesma promise, sem criar outro);
+  3. um motor criado **na hora**, sem esperar o idle.
+- **`releaseSharedDiceBox()`:** limpa os dados, devolve o container ao `body` fora da tela e põe o motor de volta no pool. Liberar duas vezes não o duplica. Acima do teto, o motor é descartado (`renderer.dispose`/`forceContextLoss` quando existem, mais `container.remove()`) para não acumular contextos WebGL.
+- **Palco:** o `DiceVisualStage` pega o motor num `useLayoutEffect`. Com um motor quente, o container entra no palco e passa por `syncDiceBoxSize` antes do primeiro paint, e o "..." nem pisca. Sem motor quente, cai no `getSharedDiceBox()` assíncrono. Encaixe, `baseScale`, física, sons e o override de `startClickThrow` não mudaram.
+- **Quando o "..." (`dice-loading-ellipsis`) ainda aparece:**
+  - enquanto o painel espera a resposta do servidor (`awaitingResult`; mantido por decisão do DND-61, cobre a latência da requisição);
+  - quando o usuário rola antes de o preload do boot terminar;
+  - quando há mais de 2 superfícies com palco ao mesmo tempo (a terceira cria um motor na hora, já com módulo e assets em cache);
+- **Testes:** `tests/frontend/dice-roller/dice-box-preloader.test.tsx` garante que o `DiceBoxPreloader` agenda o aquecimento uma vez e que o boot constrói os 2 motores. Os testes usam o loader falso (`__DNDICAS_DICE_BOX_LOADER__`) e chamam `resetDiceBoxPoolForTests()` no `beforeEach`/`afterEach`.
+  - O reset sobe uma geração: motor de um teste anterior que termina de aquecer ou é liberado depois é descartado, nunca volta ao pool.
+  - Com o loader falso, a reposição automática fica desligada (`resetDiceBoxPoolForTests({ autoReplenish: true })` liga).
+  - `warmDiceBoxPool(n)` aquece o pool de forma explícita e `getDiceBoxPoolStats()` expõe as contagens.
+
+### Standby sem física
+A renderização de dados em "standby" (dados aguardando na mesa) é puramente matemática: a simulação física síncrona foi removida, eliminando o congelamento da thread principal (Main Thread). Os dados são posicionados em grade e recebem rotações aleatórias instantâneas, garantindo que o painel apareça de forma imediata e fluida para o usuário.
 
 ### CLI TUI de gerenciamento de overrides (scripts/dice-override-cli.ts)
 Script de terminal interativo para criar e consultar dice overrides diretamente, sem precisar do browser. Conecta ao MongoDB via Mongoose (igual ao `search-cli.ts`) e usa `terminal-kit` para renderizar duas colunas permanentes:

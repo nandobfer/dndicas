@@ -3,7 +3,7 @@
 import * as React from "react"
 import { colors } from "@/lib/config/colors"
 import { cn } from "@/core/utils"
-import { getSharedDiceBox, releaseSharedDiceBox, syncDiceBoxSize, type SharedDiceBox } from "../dice-box-loader"
+import { acquireWarmDiceBox, getSharedDiceBox, releaseSharedDiceBox, syncDiceBoxSize, type SharedDiceBox } from "../dice-box-loader"
 import { buildDiceBoxNotation, buildDiceBoxStandbyNotation, expandStandbyVisualTerms, expandVisualResult } from "../dice-box-notation"
 import { renderStaticDiceBoxStandby } from "../dice-box-static-standby"
 import { CRITICAL_STAGE_CONFIG, CriticalHighlight, criticalBoxShadow } from "./critical-highlight"
@@ -56,9 +56,41 @@ export function DiceVisualStage({ terms, result, isRolling, mode, criticalState,
     const stageColor = getStageColor(mode, showStageResults ? criticalState : null)
     const criticalConfig = !bare && showStageResults && criticalState ? CRITICAL_STAGE_CONFIG[criticalState] : null
 
-    React.useEffect(() => {
+    // Layout effect: com um motor quente no pool, o container entra no palco antes do primeiro paint (sem piscar o "...").
+    React.useLayoutEffect(() => {
         let cancelled = false
         const containerElement = containerRef.current
+
+        function mountSharedBox(shared: SharedDiceBox) {
+            sharedContainerRef.current = shared
+            const box = shared.box
+
+            if (containerElement && shared.container.parentElement !== containerElement) {
+                containerElement.appendChild(shared.container)
+
+                // Reset styling for the visual stage wrapper
+                shared.container.style.position = "absolute"
+                shared.container.style.inset = "0"
+                shared.container.style.width = "100%"
+                shared.container.style.height = "100%"
+                shared.container.style.left = "0"
+                shared.container.style.top = "0"
+                shared.container.style.zIndex = "1"
+
+                // O container nasce fora da tela em 450×260: ajusta o canvas ao palco antes da primeira rolagem.
+                syncDiceBoxSize(box)
+
+                // Dispatch a resize event to ensure Three.js canvas size matches the new container
+                setTimeout(() => {
+                    if (typeof window !== "undefined") {
+                        window.dispatchEvent(new Event("resize"))
+                    }
+                }, 50)
+            }
+
+            diceBoxRef.current = box
+            setIsReady(true)
+        }
 
         async function initializeDiceBox() {
             try {
@@ -67,35 +99,7 @@ export function DiceVisualStage({ terms, result, isRolling, mode, criticalState,
                     releaseSharedDiceBox(shared)
                     return
                 }
-
-                sharedContainerRef.current = shared
-                const box = shared.box
-
-                if (containerElement && shared.container.parentElement !== containerElement) {
-                    containerElement.appendChild(shared.container)
-                    
-                    // Reset styling for the visual stage wrapper
-                    shared.container.style.position = "absolute"
-                    shared.container.style.inset = "0"
-                    shared.container.style.width = "100%"
-                    shared.container.style.height = "100%"
-                    shared.container.style.left = "0"
-                    shared.container.style.top = "0"
-                    shared.container.style.zIndex = "1"
-
-                    // O container nasce fora da tela em 450×260: ajusta o canvas ao palco antes da primeira rolagem.
-                    syncDiceBoxSize(box)
-
-                    // Dispatch a resize event to ensure Three.js canvas size matches the new container
-                    setTimeout(() => {
-                        if (typeof window !== "undefined") {
-                            window.dispatchEvent(new Event("resize"))
-                        }
-                    }, 50)
-                }
-
-                diceBoxRef.current = box
-                setIsReady(true)
+                mountSharedBox(shared)
             } catch (error) {
                 console.error("Failed to initialize dice box", error)
                 if (!cancelled) {
@@ -105,7 +109,9 @@ export function DiceVisualStage({ terms, result, isRolling, mode, criticalState,
             }
         }
 
-        initializeDiceBox()
+        const warm = acquireWarmDiceBox()
+        if (warm) mountSharedBox(warm)
+        else void initializeDiceBox()
 
         return () => {
             cancelled = true

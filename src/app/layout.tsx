@@ -8,6 +8,7 @@ import { GlassTooltipProvider } from "@/components/ui/glass-tooltip"
 import { ScrollToTop } from "@/core/ui/scroll-to-top"
 import { WindowProvider } from "@/core/context/window-context"
 import { ChunkLoadRecovery } from "@/core/ui/chunk-load-recovery"
+import { DiceBoxPreloader } from "@/features/dice-roller/components/dice-box-preloader"
 import { AuthSessionProvider } from "@/features/auth/auth-session-provider"
 import { PusherConfigBridge } from "@/lib/pusher/PusherConfigBridge"
 import { getPusherPublicConfig } from "@/lib/pusher/public-config"
@@ -38,6 +39,7 @@ export default async function RootLayout({
             <body className={cn("min-h-screen bg-background font-sans antialiased")}>
                 <PusherConfigBridge config={pusherConfig} />
                 <ChunkLoadRecovery />
+                <DiceBoxPreloader />
                 <ScrollToTop />
                 <AppProvider>
                     <AuthSessionProvider>
