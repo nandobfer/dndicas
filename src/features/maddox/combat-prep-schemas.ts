@@ -1,7 +1,7 @@
 import { z } from "zod"
 import { MADDOX_ABILITIES, MADDOX_SKILLS } from "./check-modifier"
 import { parseDiceExpression } from "./combat-rules"
-import { MADDOX_COMBAT_PREP_TEXT_CEILING as CEILING, MADDOX_REACTION_TRIGGERS } from "./constants"
+import { MADDOX_COIN_KEYS, MADDOX_COMBAT_PREP_TEXT_CEILING as CEILING, MADDOX_REACTION_TRIGGERS } from "./constants"
 import { MADDOX_MASTERY_KEYS } from "./weapon-mastery"
 
 /**
@@ -32,6 +32,11 @@ const source = catalogSourceSchema.optional().catch(undefined)
  */
 const choice = z.object({ quote: z.string().trim().min(1).max(1_000) }).optional().catch(undefined)
 const recordId = z.string().trim().min(1).max(40)
+/**
+ * DND-65: moedas por sigla pt-BR (po, pp, pe, pc, pl), só valores inteiros >= 0. O teto, a moeda nos dois lados e o saldo
+ * são conferidos em `applyCoinChange` (a recusa leva o motivo).
+ */
+const coinAmounts = z.object(Object.fromEntries(MADDOX_COIN_KEYS.map((key) => [key, z.number().int().min(0).optional()])) as Record<(typeof MADDOX_COIN_KEYS)[number], z.ZodOptional<z.ZodNumber>>).strict()
 
 /** Operações de ficha permitidas (lista fechada). `ref` liga uma criação a uma opção acrescentada (`fromChange`). */
 export const combatSheetChangeSchema = z.discriminatedUnion("type", [
@@ -67,6 +72,8 @@ export const combatSheetChangeSchema = z.discriminatedUnion("type", [
     z.object({ type: z.literal("item-add"), catalogItemId: recordId.optional(), name: text(CEILING.name).optional(), quantity: z.number().int().min(1).max(9_999).optional().default(1), equipped: z.boolean().optional().default(false), reason, ref, source, choice }),
     z.object({ type: z.literal("item-remove"), itemId: recordId, reason, ref, source, choice }),
     z.object({ type: z.literal("item-quantity"), itemId: recordId, quantity: z.number().int().min(0).max(9_999), reason, ref, source, choice }),
+    // DND-65: moedas são campo da ficha (`sheet.coins`), nunca item.
+    z.object({ type: z.literal("coins"), add: coinAmounts.optional(), subtract: coinAmounts.optional(), reason, ref, source, choice }),
 ])
 export type CombatSheetChange = z.infer<typeof combatSheetChangeSchema>
 

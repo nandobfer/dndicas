@@ -17,6 +17,7 @@ import { MADDOX_HIT_POINT_OPERATIONS } from "../hit-points-ops"
 import { catalogReadText, checkCatalogSource, createCatalogReadLog, type CatalogReadLog, type CatalogSource } from "./catalog-reads"
 import { catalogReferencesText, itemMastery, mentionCandidates, resolveCatalogReferences, type CatalogReference, type CatalogReferenceCandidate } from "./catalog-references"
 import { describeSheetChange } from "./combat-sheet-writes"
+import { coinsText, type SheetCoins } from "../coin-rules"
 
 /**
  * Preparação da mesa de combate (DND-41) — SOMENTE servidor. Ao abrir o combate tático, cada personagem (inclusive os
@@ -219,6 +220,7 @@ export async function loadPrepSheet(state: TacticalCharacterState, campaignId?: 
         `- Treino com armaduras: ${Object.entries(sheet.armorTraining ?? {}).filter(([, value]) => value).map(([key]) => key).join(", ") || "nenhum"}`,
         `- Conjuração: ${sheet.spellcastingAttribute ? MADDOX_ABILITY_LABELS[sheet.spellcastingAttribute as keyof typeof MADDOX_ABILITY_LABELS] ?? String(sheet.spellcastingAttribute) : "nenhum atributo"}${view ? ` · CD ${view.sheet.option.spellSaveDc} · ataque ${signed(view.sheet.option.spellAttackBonus)}` : ""}`,
         `- Espaços de magia: ${slots.map(([circle, slot]) => `${circle}º ${slot.total - slot.used}/${slot.total}`).join(", ") || "nenhum"}`,
+        `- Moedas: ${coinsText(sheet.coins as SheetCoins | undefined)} (campo de moedas da ficha; muda com {"type":"coins"}, nunca com item)`,
         `- Recursos com cargas: ${charges.map((charge) => `[id="${charge.id}"] ${plainText(charge.name)} ${charge.total - charge.used}/${charge.total}`).join("; ") || "nenhum"}`,
         `## Características de classe\n${clip(html("classFeatures"), 3000) || "(nenhuma)"}`,
         `## Características da espécie\n${clip(html("speciesTraits"), 2000) || "(nenhuma)"}`,

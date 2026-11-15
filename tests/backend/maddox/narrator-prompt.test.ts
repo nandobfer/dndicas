@@ -174,7 +174,7 @@ describe("fichas e testes no prompt (Maddox 5)", () => {
     })
 
     it("no MCP, a lista de ferramentas só inclui request_check quando os testes valem", () => {
-        expect(buildNarratorInstructions(context({ rigor: "fiel-dnd" }), { kind: "mcp", server: "dndicas-maddox", turnToken: "t", checks: true })).toContain("update_character_state, update_character_hit_points, update_character_exhaustion, resolve_reminder, request_check, promover_npc_opex, desfazer_npc_opex, gravar_memoria_npc_opex, search_catalog, get_catalog_entity)")
+        expect(buildNarratorInstructions(context({ rigor: "fiel-dnd" }), { kind: "mcp", server: "dndicas-maddox", turnToken: "t", checks: true })).toContain("update_character_state, update_character_hit_points, update_character_exhaustion, update_character_coins, resolve_reminder, request_check, promover_npc_opex, desfazer_npc_opex, gravar_memoria_npc_opex, search_catalog, get_catalog_entity)")
         expect(buildNarratorInstructions(context(), { kind: "mcp", server: "dndicas-maddox", turnToken: "t", checks: false })).not.toContain("request_check")
     })
 
@@ -232,7 +232,7 @@ describe("catálogo do DnDicas no narrador", () => {
     })
 
     it("no MCP, a lista de ferramentas inclui as de catálogo também sem testes", () => {
-        expect(buildNarratorInstructions(context(), { kind: "mcp", server: "dndicas-maddox", turnToken: "t", checks: false })).toContain("update_character_state, update_character_hit_points, update_character_exhaustion, resolve_reminder, promover_npc_opex, desfazer_npc_opex, gravar_memoria_npc_opex, search_catalog, get_catalog_entity)")
+        expect(buildNarratorInstructions(context(), { kind: "mcp", server: "dndicas-maddox", turnToken: "t", checks: false })).toContain("update_character_state, update_character_hit_points, update_character_exhaustion, update_character_coins, resolve_reminder, promover_npc_opex, desfazer_npc_opex, gravar_memoria_npc_opex, search_catalog, get_catalog_entity)")
     })
 })
 
@@ -512,6 +512,15 @@ describe("NPCs Opex no prompt do narrador (DND-27)", () => {
 })
 
 describe("DND-58 — descanso e exaustão no narrador", () => {
+    it("DND-65: graus com ficha recebem a regra das moedas (campo da ficha, nunca item); o narrativo não", async () => {
+        const { MADDOX_COINS_RULE, MADDOX_SHEET_FIX_TASK_RULES } = await import("@/features/maddox/server/narrator-prompt")
+        for (const rigor of ["equilibrado", "rigoroso", "fiel-dnd"] as const) expect(buildNarratorInstructions(context({ rigor }), { kind: "ai-sdk" })).toContain(MADDOX_COINS_RULE)
+        expect(buildNarratorInstructions(context({ rigor: "narrativo" }), { kind: "ai-sdk" })).not.toContain(MADDOX_COINS_RULE)
+        expect(MADDOX_COINS_RULE).toContain("`update_character_coins`")
+        expect(MADDOX_COINS_RULE).toContain("NUNCA registre moeda como item")
+        expect(MADDOX_SHEET_FIX_TASK_RULES).toContain("update_character_coins")
+    })
+
     it("graus com ficha recebem a regra do descanso e da exaustão; o MCP lista start_rest só com `rest`", async () => {
         const { MADDOX_REST_RULE, MADDOX_REST_EXCHANGE_TASK_RULES, narratorTaskText: taskText } = await import("@/features/maddox/server/narrator-prompt")
         const sheet = buildNarratorInstructions(context({ rigor: "equilibrado" }), { kind: "ai-sdk" })

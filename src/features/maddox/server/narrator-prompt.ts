@@ -140,6 +140,15 @@ export const MADDOX_HIT_POINTS_RULE = [
     "- Descanso NUNCA passa por `update_character_hit_points`: use `start_rest` (ele recupera PV, dados de vida, espaços e recursos). Dentro do combate tático, os PV mudam pelas ações e pelo `apply_effect`.",
 ].join("\n")
 
+/** DND-65: moedas são campo da ficha (graus com ficha), nunca história nem item. */
+export const MADDOX_COINS_RULE = [
+    "## Moedas",
+    "- As moedas ficam na FICHA (\"Moedas\" no resumo de cada personagem; siglas: po ouro, pp prata, pe electrum, pc cobre, pl platina). Nunca diga que moeda é \"só da história\": toda moeda que entra ou sai passa pela ficha.",
+    "- Quando um personagem paga, compra, recebe, ganha, acha ou perde moedas na cena (fora da recompensa do `end_combat`), chame `update_character_coins` com `somar` e/ou `subtrair` e o motivo ANTES de narrar o desfecho. Some só o que a história deu; para o jogador que pede, confira na transcrição.",
+    "- Sem saldo, a ferramenta recusa e a compra não acontece na história (ofereça pechincha, troca ou crédito na narração). Troco entre moedas é explícito na mesma chamada (subtrair 1 po e somar 10 pp).",
+    "- NUNCA registre moeda como item do inventário (\"Peças de prata\", \"30 po\") nem como condição em `update_character_state`: o servidor recusa o item.",
+].join("\n")
+
 /** Graus que julgam a validade da ação livre na narração (os demais validam ao declarar). */
 export function judgesFreeActionsInNarration(rigor: MaddoxRigorLevel): boolean {
     return !MADDOX_DECLARATION_VALIDATION_RIGORS.includes(rigor)
@@ -343,7 +352,7 @@ function toolsBlock(mode: NarratorToolMode): string | null {
     if (mode.kind === "ai-sdk") return null
     return [
         "## Ferramentas desta narração",
-        `- As ferramentas de anotações da campanha estão no servidor MCP \`${mode.server}\` (get_campaign_state, update_campaign_state, list_npcs, get_npc, save_npc, search_memories, save_memory, update_character_state, update_character_hit_points, update_character_exhaustion, resolve_reminder${mode.checks ? ", request_check" : ""}${mode.rest ? ", start_rest" : ""}${mode.combat ? ", get_combat, start_combat, update_combat, end_combat" : ""}${mode.tactical ? ", monster_action, apply_effect, request_damage_roll, offer_reaction" : ""}${mode.sceneImages ? ", request_scene_image" : ""}${mode.actionOptions ? ", suggest_actions" : ""}, promover_npc_opex, desfazer_npc_opex, gravar_memoria_npc_opex${mode.opexNpcs ? ", consultar_npc_opex" : ""}${mode.sheetFix ? `, ${MADDOX_SHEET_FIX_TOOL_NAMES.join(", ")}` : ""}${mode.combatFix ? `, ${MADDOX_COMBAT_FIX_TOOL_NAMES.join(", ")}` : ""}${mode.progression?.length ? `, ${mode.progression.join(", ")}` : ""}, ${MADDOX_CATALOG_TOOL_NAMES.search}, ${MADDOX_CATALOG_TOOL_NAMES.get}).`,
+        `- As ferramentas de anotações da campanha estão no servidor MCP \`${mode.server}\` (get_campaign_state, update_campaign_state, list_npcs, get_npc, save_npc, search_memories, save_memory, update_character_state, update_character_hit_points, update_character_exhaustion, update_character_coins, resolve_reminder${mode.checks ? ", request_check" : ""}${mode.rest ? ", start_rest" : ""}${mode.combat ? ", get_combat, start_combat, update_combat, end_combat" : ""}${mode.tactical ? ", monster_action, apply_effect, request_damage_roll, offer_reaction" : ""}${mode.sceneImages ? ", request_scene_image" : ""}${mode.actionOptions ? ", suggest_actions" : ""}, promover_npc_opex, desfazer_npc_opex, gravar_memoria_npc_opex${mode.opexNpcs ? ", consultar_npc_opex" : ""}${mode.sheetFix ? `, ${MADDOX_SHEET_FIX_TOOL_NAMES.join(", ")}` : ""}${mode.combatFix ? `, ${MADDOX_COMBAT_FIX_TOOL_NAMES.join(", ")}` : ""}${mode.progression?.length ? `, ${mode.progression.join(", ")}` : ""}, ${MADDOX_CATALOG_TOOL_NAMES.search}, ${MADDOX_CATALOG_TOOL_NAMES.get}).`,
         `- Em TODA chamada a essas ferramentas, envie o campo \`turno\` exatamente com este valor: \`${mode.turnToken}\`.`,
         "- Não use outras ferramentas (arquivos, terminal, web): a campanha vive só nessas anotações.",
     ].join("\n")
@@ -383,7 +392,7 @@ export function buildNarratorInstructions(context: NarratorPromptContext, mode: 
     parts.push(MADDOX_NARRATOR_RULES, usesChecks(context.rigor) ? checksRule(context.rigor) : MADDOX_NARRATIVE_MODE_RULE, rigorBlock(context.rigor))
     if (usesCombat(context.rigor)) parts.push(combatRule(context.rigor))
     if (usesTacticalCombat(context.rigor)) parts.push(tacticalCombatRule(context.rigor))
-    if (MADDOX_SHEET_RIGORS.includes(context.rigor)) parts.push(MADDOX_HIT_POINTS_RULE, MADDOX_REST_RULE)
+    if (MADDOX_SHEET_RIGORS.includes(context.rigor)) parts.push(MADDOX_HIT_POINTS_RULE, MADDOX_COINS_RULE, MADDOX_REST_RULE)
     if (judgesFreeActionsInNarration(context.rigor)) parts.push(MADDOX_FREE_ACTION_RULE)
     parts.push(MADDOX_NARRATOR_FORMAT, MADDOX_PERSISTENCE_RULE, narratorCatalogRule(context.rigor, context.worldCatalog ?? null))
     const images = sceneImagesRule(context.sceneImages)
@@ -727,7 +736,7 @@ function taskBody(task: NarratorTask): string {
  */
 export const MADDOX_SHEET_FIX_TASK_RULES = [
     "## Correções pedidas pelo jogador",
-    `Se o jogador pedir para corrigir a ficha, as ações, os PV ou o estado do personagem, CORRIJA de fato (não só narre): leia a ficha com \`${MADDOX_SHEET_FIX_TOOL_NAMES[0]}\` e o que ele escolheu na entrevista com \`${MADDOX_SHEET_FIX_TOOL_NAMES[1]}\`, consulte a regra no catálogo e grave com \`${MADDOX_SHEET_FIX_TOOL_NAMES[2]}\` (atributos, atributo de conjuração, truques e magias, ataques, talentos, características, itens, espaços de magia e cargas), \`update_character_hit_points\` (PV) e \`update_character_state\` (como o personagem está na história, fora do combate tático: texto do Diário, que não muda nenhum dado). Depois diga ao jogador, em uma ou duas frases, o que mudou.`,
+    `Se o jogador pedir para corrigir a ficha, as ações, os PV ou o estado do personagem, CORRIJA de fato (não só narre): leia a ficha com \`${MADDOX_SHEET_FIX_TOOL_NAMES[0]}\` e o que ele escolheu na entrevista com \`${MADDOX_SHEET_FIX_TOOL_NAMES[1]}\`, consulte a regra no catálogo e grave com \`${MADDOX_SHEET_FIX_TOOL_NAMES[2]}\` (atributos, atributo de conjuração, truques e magias, ataques, talentos, características, itens, espaços de magia, cargas e moedas — \`{"type":"coins"}\`, nunca item), \`update_character_coins\` (moedas: somar e subtrair), \`update_character_hit_points\` (PV) e \`update_character_state\` (como o personagem está na história, fora do combate tático: texto do Diário, que não muda nenhum dado). Depois diga ao jogador, em uma ou duas frases, o que mudou.`,
     "Toda correção de regra leva a fonte do catálogo (`source`: a entidade lida e o trecho exato dela).",
     "NUNCA escolha pelo jogador o que a regra manda ele escolher (o atributo de conjuração de uma lista como \"Inteligência, Sabedoria ou Carisma\", os truques ou a magia escolhidos de uma lista). Grave a escolha só quando ele a disse, com o trecho literal da mensagem dele em `choice.quote`. Se ele ainda não disse, PERGUNTE e não grave: a resposta dele chega como uma nova pergunta nesta conversa.",
     "Se faltar um dado para corrigir (qual truque, qual item, quanto), pergunte antes de gravar. A correção nunca gasta a Ação do personagem nem fecha o turno.",

@@ -390,6 +390,8 @@ describe("Maddox 6 — combate narrativo de ponta a ponta", () => {
                     tools: [
                         // Personagem desconhecido: recusado sem gravar nada.
                         { name: "end_combat", input: { resultado: "vitoria", resumo: "x", cenaFinal: "x", recompensas: [{ tipo: "moedas", personagem: "Zé", moedas: { po: 1 } }] } },
+                        // DND-65: moeda nunca vira item (recusado sem gravar nada).
+                        { name: "end_combat", input: { resultado: "vitoria", resumo: "x", cenaFinal: "x", recompensas: [{ tipo: "item", personagem: "Lyra", item: "30 Peças de prata" }] } },
                         {
                             name: "end_combat",
                             input: {
@@ -415,6 +417,7 @@ describe("Maddox 6 — combate narrativo de ponta a ponta", () => {
         await playersTurn(id, owner, player, 1)
 
         expect(toolLog.find((item) => item.error)?.error).toContain('Nenhum personagem jogador chamado "Zé". Personagens: ')
+        expect(toolLog.filter((item) => item.error)[1]?.error).toContain('Recompensa "30 Peças de prata" é moeda, não item')
         const combat = await MaddoxCombatModel.findOne({ campaignId: id }).lean()
         expect(combat!.status).toBe("ended")
         expect(combat!.rewards.map((reward) => [reward.kind, reward.applied, reward.warning])).toEqual([
