@@ -775,10 +775,15 @@ export const MADDOX_SHEET_FIX_TOOL_NAMES = ["get_character_sheet", "get_characte
 /** DND-59: o Rolar do card espera enquanto o mestre responde uma pergunta ou corrige um lembrete. */
 export const MADDOX_MASTER_REVIEWING_MESSAGE = "O mestre está revisando um pedido; role quando a resposta chegar."
 
-export const MADDOX_COMBAT_FIX_TOOL_NAMES = ["get_combat_details", "set_combat_condition", "edit_combat_action", "correct_combatant", "correct_character_turn"] as const
+export const MADDOX_COMBAT_FIX_TOOL_NAMES = ["get_combat_details", "set_combat_condition", "edit_combat_action", "correct_combatant", "correct_character_turn", "resume_combat_turn"] as const
 
 /** DND-51: prazo da resposta do jogador a uma pergunta da preparação do combate; depois, a preparação conclui sem a escolha. */
 export const MADDOX_COMBAT_PREP_ANSWER_TIMEOUT_MS = 3 * 60_000
+/**
+ * Status da preparação da mesa de combate que seguram a ordem de iniciativa e a continuação do mestre (DND-41/51). Lista
+ * única (DND-62): `preparationPending` e `hasRoundWaits` precisam concordar, senão a narração roda antes da ordem fechar.
+ */
+export const MADDOX_COMBAT_PREP_BLOCKING_STATUSES = ["pending", "running", "awaiting-player", "failed"] as const
 
 export const MADDOX_COMBAT_PREP_EXPIRED_NOTICE = "Você não respondeu a tempo: a preparação seguiu sem essa escolha. Peça a correção pelo \"Pergunte ao mestre\"."
 

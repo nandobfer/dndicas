@@ -415,7 +415,7 @@ export function CombatActionMenu({ economy: economySlot, options, combat, busy, 
 }
 
 /** Fora da minha vez: de quem é a vez e a rodada. */
-export function CombatWaitBar({ combat, onAsk, canAsk, isOwner = false }: { combat: MaddoxTacticalCombatDto; onAsk: () => void; canAsk: boolean; isOwner?: boolean }) {
+export function CombatWaitBar({ combat, onAsk, canAsk, isOwner = false, recovering = false }: { combat: MaddoxTacticalCombatDto; onAsk: () => void; canAsk: boolean; isOwner?: boolean; recovering?: boolean }) {
     const active = combat.order.find((slot) => slot.active)
     const preparation = combat.preparation
     // DND-41: durante a iniciativa, o mestre prepara a mesa de cada personagem; uma falha espera o dono da campanha.
@@ -423,7 +423,7 @@ export function CombatWaitBar({ combat, onAsk, canAsk, isOwner = false }: { comb
     return (
         <div className="flex items-center gap-2 border-t px-4 py-3 text-sm text-white/80" data-testid="combat-wait-bar">
             <Swords className="h-4 w-4 text-red-300" aria-hidden />
-            <span className="flex-1" data-testid="combat-wait-text">{preparing ? preparing : combat.phase === "initiative" ? "Rolando a iniciativa…" : active ? `Vez de ${active.name}${active.initiative !== null ? ` (iniciativa ${active.initiative})` : ""} · Rodada ${combat.round}` : `Vez dos adversários · Rodada ${combat.round}`}</span>
+            <span className="flex-1" data-testid="combat-wait-text">{preparing ? preparing : recovering ? "O Maddox está retomando a vez do combate…" : combat.phase === "initiative" ? "Rolando a iniciativa…" : active ? `Vez de ${active.name}${active.initiative !== null ? ` (iniciativa ${active.initiative})` : ""} · Rodada ${combat.round}` : `Vez dos adversários · Rodada ${combat.round}`}</span>
             {canAsk && (
                 <Button size="sm" variant="ghost" onClick={onAsk}>
                     <HelpCircle aria-hidden /> Perguntar ao mestre

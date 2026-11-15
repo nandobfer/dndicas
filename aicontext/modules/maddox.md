@@ -2273,6 +2273,43 @@ Caso real: o Maddox disse "Registrei a condição em Lizwan" depois de gravar s�
 Sem permissão nova (`maddox.play` cobre). Testes: `tests/backend/maddox/question-combat-fix.test.ts`, `dnd59-rules.test.ts`, os casos
 "DND-59" de `tactical-combat.test.ts`, `reminders.test.ts` e `tests/frontend/maddox/maddox-dnd59-combat.test.tsx`.
 
+## A vez do combate nunca fica sem card (DND-62)
+
+Caso real: a preparação de uma ficha parou numa pergunta ao jogador (`awaiting-player`, DND-51), `hasRoundWaits` não contava esse
+status, a continuação do mestre narrou com o combate ainda em `initiative` e o fim da narração abriu um turno de jogadores genérico
+(`combatActor: null`). Quando a ordem fechou depois, ninguém preparou a fila (`activeIndex -1`, `nextKey`/`block` nulos): a tela
+mostrava "Vez dos adversários" sem card nem campo de texto.
+
+- **Lista única de status bloqueantes:** `MADDOX_COMBAT_PREP_BLOCKING_STATUSES` (`constants.ts`: `pending`, `running`,
+  `awaiting-player`, `failed`), usada por `preparationPending` (`combat-prep.ts`) e por `hasRoundWaits(…, pendingOnly)`.
+- **Continuação só com a ordem fechada:** `parkWhileInitiative` (`server/game.ts`) roda no começo de `runMasterTurn` (rodada > 0) e
+  no lugar do turno genérico do fim da narração. Com o combate tático ainda em `initiative`, tenta fechar a ordem; senão o turno volta
+  a `master` + `awaitingChecks` na rodada da iniciativa (`waitRound` do card de iniciativa) e nada é narrado — `afterPrepSettled` e o
+  prazo do dado dos inimigos retomam pela troca condicional de sempre (`advanceAfterChecks`). Log
+  `[maddox] continuação adiada: a ordem de iniciativa ainda não fechou`. Com combate `running` e sem vez, o turno genérico só fica
+  como último recurso, com `log.error`.
+- **Fila na hora:** `advanceToNextCharacter` com `nextKey` nulo monta o `planQueue` agora (`preparedNow: true` no `OpenResult`):
+  personagem primeiro = abre a vez dele (rodada nova só se a ordem voltou ao topo); adversário antes = `monsters` (novo turno do
+  mestre com `queueTurn: null`, que prepara a fila e os blocos); `none` só sem personagem que possa agir.
+- **Auto-recuperação:** `ensureCombatTurn(campaignOrId, reason)` (`server/game.ts`, exportada) detecta combate tático `running` +
+  `turn.phase = players` + sem `combatActor` + sem `generating` (+ sem volta pendente), pega a trava por troca condicional e chama
+  `openCombatTurn(…, "recovery")`; publica a mesa. Chamada em `getGameState` (`reason: "state"`), depois de toda ordem de iniciativa
+  fechada (`finishInitiativeIfReady`, `"initiative"`, fire-and-forget) e pela ferramenta `resume_combat_turn` (`"question"`). Não usa a
+  fila de jobs (pode rodar dentro de um job).
+- **Log da decisão:** `openCombatTurn` registra `[maddox] vez do combate` (ou `… não aberta`) com `source`, combate, rodada,
+  `activeIndex`, `nextKey` de antes, `preparedNow`, `result` e `actorKey`; a retomada loga `combate tático sem vez aberta: retomando a vez`.
+- **Tela:** `combatTurnRecovering(state)` (`game-view.ts`) = combate `running`, turno dos jogadores, sem `combatActor` e sem Opex de
+  combate na vez. A faixa usa `combatRecoveringBannerText` ("Combate — rodada N: retomando a vez…", nunca "Turno dos jogadores") e o
+  `CombatWaitBar recovering` mostra "O Maddox está retomando a vez do combate…" com o "Perguntar ao mestre".
+- **Pergunte ao mestre:** `get_combat_details` devolve `vez` (`{ aberta: true, personagem, rodada }` ou `{ aberta: false, motivo }`);
+  `resume_combat_turn` (6ª ferramenta de `MADDOX_COMBAT_FIX_TOOL_NAMES`, `resumeCombatTurnForFix`) retoma a vez. A regra em
+  `MADDOX_COMBAT_FIX_TASK_RULES` proíbe falar do card ou da vez sem a leitura de `vez`.
+
+Sem permissão nova (`maddox.play` cobre). Testes: casos "DND-62" de `tests/backend/maddox/tactical-combat.test.ts` (pergunta pendente
+segura a continuação e a vez abre com card; fila na hora; retomada na leitura, concorrente e com adversário primeiro),
+`question-combat-fix.test.ts` (`vez` e `resume_combat_turn`), `tests/frontend/maddox/maddox-tactical-combat.test.tsx` e
+`maddox-game.test.tsx`.
+
 ## Testes
 
 Descanso e exaustão (DND-58): `tests/backend/maddox/rest-rules.test.ts` (tabela, dados de vida, trecho do catálogo, exaustão, teste

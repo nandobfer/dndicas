@@ -342,6 +342,42 @@ describe("DND-59 — correções do combate pelo Pergunte ao mestre", () => {
     })
 })
 
+describe("DND-62 — o Pergunte ao mestre lê a vez antes de falar do card", () => {
+    /** Combate em andamento sem vez aberta (fila nunca preparada) e um turno de jogadores genérico. */
+    async function breakTurn(id: string) {
+        await MaddoxCombatModel.updateOne({ campaignId: id }, { $set: { "tactical.activeIndex": -1, "tactical.nextKey": null, "tactical.queue": [], "tactical.block": null } })
+        await MaddoxCampaignModel.updateOne({ _id: id }, { $set: { "turn.combatActor": null } })
+    }
+
+    it("get_combat_details mostra a vez aberta e, sem vez, manda retomar; resume_combat_turn abre a vez de verdade", async () => {
+        const { id, kael } = await scene()
+        const open = await openRun(id, kael.userId)
+        expect((await fixTools.readCombatForFix(open.jobId)).vez).toMatchObject({ aberta: true, personagem: "Kael" })
+        open.close()
+
+        await breakTurn(id)
+        const run = await openRun(id, kael.userId)
+        const read = await fixTools.readCombatForFix(run.jobId)
+        expect(read.vez).toMatchObject({ aberta: false, motivo: expect.stringContaining("resume_combat_turn") })
+        const tool = masterTools.findMaddoxTool("resume_combat_turn")!
+        const resumed = await masterTools.runMaddoxTool(tool, { campaignId: new mongoose.Types.ObjectId(id), turnNumber: 2, jobId: run.jobId }, {})
+        expect(resumed).toMatchObject({ retomada: true, vez: { aberta: true, personagem: "Kael" } })
+        // Já aberta: nada a retomar, e a resposta diz o estado gravado.
+        expect(await fixTools.resumeCombatTurnForFix(run.jobId)).toMatchObject({ retomada: false, vez: { aberta: true, personagem: "Kael" } })
+        run.close()
+        expect((await MaddoxCampaignModel.findById(id).lean())!.turn.combatActor).toMatchObject({ actorKey: kael.actorKey })
+    })
+
+    it("fora da execução de uma resposta, a retomada é recusada; a regra do prompt manda ler a vez", async () => {
+        const { id } = await scene()
+        await breakTurn(id)
+        await expect(fixTools.resumeCombatTurnForFix("sem-job")).rejects.toThrow('Esta ferramenta só funciona na resposta a uma pergunta do "Pergunte ao mestre" ou a um lembrete.')
+        const { MADDOX_COMBAT_FIX_TASK_RULES } = await import("@/features/maddox/server/narrator-prompt")
+        expect(MADDOX_COMBAT_FIX_TASK_RULES).toContain("Sobre o card de ações")
+        expect(MADDOX_COMBAT_FIX_TASK_RULES).toContain("resume_combat_turn")
+    })
+})
+
 describe("DND-59 — Esconder-se antes do combate", () => {
     const check = (characterId: string, characterName: string, turnNumber: number, total: number, dc = 13) => ({ characterId, characterName, turnNumber, total, dc })
 

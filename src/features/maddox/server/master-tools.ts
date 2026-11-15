@@ -1443,6 +1443,15 @@ export const MADDOX_COMBAT_FIX_TOOLS: readonly MaddoxMasterTool[] = [
             return questionCombatCall((tools) => tools.correctCharacterTurn(context.jobId, input))
         },
     }),
+    define({
+        name: MADDOX_COMBAT_FIX_TOOL_NAMES[5],
+        description: "Combate tático (resposta a pergunta ou lembrete): retoma a vez quando get_combat_details mostra `vez.aberta: false` sem motivo de espera (ninguém tem o card de ações). O servidor abre a vez do próximo personagem da ordem (ou passa aos adversários). Só diga que a vez abriu depois do retorno com `retomada: true`.",
+        readOnly: false,
+        input: z.object({}),
+        async execute(context) {
+            return questionCombatCall((tools) => tools.resumeCombatTurnForFix(context.jobId))
+        },
+    }),
 ]
 
 // ── Progressão de nível (DND-56) ───────────────────────────────────────────────

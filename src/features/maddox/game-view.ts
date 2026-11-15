@@ -68,6 +68,19 @@ export function combatBannerText(state: Pick<MaddoxGameStateDto, "turn" | "comba
     return actor.memberId === state.me?.memberId ? `Combate — rodada ${round}: é a sua vez (${actor.characterName})` : `Combate — rodada ${round}: vez de ${actor.characterName}`
 }
 
+/**
+ * DND-62: combate tático em andamento com a mesa num turno de jogadores sem vez aberta (ninguém tem o card de ações). O
+ * servidor retoma a vez sozinho na leitura da mesa; até o aviso de mudança chegar, a tela mostra a retomada.
+ */
+export function combatTurnRecovering(state: Pick<MaddoxGameStateDto, "turn" | "combat" | "status">): boolean {
+    return state.status === "active" && state.combat?.tactical?.phase === "running" && state.turn.phase === "players" && !state.turn.combatActor && !state.turn.opexActor?.combat
+}
+
+/** Faixa do turno dos jogadores em combate tático sem vez aberta (nunca "Turno dos jogadores" com o painel de combate). */
+export function combatRecoveringBannerText(state: Pick<MaddoxGameStateDto, "combat">): string {
+    return `Combate — rodada ${state.combat?.tactical?.round ?? 1}: retomando a vez…`
+}
+
 /** Faixa dos Personagens Opex (DND-26): quem está agindo, ou a falha que trava a mesa. `null` = nenhum Opex na vez. */
 export function opexBannerText(state: Pick<MaddoxGameStateDto, "turn" | "status"> & { me?: Pick<MaddoxGameStateDto["me"], "isOwner"> }): string | null {
     const actor = state.status === "active" && state.turn.phase === "players" ? state.turn.opexActor : null

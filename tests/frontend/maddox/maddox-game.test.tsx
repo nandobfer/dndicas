@@ -1266,6 +1266,17 @@ describe("mesa Maddox — preparação do combate (DND-41)", () => {
         await act(async () => fireEvent.click(within(menu).getByTestId("combat-adjust-send")))
         await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns/c1/game/combat/adjustments", { economy: "action", optionId: "weapon:adaga", text: "a adaga tem acuidade" }))
     })
+
+    it("DND-62: combate em andamento sem vez aberta — faixa e painel falam da retomada, sem 'Turno dos jogadores' nem 'Vez dos adversários'", async () => {
+        const running = { phase: "running" as const, round: 1, activeKey: null, order: [slot("pc:kael", "Kael", "m1", { initiative: 21 }), slot("npc:g", "Goblin", null, { initiative: 18 })] }
+        const state = combatState(running)
+        state.turn = { ...state.turn, phase: "players", awaitingChecks: false, combatActor: null }
+        await renderGame(state)
+        expect(screen.getByTestId("turn-banner")).toHaveTextContent("Combate — rodada 1: retomando a vez…")
+        expect(screen.getByTestId("turn-banner")).not.toHaveTextContent("Turno dos jogadores")
+        expect(screen.getByTestId("combat-wait-text")).toHaveTextContent("O Maddox está retomando a vez do combate…")
+        expect(screen.getByText("Perguntar ao mestre")).toBeInTheDocument()
+    })
 })
 
 describe("mesa Maddox — descanso conduzido pelo Maddox (DND-58)", () => {

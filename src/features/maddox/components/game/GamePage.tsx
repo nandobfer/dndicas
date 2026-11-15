@@ -15,7 +15,7 @@ import { apiErrorCode, apiErrorMessage } from "@/lib/api"
 import { MADDOX_RESET_NOTICE_PARAM, MADDOX_RESET_NOTICE_VALUE, MADDOX_RESET_TEXTS, MADDOX_TURN_PHASE_LABELS } from "../../constants"
 import type { MaddoxGameMessageDto, MaddoxGameStateDto } from "../../game-types"
 import type { MaddoxGameActionInput } from "../../game-schemas"
-import { actionOptionsView, combatBannerText, newestRewindNoticeId, composerBlockReason, masterBannerText, opexActingView, opexBannerText, reminderBlockReason, turnProgress, visibleLiveGenerations } from "../../game-view"
+import { actionOptionsView, combatBannerText, combatRecoveringBannerText, combatTurnRecovering, newestRewindNoticeId, composerBlockReason, masterBannerText, opexActingView, opexBannerText, reminderBlockReason, turnProgress, visibleLiveGenerations } from "../../game-view"
 import { useMaddoxOpexTableActions } from "../../hooks/useMaddoxOpex"
 import { OpexFailureBanner } from "./OpexFailureBanner"
 import type { MaddoxCombatActionInput } from "../../combat-schemas"
@@ -207,6 +207,8 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
         }
     }
     const myCombatTurn = Boolean(tactical && state.me.combat?.myTurn && state.turn.phase === "players")
+    // DND-62: combate em andamento sem vez aberta — aviso de retomada (o servidor reabre a vez na leitura da mesa).
+    const recoveringCombatTurn = combatTurnRecovering(state)
     const combatBusy = combatAct.isPending || combatEnd.isPending || combatCancel.isPending
     // Em combate tático o campo de texto só pergunta ao mestre (a vez é pelos botões).
     const questionBlock = state.status !== "active" ? "A campanha não está em andamento." : !state.me.ready ? "Conclua a entrevista de personagem com o Maddox para entrar no jogo." : state.turn.phase !== "players" ? "Perguntas ao mestre ficam para a vez de um personagem." : null
@@ -260,6 +262,8 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
                               ? opexBannerText(state)
                               : state.turn.combatActor
                               ? combatBannerText(state)
+                              : recoveringCombatTurn
+                              ? combatRecoveringBannerText(state)
                               : `${MADDOX_TURN_PHASE_LABELS.players} — ${progress.declared} de ${progress.total} ${presence.available ? "jogador(es) online" : "jogador(es)"} já declararam`}
                     </p>
                     {state.turn.rewind && (
@@ -357,7 +361,7 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
                                             <CombatPrepBlockedNotice preparation={tactical.preparation} isOwner={state.me.isOwner} retrying={prepRetry.isPending} skipping={prepSkip.isPending} onRetry={(prepId) => prepRetry.mutate(prepId)} onSkip={(prepId) => prepSkip.mutate(prepId)} />
                                         </div>
                                     )}
-                                    <CombatWaitBar combat={tactical} isOwner={state.me.isOwner} canAsk={questionBlock === null} onAsk={() => setAsking((value) => !value)} />
+                                    <CombatWaitBar combat={tactical} isOwner={state.me.isOwner} recovering={recoveringCombatTurn} canAsk={questionBlock === null} onAsk={() => setAsking((value) => !value)} />
                                 </>
                             )}
                             {asking && <GameComposer blockedReason={questionBlock} declared busy={send.isPending} onSend={onSend} invalidReason={null} focusKey={focusKey} />}
