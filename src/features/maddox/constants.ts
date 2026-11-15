@@ -756,6 +756,8 @@ export const MADDOX_COMBAT_PREP_TRAIT_TEXT_MAX = 400
 /** DND-58: ferramenta do descanso (só nas narrações dos graus com ficha) e a da exaustão. */
 export const MADDOX_REST_TOOL_NAME = "start_rest"
 export const MADDOX_EXHAUSTION_TOOL_NAME = "update_character_exhaustion"
+/** DND-65: moedas da ficha (narração, pergunta e lembrete). */
+export const MADDOX_COINS_TOOL_NAME = "update_character_coins"
 /** DND-58: teto de pedidos de troca por personagem num descanso e de idas e voltas do Personagem Opex. */
 export const MADDOX_REST_EXCHANGE_REQUESTS_MAX = 8
 export const MADDOX_REST_OPEX_EXCHANGE_ROUNDS = 2
