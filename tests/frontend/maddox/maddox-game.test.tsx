@@ -492,6 +492,16 @@ describe("mesa Maddox — participantes e presença", () => {
         fireEvent.mouseEnter(ca.parentElement!)
         expect(await screen.findByText("Escudo da Fé +2")).toBeInTheDocument()
         fireEvent.mouseLeave(ca.parentElement!)
+        await waitFor(() => expect(screen.queryByText("Escudo da Fé +2")).not.toBeInTheDocument())
+        // Revisão F3: teclado e toque (foco) também abrem o detalhamento.
+        fireEvent.focus(ca)
+        expect(await screen.findByText("Escudo da Fé +2")).toBeInTheDocument()
+        fireEvent.blur(ca)
+        await waitFor(() => expect(screen.queryByText("Escudo da Fé +2")).not.toBeInTheDocument())
+        fireEvent.touchStart(ca)
+        expect(await screen.findByText("Escudo da Fé +2")).toBeInTheDocument()
+        fireEvent.touchStart(ca)
+        await waitFor(() => expect(screen.queryByText("Escudo da Fé +2")).not.toBeInTheDocument())
         expect(within(seat("m1")).getByTestId("seat-armor-class")).toHaveTextContent("18")
         expect(within(seat("m3")).queryByTestId("seat-armor-class")).not.toBeInTheDocument()
 
@@ -862,6 +872,8 @@ describe("mesa Maddox — testes pedidos pelo Maddox (Maddox 5)", () => {
         const seat = screen.getByTestId("seat-m2")
         expect(seat).toHaveTextContent("Rolando teste")
         expect(within(screen.getByTestId("seat-m1")).queryByRole("button", { name: /Rolar no lugar/ })).not.toBeInTheDocument()
+        // DND-66 (revisão F2): "Rolar no lugar" continua com o texto visível; só o "Pular" virou ícone.
+        expect(within(seat).getByRole("button", { name: "Rolar no lugar de Lyra" })).toHaveTextContent("Rolar no lugar")
         fireEvent.click(within(seat).getByRole("button", { name: "Rolar no lugar de Lyra" }))
         const dialog = await screen.findByRole("alertdialog")
         expect(dialog).toHaveTextContent("Rolar o teste no lugar de Lyra?")

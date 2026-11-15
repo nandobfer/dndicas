@@ -3,6 +3,7 @@
 import { memberAvatarContext } from "../../constants"
 import { useState } from "react"
 import { Crown, Dices, Shield, SkipForward, Users } from "lucide-react"
+import { Button } from "@/components/ui/opex/button"
 import { IconAction } from "@/components/ui/opex/icon-action"
 import { ConfirmDialog } from "@/components/ui/opex/confirm-dialog"
 import { GlassCard as Card, GlassCardContent as CardContent, GlassCardHeader as CardHeader, GlassCardTitle as CardTitle } from "@/components/ui/glass-card"
@@ -94,7 +95,11 @@ export function TurnPanel({ state, presence, color, skipping, onSkip, rollingFor
                                         participant.memberId !== state.me.memberId &&
                                         state.turn.pendingChecks
                                             .filter((check) => check.memberId === participant.memberId)
-                                            .map((check) => <IconAction key={check.checkId} icon={Dices} label={`Rolar no lugar de ${check.characterName}`} busy={rollingFor} onClick={() => setConfirmingRoll({ checkId: check.checkId, characterName: check.characterName })} />)}
+                                            .map((check) => (
+                                                <Button key={check.checkId} size="sm" variant="ghost" onClick={() => setConfirmingRoll({ checkId: check.checkId, characterName: check.characterName })} aria-label={`Rolar no lugar de ${check.characterName}`} disabled={rollingFor}>
+                                                    <Dices aria-hidden /> Rolar no lugar
+                                                </Button>
+                                            ))}
                                     {canSkip && participant.eligible && !participant.declared && <IconAction icon={SkipForward} label={`Pular a vez de ${participant.characterName ?? participant.name}`} busy={skipping} onClick={() => setConfirming(participant)} />}
                                 </div>
                             </li>

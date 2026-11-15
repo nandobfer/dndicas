@@ -763,6 +763,16 @@ export const MADDOX_AC_DURATIONS = ["permanente", "rodadas", "fim-do-combate", "
 export type MaddoxAcDuration = (typeof MADDOX_AC_DURATIONS)[number]
 export const MADDOX_AC_ORIGINS = ["magia", "item", "talento", "situacao", "outro"] as const
 export type MaddoxAcOrigin = (typeof MADDOX_AC_ORIGINS)[number]
+/**
+ * DND-66 (revisão F1): no "Pergunte ao mestre", quem não é o dono só aplica pela ferramenta bônus de situação ou de
+ * efeito passageiro do combate/cena. Bônus permanente ou "até o descanso" de magia, item ou talento é regra da ficha:
+ * passa por `update_character_sheet` (`ac-bonus-upsert`) com a fonte do catálogo lida.
+ */
+export const MADDOX_AC_PLAYER_TOOL_DURATIONS: readonly MaddoxAcDuration[] = ["rodadas", "fim-do-combate", "concentracao", "momento"]
+export function playerArmorClassRefusal(origin: MaddoxAcOrigin, duration: MaddoxAcDuration): string | null {
+    if (origin === "situacao" || MADDOX_AC_PLAYER_TOOL_DURATIONS.includes(duration)) return null
+    return `Bônus de CA "${duration}" de ${origin} é regra da ficha: pelo pedido do jogador, grave com update_character_sheet (\"ac-bonus-upsert\") citando a fonte do catálogo lida nesta resposta (\"source\"). Por aqui, só bônus de situação ou com duração rodadas, fim-do-combate, concentracao ou momento.`
+}
 /** DND-58: teto de pedidos de troca por personagem num descanso e de idas e voltas do Personagem Opex. */
 export const MADDOX_REST_EXCHANGE_REQUESTS_MAX = 8
 export const MADDOX_REST_OPEX_EXCHANGE_ROUNDS = 2

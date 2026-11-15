@@ -72,16 +72,21 @@ describe("DND-66 — migração sheet-armor-class-bonuses", () => {
     it("converte o bônus único em \"Bônus manual\", tira o campo antigo e é idempotente", async () => {
         const { CharacterSheet } = await import("@/features/character-sheets/models/character-sheet")
         const { sheetArmorClassBonuses } = await import("@/lib/db/migrations/sheet-armor-class-bonuses")
-        const ids = [new Types.ObjectId(), new Types.ObjectId(), new Types.ObjectId()]
+        const ids = [new Types.ObjectId(), new Types.ObjectId(), new Types.ObjectId(), new Types.ObjectId(), new Types.ObjectId()]
         await CharacterSheet.collection.insertMany([
             { _id: ids[0], slug: "a", userId: "u", name: "A", armorClassBonus: 2 },
             { _id: ids[1], slug: "b", userId: "u", name: "B", armorClassBonus: null },
             { _id: ids[2], slug: "c", userId: "u", name: "C", armorClassBonuses: [] },
+            { _id: ids[3], slug: "d", userId: "u", name: "D", armorClassBonus: 23 },
+            { _id: ids[4], slug: "e", userId: "u", name: "E", armorClassBonus: -12 },
         ])
         await sheetArmorClassBonuses()
         await sheetArmorClassBonuses()
         const rows = await CharacterSheet.collection.find({ _id: { $in: ids } }).sort({ slug: 1 }).toArray()
-        expect(rows.map((row) => "armorClassBonus" in row)).toEqual([false, false, false])
+        expect(rows.map((row) => "armorClassBonus" in row)).toEqual([false, false, false, false, false])
+        // Revisão F6: acima do teto de ±10 por bônus, o valor antigo é dividido (a CA não muda).
+        expect((rows[3]!.armorClassBonuses as { name: string; value: number }[]).map((bonus) => [bonus.name, bonus.value])).toEqual([["Bônus manual", 10], ["Bônus manual (2)", 10], ["Bônus manual (3)", 3]])
+        expect((rows[4]!.armorClassBonuses as { name: string; value: number }[]).map((bonus) => [bonus.name, bonus.value])).toEqual([["Bônus manual", -10], ["Bônus manual (2)", -2]])
         expect(rows[0]!.armorClassBonuses).toEqual([expect.objectContaining({ name: "Bônus manual", value: 2, origin: "other", duration: { kind: "permanent" } })])
         expect(rows[1]!.armorClassBonuses).toEqual([])
         expect(rows[2]!.armorClassBonuses).toEqual([])

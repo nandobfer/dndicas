@@ -50,6 +50,9 @@ import {
     MADDOX_ARMOR_CLASS_TOOL_NAMES,
     MADDOX_AC_DURATIONS,
     MADDOX_AC_ORIGINS,
+    playerArmorClassRefusal,
+    type MaddoxAcDuration,
+    type MaddoxAcOrigin,
     MADDOX_REST_TOOL_NAME,
 } from "../constants"
 import { SHEET_CHANGE_CONTRACT } from "../sheet-change-contract"
@@ -490,6 +493,7 @@ export const MADDOX_MASTER_TOOLS: readonly MaddoxMasterTool[] = [
             "Aplica um BÔNUS DE CA nomeado NA FICHA de um personagem jogador (graus com ficha): magia (Escudo da Fé +2, Armadura Arcana), item, talento ou situação (cobertura parcial +2, três quartos +5). Sem esta ferramenta a CA NÃO muda: o ataque seguinte é comparado com a CA da ficha.",
             "`duracao`: permanente | rodadas (com `rodadas`; sai sozinho no fim da última rodada) | fim-do-combate | concentracao (com `conjurador`: sai sozinho quando ele perde ou troca a concentração) | descanso-curto | descanso-longo | momento (com `momento`, ex.: \"o fim da cena\"; você remove quando chegar).",
             "Mesmo nome = substitui (efeitos iguais não se acumulam). O retorno traz a CA e os bônus gravados: só diga que aplicou depois dele.",
+            "No \"Pergunte ao mestre\" de um jogador (não o dono), bônus permanente ou até o descanso de magia, item ou talento é regra da ficha: use update_character_sheet (ac-bonus-upsert) com a fonte do catálogo.",
         ].join(" "),
         readOnly: false,
         input: z.object({
@@ -517,6 +521,7 @@ export const MADDOX_MASTER_TOOLS: readonly MaddoxMasterTool[] = [
                     duration: { kind: input.duracao, rounds: input.rodadas ?? null, caster: input.conjurador ?? null, moment: input.momento ?? null },
                     reason: clip(input.motivo, MADDOX_TOOL_NAME_MAX * 2),
                 }),
+                { origin: input.origem, duration: input.duracao },
             )
         },
     }),
@@ -1361,12 +1366,15 @@ async function armorClassCall(
     context: MaddoxToolContext,
     characterName: string,
     work: (tools: typeof import("./armor-class-bonuses"), run: import("./question-runs").QuestionRun | null) => Promise<import("./armor-class-bonuses").ArmorClassBonusState>,
+    added?: { origin: MaddoxAcOrigin; duration: MaddoxAcDuration },
 ): Promise<Record<string, unknown>> {
     const [tools, { questionRun }] = await Promise.all([import("./armor-class-bonuses"), import("./question-runs")])
     const run = questionRun(context.jobId) ?? null
     if (run && !run.askerIsOwner) {
         const own = run.askerCharacterId ? await MaddoxCharacterModel.findById(run.askerCharacterId).select("name").lean<{ name: string }>() : null
         if (!own || keyOf(own.name) !== keyOf(characterName)) throw new MaddoxToolError("Quem perguntou só pode mudar a CA do próprio personagem.")
+        const refusal = added ? playerArmorClassRefusal(added.origin, added.duration) : null
+        if (refusal) throw new MaddoxToolError(refusal)
     }
     try {
         const state = await work(tools, run)

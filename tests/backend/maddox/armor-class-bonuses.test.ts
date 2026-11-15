@@ -29,9 +29,14 @@ vi.mock("@/features/character-sheets/realtime/character-sheet-pusher-service", (
 }))
 vi.mock("@/features/maddox/server/combat-prep-ai", async () => (await import("../../helpers/combat-prep-mock")).combatPrepAiModule)
 vi.mock("@/features/engramind/server/campaign-memories", async () => (await import("../../helpers/campaign-memories-mock")).campaignMemoriesModule)
+vi.mock("@/features/maddox/server/settings", async (importOriginal) => {
+    const actual = await importOriginal<typeof import("@/features/maddox/server/settings")>()
+    const { DEFAULT_MADDOX_SETTINGS } = await import("@/features/maddox/schemas")
+    return { ...actual, loadMaddoxSettings: vi.fn(async () => ({ settings: DEFAULT_MADDOX_SETTINGS, isDefault: true, updatedAt: null })) }
+})
 
 const { campaignMemoriesStore } = await import("../../helpers/campaign-memories-mock")
-const { MaddoxCampaignMessageModel, MaddoxCampaignModel, MaddoxCharacterModel, MaddoxCombatModel } = await import("@/features/maddox/models")
+const { MaddoxCampaignMemberModel, MaddoxCampaignMessageModel, MaddoxCampaignModel, MaddoxCharacterModel, MaddoxCombatModel } = await import("@/features/maddox/models")
 const { CharacterSheet } = await import("@/features/character-sheets/models/character-sheet")
 const { CharacterItem } = await import("@/features/character-sheets/models/character-item")
 const { findMaddoxTool, runMaddoxTool } = await import("@/features/maddox/server/master-tools")
@@ -79,16 +84,20 @@ const characterState = (actorKey: string, characterId: Types.ObjectId, name: str
 })
 
 /** Campanha Fiel ao D&D com Lizwan (couro + DES 19 = CA 15) e Ravel; com `combat`, um combate tático contra um rato. */
-async function table(options: { combat?: boolean } = {}) {
+async function table(options: { combat?: boolean; rigor?: string } = {}) {
     const campaignId = new Types.ObjectId()
     const owner = String(new Types.ObjectId())
     const player = String(new Types.ObjectId())
-    await MaddoxCampaignModel.collection.insertOne({ _id: campaignId, name: "Porão", ownerId: owner, rigor: "fiel-dnd", status: "active", turn: { number: 3, phase: "master" }, createdAt: new Date(), updatedAt: new Date() })
+    await MaddoxCampaignModel.collection.insertOne({ _id: campaignId, name: "Porão", ownerId: owner, rigor: options.rigor ?? "fiel-dnd", status: "active", turn: { number: 3, phase: "master" }, createdAt: new Date(), updatedAt: new Date() })
     const lizwan = { characterId: new Types.ObjectId(), sheetId: new Types.ObjectId() }
     const ravel = { characterId: new Types.ObjectId(), sheetId: new Types.ObjectId() }
     await MaddoxCharacterModel.collection.insertMany([
         { _id: lizwan.characterId, campaignId, memberId: new Types.ObjectId(), userId: player, name: "Lizwan", status: "active", sheetId: lizwan.sheetId },
         { _id: ravel.characterId, campaignId, memberId: new Types.ObjectId(), userId: owner, name: "Ravel", status: "active", sheetId: ravel.sheetId },
+    ])
+    await MaddoxCampaignMemberModel.collection.insertMany([
+        { campaignId, userId: player, role: "player", status: "joined", characterId: lizwan.characterId, joinedAt: new Date(1), createdAt: new Date(1) },
+        { campaignId, userId: owner, role: "owner", status: "joined", characterId: ravel.characterId, joinedAt: new Date(0), createdAt: new Date(0) },
     ])
     const abilities = { strength: 10, constitution: 12, intelligence: 10, wisdom: 14, charisma: 10 }
     await CharacterSheet.collection.insertMany([
@@ -206,9 +215,22 @@ describe("DND-66 — bônus de CA nomeados pelo Maddox", () => {
         runs.openQuestionRun({ campaignId: String(t.campaignId), jobId, turnNumber: 3, questionId: String(new Types.ObjectId()), askerUserId: t.owner, askerCharacterId: String(t.ravel.characterId), askerIsOwner: false, playerTexts: [] })
         try {
             await expect(add(t, { nome: "Escudo da Fé", valor: 2, duracao: "permanente" }, jobId)).rejects.toThrow("Quem perguntou só pode mudar a CA do próprio personagem.")
-            expect(await tool("add_armor_class_bonus", t, { personagem: "Ravel", nome: "Escudo", valor: 2, origem: "item", duracao: "permanente", motivo: "Escudo de madeira" }, jobId)).toMatchObject({ saved: true, personagem: "Ravel" })
+            // Revisão F1: o jogador comum não grava bônus permanente (ou até o descanso) de item/magia/talento sem a fonte do catálogo.
+            for (const [origem, duracao] of [["item", "permanente"], ["magia", "descanso-longo"], ["talento", "descanso-curto"]] as const) {
+                await expect(tool("add_armor_class_bonus", t, { personagem: "Ravel", nome: "Anel de Proteção +3", valor: 3, origem, duracao, motivo: "Tenho um anel" }, jobId)).rejects.toThrow("update_character_sheet")
+            }
+            expect(await bonusesOf(t.ravel.sheetId)).toEqual([])
+            expect(await tool("add_armor_class_bonus", t, { personagem: "Ravel", nome: "Cobertura parcial", valor: 2, origem: "situacao", duracao: "permanente", motivo: "Atrás do muro" }, jobId)).toMatchObject({ saved: true, personagem: "Ravel" })
+            expect(await tool("add_armor_class_bonus", t, { personagem: "Ravel", nome: "Escudo da Fé", valor: 2, origem: "magia", duracao: "momento", momento: "o fim da cena", motivo: "Bênção" }, jobId)).toMatchObject({ saved: true })
         } finally {
             runs.closeQuestionRun(jobId)
+        }
+        const ownerJob = "job-owner"
+        runs.openQuestionRun({ campaignId: String(t.campaignId), jobId: ownerJob, turnNumber: 3, questionId: String(new Types.ObjectId()), askerUserId: t.owner, askerCharacterId: String(t.ravel.characterId), askerIsOwner: true, playerTexts: [] })
+        try {
+            expect(await tool("add_armor_class_bonus", t, { personagem: "Ravel", nome: "Anel de Proteção", valor: 1, origem: "item", duracao: "permanente", motivo: "O dono corrige" }, ownerJob)).toMatchObject({ saved: true, ca: 15 })
+        } finally {
+            runs.closeQuestionRun(ownerJob)
         }
         expect(await bonusesOf(t.lizwan.sheetId)).toEqual([])
     })
@@ -320,3 +342,39 @@ describe("DND-66 — ataque do adversário usa a CA nova", () => {
         expect(results[1]).toMatchObject({ ataque: { total: 16, ca: 17, acertou: false } })
     })
 })
+
+describe("DND-66 — revisão F4: ligações reais (mesa e fim do combate)", () => {
+    it("getGameState: cada participante traz a CA calculada da ficha; o Escudo da reação soma +5; sem ficha no grau narrativo", async () => {
+        const t = await table({ combat: true })
+        await MaddoxCampaignModel.collection.updateOne({ _id: t.campaignId }, { $set: { status: "paused" } })
+        await add(t, { nome: "Escudo da Fé", valor: 2, duracao: "concentracao", conjurador: "Ravel" })
+        await MaddoxCombatModel.collection.updateOne({ _id: t.combatId!, "tactical.characters.name": "Ravel" }, { $set: { "tactical.characters.$.flags.shield": true } })
+        const { getGameState } = await import("@/features/maddox/server/game")
+        const state = await getGameState(String(t.campaignId), t.owner)
+        const summaries = await acBonuses.loadArmorClassSummaries([String(t.lizwan.sheetId), String(t.ravel.sheetId)])
+        const lizwan = state.participants.find((item) => item.characterName === "Lizwan")!
+        const ravel = state.participants.find((item) => item.characterName === "Ravel")!
+        expect(lizwan.armorClass).toEqual({ value: 17, formula: summaries.get(String(t.lizwan.sheetId))!.formula, parts: summaries.get(String(t.lizwan.sheetId))!.parts })
+        expect(lizwan.armorClass!.parts.map((part) => part.label)).toContain("Escudo da Fé")
+        expect(ravel.armorClass).toMatchObject({ value: 15, formula: "Base(10) + Escudo(5) = 15" })
+        expect(ravel.armorClass!.parts.at(-1)).toEqual({ label: "Escudo (reação)", value: "+5", color: "bonus" })
+
+        const narrative = await table({ rigor: "narrativo" })
+        await MaddoxCampaignModel.collection.updateOne({ _id: narrative.campaignId }, { $set: { status: "paused" } })
+        const free = await getGameState(String(narrative.campaignId), narrative.owner)
+        expect(free.participants.map((item) => item.armorClass)).toEqual([undefined, undefined])
+    })
+
+    it("fim do combate pelo caminho real (finishCombatTurn → afterCombatEnded): o bônus do combate sai e o permanente fica", async () => {
+        const t = await table({ combat: true })
+        await add(t, { nome: "Escudo da Fé", valor: 2, duracao: "fim-do-combate" })
+        await add(t, { nome: "Anel de Proteção", valor: 1, origem: "item", duracao: "permanente" })
+        await MaddoxCombatModel.collection.updateOne({ _id: t.combatId! }, { $set: { status: "ended", endedTurn: 3, outcome: "vitoria", summary: "Os ratos caíram.", masterNotes: "", rewards: [], characterOutcomes: [], finalScene: "", endedAt: new Date() } })
+        const { finishCombatTurn } = await import("@/features/maddox/server/combat")
+        await finishCombatTurn({ _id: t.campaignId, rigor: "fiel-dnd", ownerId: t.owner } as never, 3, 0)
+        expect((await bonusesOf(t.lizwan.sheetId)).map((bonus) => bonus.name)).toEqual(["Anel de Proteção"])
+        expect(await linesOf(t)).toContain("CA de Lizwan: 18 → 16 (Escudo da Fé +2 terminou: fim do combate)")
+        expect(await MaddoxCombatModel.collection.findOne({ _id: t.combatId! })).toMatchObject({ effectsApplied: true })
+    })
+})
+
