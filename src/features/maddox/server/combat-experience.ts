@@ -84,28 +84,48 @@ export async function grantCombatExperience(campaignId: Types.ObjectId, combat: 
     // `experienceProcessedAt` no mesmo claim: o combate em processamento nunca parece legado (`legacyBurned`).
     const claimed = await MaddoxCombatModel.updateOne({ _id: combat._id, experienceGranted: { $ne: true } }, { $set: { experienceGranted: true, experienceProcessedAt: new Date() } })
     if (!claimed.modifiedCount) return none
-    const breakdown = await combatExperienceBreakdown(combat)
-    const participants = participantsOf(combat)
     const context = { campaignId: String(campaignId), combatId: String(combat._id) }
-    if (!breakdown.defeatedCount) {
-        log.info(context, "[maddox] combate encerrado sem adversário derrotado: sem XP")
-        return none
+    const allDefeated = () => combat.combatants.filter(defeated).map((combatant) => ({ name: combatant.name, quantity: quantityOf(combatant) }))
+    let applied = 0
+    let breakdown: CombatExperienceBreakdown | null = null
+    try {
+        breakdown = await combatExperienceBreakdown(combat)
+        const participants = participantsOf(combat)
+        if (!breakdown.defeatedCount) {
+            log.info(context, "[maddox] combate encerrado sem adversário derrotado: sem XP")
+            return none
+        }
+        if (!participants.length) {
+            log.info(context, "[maddox] combate encerrado sem personagem participante: sem XP")
+            return none
+        }
+        const share = Math.floor(breakdown.catalogXp / participants.length)
+        let granted = 0
+        if (share > 0) {
+            const result = await grantExperience(campaignId, participants.map((character) => ({ characterId: character.characterId, amount: share })), combatExperienceReason(combat), "combat", turnNumber, { combatId: combat._id, onSheetUpdated: () => (applied += 1) })
+            granted = result.total
+        }
+        // A parte oficial que dividiu para 0 também vira pendência: o mestre decide o valor, nada some em silêncio.
+        const pending = granted > 0 ? breakdown.missing : breakdown.missing.length ? breakdown.missing : allDefeated()
+        if (pending.length) await markExperiencePending(campaignId, combat, pending, turnNumber)
+        log.info({ ...context, catalogXp: breakdown.catalogXp, granted, pending: pending.map((item) => item.name) }, "[maddox] XP do fim do combate")
+        return { granted, pending }
+    } catch (error) {
+        // DND-70 (revisão 2): falha depois do claim nunca deixa o combate sem desfecho. Sem ficha somada, todos os derrotados
+        // viram pendência para o mestre; com parte das fichas já somada, só os sem ND (a parte oficial não se repete).
+        const pending = applied ? (breakdown?.missing ?? []) : allDefeated()
+        log.error({ ...context, applied, pending: pending.map((item) => item.name), err: error instanceof Error ? error.message : String(error) }, "[maddox] XP do fim do combate falhou; o que faltou vira pendência para o mestre")
+        if (pending.length) {
+            try {
+                await markExperiencePending(campaignId, combat, pending, turnNumber)
+            } catch (markError) {
+                // Nem a pendência gravou: tira a marca do processamento e o combate volta a ser pendência recuperável.
+                log.error({ ...context, err: markError instanceof Error ? markError.message : String(markError) }, "[maddox] pendência da XP do combate não gravada")
+                if (!applied) await MaddoxCombatModel.updateOne({ _id: combat._id }, { $set: { experienceProcessedAt: null } }).catch(() => undefined)
+            }
+        }
+        throw error
     }
-    if (!participants.length) {
-        log.info(context, "[maddox] combate encerrado sem personagem participante: sem XP")
-        return none
-    }
-    const share = Math.floor(breakdown.catalogXp / participants.length)
-    let granted = 0
-    if (share > 0) {
-        const result = await grantExperience(campaignId, participants.map((character) => ({ characterId: character.characterId, amount: share })), combatExperienceReason(combat), "combat", turnNumber, { combatId: combat._id })
-        granted = result.total
-    }
-    // A parte oficial que dividiu para 0 também vira pendência: o mestre decide o valor, nada some em silêncio.
-    const pending = granted > 0 ? breakdown.missing : breakdown.missing.length ? breakdown.missing : combat.combatants.filter(defeated).map((combatant) => ({ name: combatant.name, quantity: quantityOf(combatant) }))
-    if (pending.length) await markExperiencePending(campaignId, combat, pending, turnNumber)
-    log.info({ ...context, catalogXp: breakdown.catalogXp, granted, pending: pending.map((item) => item.name) }, "[maddox] XP do fim do combate")
-    return { granted, pending }
 }
 
 async function markExperiencePending(campaignId: Types.ObjectId, combat: IMaddoxCombat, adversaries: { name: string; quantity: number }[], turnNumber: number) {
@@ -146,13 +166,18 @@ const pendingOf = (combat: CombatRow, legacy: boolean): PendingCombatExperience 
     legacy,
 })
 
+/** Etapa automática parada há mais que isto (o processo caiu depois do claim) vira pendência recuperável. */
+export const MADDOX_XP_PROCESSING_STALE_MS = 10 * 60_000
+
 /**
  * Antes da DND-70 o combate era marcado como concedido antes da conta: tático encerrado, `experienceGranted` sem
  * `experienceProcessedAt` (o código novo grava os dois juntos), sem pendência, sem resolução, com derrotado e sem card de XP
- * dele (pelo `combatId` ou pelo motivo `Combate "<título>"`).
+ * dele (pelo `combatId` ou pelo motivo `Combate "<título>"`). Também o combate cujo claim tem mais de
+ * `MADDOX_XP_PROCESSING_STALE_MS` sem card nem pendência (o processo caiu no meio da etapa automática).
  */
 async function legacyBurned(campaignId: Types.ObjectId, combats: readonly CombatRow[]): Promise<CombatRow[]> {
-    const candidates = combats.filter((combat) => combat.mode === "tactical" && combat.status === "ended" && combat.experienceGranted && !combat.experienceProcessedAt && !combat.experiencePending && !combat.experienceResolved && combat.combatants.some(defeated))
+    const staleBefore = Date.now() - MADDOX_XP_PROCESSING_STALE_MS
+    const candidates = combats.filter((combat) => combat.mode === "tactical" && combat.status === "ended" && combat.experienceGranted && (!combat.experienceProcessedAt || new Date(combat.experienceProcessedAt).getTime() < staleBefore) && !combat.experiencePending && !combat.experienceResolved && combat.combatants.some(defeated))
     if (!candidates.length) return []
     const cards = await MaddoxCampaignMessageModel.find({ campaignId, kind: "experience", "experience.source": "combat" }).select("experience").lean<{ experience?: { reason?: string; combatId?: Types.ObjectId | null } | null }[]>()
     const ids = new Set(cards.map((card) => (card.experience?.combatId ? String(card.experience.combatId) : null)).filter(Boolean))

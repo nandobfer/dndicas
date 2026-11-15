@@ -567,6 +567,49 @@ describe("DND-70: XP de adversário fora do catálogo e XP no Pergunte ao mestre
         expect(await xpOf(t.members[0]!)).toBe(50)
     })
 
+    it("falha da etapa automática depois do claim: os derrotados viram pendência (nada some em silêncio)", async () => {
+        const t = await table({ mode: "experiencia", rigor: "rigoroso" })
+        const goblin = new Types.ObjectId()
+        await mongoose.connection.collection("monsters").insertOne({ _id: goblin, name: "Goblin", challengeRating: "1/4", status: "active" })
+        const combat = await beastCombat(t, { combatants: [{ name: "Goblin", nameKey: "goblin", side: "inimigo", quantity: 2, outcome: "morto", tactical: { defeated: true, stats: { source: "catalog", monsterId: String(goblin) } } }, { name: "A besta da estrada sul", nameKey: "a besta", side: "inimigo", quantity: 1, outcome: "morto", tactical: { defeated: true, stats: { source: "custom", monsterId: null } } }] })
+        const { MonsterModel } = await import("@/features/monsters/models/monster")
+        const find = vi.spyOn(MonsterModel, "find").mockImplementationOnce(() => {
+            throw new Error("banco fora do ar")
+        })
+        await expect(grantCombatExperience(t.campaignId, (await MaddoxCombatModel.findById(combat._id).lean())!, 34)).rejects.toThrow("banco fora do ar")
+        find.mockRestore()
+        expect((await MaddoxCombatModel.findById(combat._id).lean())!.experiencePending).toMatchObject({ adversaries: [{ name: "Goblin", quantity: 2 }, { name: "A besta da estrada sul", quantity: 1 }] })
+        const { pendingCombatExperience } = await import("@/features/maddox/server/combat-experience")
+        await expect(pendingCombatExperience(t.campaignId)).resolves.toEqual([expect.objectContaining({ combatId: String(combat._id), legacy: false })])
+        expect(await xpOf(t.members[0]!)).toBe(0)
+    })
+
+    it("se nem a pendência grava, o claim perde a marca de processamento e o combate volta a ser pendência recuperável", async () => {
+        const t = await table({ mode: "experiencia", rigor: "rigoroso" })
+        const combat = await beastCombat(t)
+        const update = MaddoxCombatModel.updateOne.bind(MaddoxCombatModel)
+        // Toda gravação da pendência falha (a da etapa e a do tratamento da falha); o claim e o desfazer passam.
+        const updateSpy = vi.spyOn(MaddoxCombatModel, "updateOne").mockImplementation(((...args: Parameters<typeof update>) => {
+            if (JSON.stringify(args[1] ?? {}).includes("experiencePending")) return Promise.reject(new Error("pendência falhou"))
+            return update(...args)
+        }) as never)
+        await expect(grantCombatExperience(t.campaignId, (await MaddoxCombatModel.findById(combat._id).lean())!, 34)).rejects.toThrow("pendência falhou")
+        updateSpy.mockRestore()
+        const stored = (await MaddoxCombatModel.findById(combat._id).lean())!
+        expect(stored.experienceGranted).toBe(true)
+        expect(stored.experienceProcessedAt ?? null).toBeNull()
+        const { pendingCombatExperience } = await import("@/features/maddox/server/combat-experience")
+        await expect(pendingCombatExperience(t.campaignId)).resolves.toEqual([expect.objectContaining({ combatId: String(combat._id), legacy: true })])
+    })
+
+    it("processo caído depois do claim: claim antigo sem card nem pendência vira pendência recuperável; o recente não", async () => {
+        const t = await table({ mode: "experiencia", rigor: "rigoroso" })
+        const { pendingCombatExperience, MADDOX_XP_PROCESSING_STALE_MS } = await import("@/features/maddox/server/combat-experience")
+        const stale = await beastCombat(t, { experienceGranted: true, experienceProcessedAt: new Date(Date.now() - MADDOX_XP_PROCESSING_STALE_MS - 60_000) })
+        await beastCombat(t, { title: "Lobos", experienceGranted: true, experienceProcessedAt: new Date() })
+        await expect(pendingCombatExperience(t.campaignId)).resolves.toEqual([expect.objectContaining({ combatId: String(stale._id), legacy: true })])
+    })
+
     it("regra do narrador: fera fora do catálogo vale XP e nunca \"não posso conceder\"", async () => {
         const { progressionRule } = await import("@/features/maddox/server/narrator-prompt")
         const rule = progressionRule({ mode: "experiencia", level: 1 })

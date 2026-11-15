@@ -2269,6 +2269,10 @@ podia lançar a XP.
   `resolveCombatExperience`, falha antes de somar fichas reabre a pendência; falha depois (`onSheetUpdated` de `grantExperience`)
   mantém o combate resolvido com o total parcial e `partial: true` (log de erro), para não duplicar XP. A ligação na tarefa é
   `taskTakesPendingCombatXp` (`narrator-prompt.ts`), coberta em `narrator-campaign.test.ts` (narração, resposta, Marco, bloco `npc`).
+- **Falha da etapa automática (revisão 2)**: o que roda depois do claim fica num `try`. Na falha sem ficha somada, todos os
+  derrotados viram `experiencePending` (com ficha somada, só os sem ND) e o erro segue para o log do passo; se nem a pendência
+  grava, `experienceProcessedAt` volta a `null` e o combate vira pendência recuperável. Queda do processo no meio: claim com mais de
+  `MADDOX_XP_PROCESSING_STALE_MS` (10 min) sem card e sem pendência também é pendência recuperável (`legacyBurned`).
 - Testes: bloco DND-70 de `tests/backend/maddox/level-progression.test.ts` e o de `tests/frontend/maddox/level-up-cards.test.tsx`.
 
 ## Bônus de CA nomeados e CA no card "Na mesa" (DND-66)
