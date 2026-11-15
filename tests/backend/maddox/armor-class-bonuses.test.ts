@@ -365,6 +365,32 @@ describe("DND-66 — revisão F4: ligações reais (mesa e fim do combate)", () 
         expect(free.participants.map((item) => item.armorClass)).toEqual([undefined, undefined])
     })
 
+    it("DND-63: getGameState traz o PV da ficha de cada personagem, dentro e fora do combate; sem ficha no grau narrativo", async () => {
+        const t = await table({ combat: true })
+        await MaddoxCampaignModel.collection.updateOne({ _id: t.campaignId }, { $set: { status: "paused" } })
+        await CharacterSheet.collection.updateOne({ _id: t.lizwan.sheetId }, { $set: { hpCurrent: 4, hpTemp: 3 } })
+        const { getGameState } = await import("@/features/maddox/server/game")
+        const inCombat = await getGameState(String(t.campaignId), t.owner)
+        const hpOf = (state: typeof inCombat, name: string) => state.participants.find((item) => item.characterName === name)!.hp
+        expect(hpOf(inCombat, "Lizwan")).toEqual({ current: 4, max: 9, temp: 3 })
+        expect(hpOf(inCombat, "Ravel")).toEqual({ current: 12, max: 12, temp: 0 })
+        // Só os três números de PV saem da ficha.
+        expect(Object.keys(hpOf(inCombat, "Lizwan")!).sort()).toEqual(["current", "max", "temp"])
+
+        const calm = await table()
+        await MaddoxCampaignModel.collection.updateOne({ _id: calm.campaignId }, { $set: { status: "paused" } })
+        await CharacterSheet.collection.updateOne({ _id: calm.ravel.sheetId }, { $set: { hpCurrent: 7 } })
+        const outOfCombat = await getGameState(String(calm.campaignId), calm.owner)
+        expect(hpOf(outOfCombat, "Ravel")).toEqual({ current: 7, max: 12, temp: 0 })
+        const summaries = await (await import("@/features/maddox/server/seat-hit-points")).loadHitPointsSummaries([String(calm.ravel.sheetId), String(calm.lizwan.sheetId), String(calm.ravel.sheetId)])
+        expect([...summaries.keys()].sort()).toEqual([String(calm.ravel.sheetId), String(calm.lizwan.sheetId)].sort())
+
+        const narrative = await table({ rigor: "narrativo" })
+        await MaddoxCampaignModel.collection.updateOne({ _id: narrative.campaignId }, { $set: { status: "paused" } })
+        const free = await getGameState(String(narrative.campaignId), narrative.owner)
+        expect(free.participants.map((item) => item.hp)).toEqual([undefined, undefined])
+    })
+
     it("fim do combate pelo caminho real (finishCombatTurn → afterCombatEnded): o bônus do combate sai e o permanente fica", async () => {
         const t = await table({ combat: true })
         await add(t, { nome: "Escudo da Fé", valor: 2, duracao: "fim-do-combate" })

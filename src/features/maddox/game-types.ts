@@ -455,6 +455,11 @@ export interface MaddoxGameParticipantDto {
      * bônus nomeado. Só nos graus com ficha; no combate tático soma o Escudo (reação) ativo. Ausente sem ficha.
      */
     armorClass?: { value: number; formula: string; parts: CalcPart[] } | null
+    /**
+     * DND-63: PV da ficha (o grupo vê o PV dos personagens), dentro e fora do combate. Só nos graus com ficha e com PV
+     * máximo; ausente sem ficha.
+     */
+    hp?: { current: number; max: number; temp: number } | null
 }
 
 export interface MaddoxGameStateDto {

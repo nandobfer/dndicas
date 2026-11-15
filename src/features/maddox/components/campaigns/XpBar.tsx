@@ -17,7 +17,7 @@ export function XpBar({ xp, color, className }: Props) {
     if (!xp) return null
     const { text, detail } = xpProgressLabel(xp)
     return (
-        <div className={cn("mt-1 flex items-center gap-2", className)} data-testid="xp-bar" title={detail}>
+        <div className={cn("flex items-center gap-2", className)} data-testid="xp-bar" title={detail}>
             <div
                 role="progressbar"
                 aria-label={detail}

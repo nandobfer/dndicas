@@ -452,9 +452,9 @@ pergunta e resposta ligadas, "Fulano não fez nada (pulado por …)", "Carregar 
 campo da entrevista (`GameComposer`: caixa única `flex items-end`, texto `flex-1`, três botões de ícone redondos `h-8 w-8` à direita,
 na ordem **Perguntar ao mestre** (com a borda premium de IA, DND-52), **Não fazer nada** e **Declarar** (enviar); Enter declara, também Ctrl/⌘+Enter, Shift+Enter quebra
 linha; estado/motivo e contador abaixo da caixa), bloqueado com o
-motivo em pt-BR (turno do mestre, próximo turno, entrevista pendente com link); painel "Na mesa" com presença (ponto
-online/offline) e a situação em cores de raridade (Declarou, Aguardando, Offline (não conta), Entra no próximo turno,
-Preparando personagem) e **"Pular"** para o dono.
+motivo em pt-BR (turno do mestre, próximo turno, entrevista pendente com link); painel "Na mesa" com a situação em cores de raridade (Declarou, Aguardando, Offline (não conta), Entra no próximo turno,
+Preparando personagem; desde a DND-63, uma bolinha no canto do avatar com o rótulo no tooltip, e sem o ponto online/offline)
+e **"Pular"** para o dono.
 
 API (todas com `maddox.play`, usuário efetivo; quem não participa = 404):
 
@@ -2171,6 +2171,7 @@ Graus com ficha (`MADDOX_SHEET_RIGORS`) escolhem na criação o modo `progressio
 - Tempo real: `notifyCampaignChanged` ignora ids `opex:` e `notifyJournalChanged` só avisa membros humanos (o Pusher recusa o canal `private-maddox-u-opex:…` e derrubaria o lote inteiro).
 - Testes: `tests/backend/maddox/level-progression.test.ts` mocka `server/level-up-ai`, `server/settings` e `decideOpex`/`loadOpexModel` de `opex-player`; `tests/backend/character-sheets/level-up.test.ts` cobre o motor.
 - **Barra de XP (DND-63)**: no modo Experiência, cada personagem com ficha e entrevista concluída mostra a barrinha (`components/campaigns/XpBar.tsx`, `data-testid="xp-bar"`, `role="progressbar"`, cor do rigor) no card "Na mesa" (`TurnPanel`), no card "Participantes" da página da campanha e na aba Grupo do Diário. O servidor decide: o campo `xp: MaddoxXpProgressDto | null` (`level`, `value`, `floor`, `next`, `missing`, `percent`) vem em `MaddoxCampaignCharacterDto` (`server/campaigns.ts`, mesma consulta das fichas do slug), `MaddoxGameParticipantDto` (`server/game.ts`) e `MaddoxJournalPartyMemberDto` (`listJournalParty`; a busca do Diário não leva), sempre `null` no modo Marco, nos graus narrativos e sem ficha (`server/experience-progress.ts`: `xpProgressEnabled` = `progressionModeOf(campaign) === "experiencia"`, a mesma regra da concessão de XP, agora no módulo leve `server/progression-mode.ts` reexportado por `level-ups.ts`; elegibilidade única em `xpProgressOf`, usada por `characterDto` e `loadXpProgress`). Da ficha saem só nível e XP. Cálculo puro em `experience-progress.ts` (`experienceProgress` sobre `xpForLevel`/`xpToNextLevel`; `percent` entre o limiar do nível e o do próximo, 0–100; XP já no próximo limiar = 100% e "nível N alcançado"; nível 20 = cheia e "Nível máximo"; `xpProgressLabel` com os rótulos pt-BR). Atualiza com a XP nova pelo `maddox.game.changed`/`maddox.campaign.changed` que já recarregam a mesa e a campanha. Testes: `tests/backend/maddox/experience-progress.test.ts`, `tests/frontend/maddox/maddox-xp-bar.test.tsx`.
+- **Card "Na mesa" (DND-63, reabertura)**: cada assento (`TurnPanel`, `data-testid="seat-<memberId>"`) tem a linha do avatar e, abaixo, a barra de XP **filha direta do assento**, na largura total do card. Na coluna do nome: nome do personagem (+ `OpexChip`), o jogador (omitido para o Personagem Opex, que fica só com o chip) e a linha `seat-vitals` com a barra de PV (`seat-hp`, `flex-1`) e a CA à direita (`seat-armor-class`, só o número). A situação do turno é a bolinha `seat-status` (`role="img"`, `aria-label` = rótulo de `MADDOX_SEAT_LABELS`, cor de `SEAT_COLORS`, `SimpleGlassTooltip`) no canto superior direito do avatar, irmã do botão do avatar (nunca dentro dele); o Opex não tem bolinha; o ponto online/offline saiu. PV: `MaddoxGameParticipantDto.hp { current, max, temp }`, da ficha (`hpCurrent`/`hpMax`/`hpTemp`, o grupo vê o PV dos personagens), dentro e fora do combate, só nos graus com ficha (`hasLevels`) e com PV máximo, carregado em lote por `loadHitPointsSummaries` (`server/seat-hit-points.ts`, normalização em `sheetHitPointsOf`) em paralelo com a CA; falha de leitura = `log.warn` e sem barra. `HpBar` (`components/game/combat/HpBar.tsx`, `role="progressbar"`, "PV de X: 9 de 12 (+3 temporários)") é o mesmo do rastreador de iniciativa (`testId` padrão `initiative-hp`). Testes: `tests/backend/maddox/seat-hit-points.test.ts`, `armor-class-bonuses.test.ts` (PV no estado da mesa), `maddox-xp-bar.test.tsx` (layout).
 
 ## Descanso curto e longo (DND-58)
 
@@ -2257,8 +2258,8 @@ valor, origem e duração; o total sai de `computeSheetArmorClass`, cada bônus 
 - **Na rolagem:** `monster_action` relê a CA do alvo personagem pela ficha na hora (`loadArmorClass`) e atualiza o workspace; o
   `get_combat` mostra a CA atual com `contaDaCA` e o Escudo da reação. A reação Escudo (+5, `flags.shield`) continua no combate.
 - **Card "Na mesa"** (`TurnPanel.tsx`): `MaddoxGameParticipantDto.armorClass { value, formula, parts }` (graus com ficha; todos veem a
-  CA dos personagens jogadores; com `flags.shield` soma "Escudo (reação) +5"), chip "CA N" focável com `CalcTooltip`. Nome e jogador
-  quebram linha (sem `truncate`); CA e situação numa linha própria; ações à direita como `IconAction` (só ícone, `aria-label` e dica
+  CA dos personagens jogadores; com `flags.shield` soma "Escudo (reação) +5"), chip focável com `CalcTooltip` (desde a DND-63, só o valor, no estilo do
+  antigo rótulo "CA"). Nome e jogador quebram linha (sem `truncate`); a CA fica à direita da barra de PV (ver "Card Na mesa (DND-63)"); ações à direita como `IconAction` (só ícone, `aria-label` e dica
   "Pular a vez de X" / "Rolar no lugar de X"). O "Pular" do `OpexFailureBanner` segue o mesmo padrão.
 - Testes: `tests/backend/maddox/armor-class-bonuses.test.ts`, `tests/backend/character-sheets/armor-class-bonuses.test.ts`, mesa em
   `tests/frontend/maddox/maddox-game.test.tsx`.
