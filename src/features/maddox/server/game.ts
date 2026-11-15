@@ -143,6 +143,12 @@ async function runMasterTurn(campaignId: Types.ObjectId, token: string, turnNumb
     try {
         // Volta pendente (DND-44): a nova narração a partir do turno em que a mesa está apaga o trecho descartado de vez.
         if (campaign.rewind) await (await import("./rewind")).commitRewind(campaignId)
+        // DND-62: a continuação só narra o combate tático com a ordem de iniciativa fechada. Ainda na iniciativa (preparação
+        // de uma ficha esperando o jogador, por exemplo), o turno volta a esperar e nada é narrado.
+        if (round > 0 && MADDOX_TACTICAL_COMBAT_RIGORS.includes(campaign.rigor) && (await parkWhileInitiative(campaign, token, turnNumber, round))) {
+            await publishGameChanged(campaignId)
+            return
+        }
         const existing = await MaddoxCampaignMessageModel.findOne({ campaignId, turnNumber, kind: "narration", ...segmentFilter(round) }).select("_id").lean()
         if (!existing) {
             const actions = await MaddoxCampaignMessageModel.find({ campaignId, turnNumber: turnNumber - 1, turnAction: true }).sort({ _id: 1 }).lean<MessageDoc[]>()
@@ -253,6 +259,11 @@ async function runMasterTurn(campaignId: Types.ObjectId, token: string, turnNumb
             // Nenhum pendente (todos cancelados porque o jogador saiu): a continuação entra na fila logo.
             const { advanceAfterChecks } = await import("./game-checks")
             await advanceAfterChecks(campaignId, turnNumber, round)
+        } else if (tacticalCampaign && (await parkWhileInitiative(campaign, token, turnNumber, round))) {
+            // DND-62: combate tático ainda na iniciativa — nunca vira turno de jogadores genérico (a vez abre quando a ordem fechar).
+        } else if (tacticalCampaign && (await parkWithoutCombatTurn(campaignId, token, turnNumber, round))) {
+            // DND-62: combate tático em andamento sem vez aberta — nunca vira turno de jogadores genérico; o turno do mestre
+            // fica como falha e a retomada (`resumeMasterTurn`) refaz o fim da narração (a narração gravada é reaproveitada).
         } else {
             const eligible = await readyMemberIds(campaignId)
             const reopened = await MaddoxCampaignModel.updateOne(
@@ -334,6 +345,46 @@ async function scheduleDraftImages(campaignId: Types.ObjectId, jobId: string, tu
 }
 
 /**
+ * DND-62: o combate tático ainda está na iniciativa (a ordem não fechou: preparação de ficha esperando o jogador, dado dos
+ * inimigos na tela). O turno do mestre volta a esperar na rodada da iniciativa — `afterPrepSettled` e o prazo do dado dos
+ * inimigos chamam `advanceAfterChecks` com essa rodada — e nada é narrado. `true` = estacionou (ou a trava já não era dela).
+ */
+async function parkWhileInitiative(campaign: CampaignDoc, token: string, turnNumber: number, round: number): Promise<boolean> {
+    const tactical = await import("./tactical-combat")
+    let combat = await tactical.findActiveTactical(campaign._id)
+    if (!combat || combat.tactical.phase !== "initiative") return false
+    const card = await MaddoxCampaignMessageModel.findOne({ campaignId: campaign._id, kind: "combat-roll", "combatRoll.combatId": String(combat._id), "combatRoll.kind": { $in: ["initiative", "enemy-initiative"] } })
+        .sort({ _id: -1 })
+        .select("turnNumber combatRoll.waitRound")
+        .lean<{ turnNumber: number; combatRoll: { waitRound: number | null } }>()
+    const waitRound = card && card.turnNumber === turnNumber && typeof card.combatRoll.waitRound === "number" ? card.combatRoll.waitRound : Math.max(0, round - 1)
+    // Tudo pronto desde a última conferência: a ordem fecha agora e a narração segue normalmente.
+    if (await tactical.finishInitiativeIfReady(campaign._id, turnNumber, waitRound + 1)) {
+        combat = await tactical.findActiveTactical(campaign._id)
+        if (combat?.tactical.phase === "running") return false
+    }
+    const parked = await MaddoxCampaignModel.updateOne(
+        { _id: campaign._id, "turn.generating.token": token },
+        { $set: { "turn.phase": "master", "turn.awaitingChecks": true, "turn.checkRound": waitRound, "turn.generating": null, "turn.failedAt": null, "turn.pauseUntil": null, "turn.combatActor": null } },
+    )
+    log.warn({ campaignId: String(campaign._id), combatId: String(combat!._id), turnNumber, round, waitRound, parked: parked.modifiedCount > 0 }, "[maddox] continuação adiada: a ordem de iniciativa ainda não fechou")
+    return true
+}
+
+/**
+ * DND-62: o fim da narração não abriu a vez com o combate tático ainda em andamento. Em vez do turno de jogadores genérico
+ * (sem card nem campo de texto), o turno do mestre solta a trava marcado como falha: depois de `MADDOX_MASTER_RETRY_MS`, a
+ * leitura da mesa o retoma e tenta abrir a vez de novo. `false` = sem combate tático ativo (o turno genérico segue).
+ */
+async function parkWithoutCombatTurn(campaignId: Types.ObjectId, token: string, turnNumber: number, round: number): Promise<boolean> {
+    const live = await (await import("./tactical-combat")).findActiveTactical(campaignId)
+    if (!live) return false
+    const parked = await MaddoxCampaignModel.updateOne({ _id: campaignId, "turn.generating.token": token }, { $set: { "turn.generating": null, "turn.failedAt": new Date(), "turn.combatActor": null } })
+    log.error({ campaignId: String(campaignId), combatId: String(live._id), turnNumber, round, phase: live.tactical.phase, activeIndex: live.tactical.activeIndex, nextKey: live.tactical.nextKey ?? null, parked: parked.modifiedCount > 0, retryInMs: MADDOX_MASTER_RETRY_MS }, "[maddox] combate tático ativo sem vez aberta: turno do mestre volta a tentar")
+    return true
+}
+
+/**
  * Combate tático, depois de uma narração sem esperas (DND-25): o bloco que acabou fecha e, se ainda houver adversário na
  * fila, o turno do mestre faz a pausa de leitura (`turn.pauseUntil`) e o bloco seguinte entra na fila depois dela; senão,
  * segue para `openCombatTurn` (vez do próximo personagem ou fim do combate).
@@ -363,10 +414,13 @@ async function nextCombatStep(campaign: CampaignDoc, token: string, turnNumber: 
  * quando o Maddox deixou passar o fim (todos os inimigos ou todos os personagens fora de combate). `null` = sem combate
  * tático (o turno dos jogadores abre como antes).
  */
-async function openCombatTurn(campaign: CampaignDoc, token: string, turnNumber: number): Promise<"done" | null> {
+async function openCombatTurn(campaign: CampaignDoc, token: string, turnNumber: number, source: "narration" | "recovery" = "narration"): Promise<"done" | null> {
     const tactical = await import("./tactical-combat")
     let combat = await tactical.findActiveTactical(campaign._id)
-    if (!combat || combat.tactical.phase !== "running") return null
+    if (!combat || combat.tactical.phase !== "running") {
+        if (combat) log.warn({ campaignId: String(campaign._id), combatId: String(combat._id), turnNumber, source, phase: combat.tactical.phase, result: "not-running" }, "[maddox] vez do combate não aberta")
+        return null
+    }
     const enemies = tactical.livingEnemies(combat).length
     // DND-25: nenhum personagem consciente (todos com 0 PV, mesmo que alguém ainda esteja morrendo) = derrota na hora.
     const standing = tactical.consciousCharacters(combat).length > 0
@@ -398,8 +452,15 @@ async function openCombatTurn(campaign: CampaignDoc, token: string, turnNumber: 
         combat = await tactical.findActiveTactical(campaign._id)
         if (!combat) return null
     }
+    const before = { combatId: String(combat._id), round: combat.tactical.round, activeIndex: combat.tactical.activeIndex, nextKey: combat.tactical.nextKey ?? null }
     const next = await tactical.advanceToNextCharacter(campaign._id, turnNumber)
-    if (next.kind === "none") return null
+    // DND-62: a decisão de abrir (ou não) a vez fica no log, com o estado do combate antes dela.
+    const decision = { campaignId: String(campaign._id), turnNumber, source, ...before, preparedNow: Boolean(next.preparedNow), result: next.kind, ...(next.kind === "player" ? { actorKey: next.actorKey } : {}) }
+    if (next.kind === "none") {
+        log.warn(decision, "[maddox] vez do combate não aberta: nenhum personagem pode agir")
+        return null
+    }
+    log.info(decision, "[maddox] vez do combate")
     if (next.kind === "monsters") {
         // O personagem da vez caiu: os adversários seguintes agem num novo turno do mestre (sem declarações).
         const nextToken = randomUUID()
@@ -429,6 +490,47 @@ async function openCombatTurn(campaign: CampaignDoc, token: string, turnNumber: 
     if (opened.modifiedCount > 0) await (await import("./turn-snapshots")).captureTurnSnapshot(campaign._id, turnNumber)
     if (opened.modifiedCount > 0 && next.offline) tactical.scheduleAbsenceCheck(String(campaign._id))
     return "done"
+}
+
+export type CombatTurnRecoveryReason = "state" | "initiative" | "question"
+
+/**
+ * DND-62: auto-recuperação da vez do combate tático. Combate em andamento com a mesa num turno de jogadores sem
+ * `combatActor` (a narração abriu o turno genérico antes de a ordem de iniciativa fechar) é um estado sem saída: ninguém
+ * tem card nem campo de texto. A vez é retomada pelo mesmo `openCombatTurn` do fim da narração, com a trava de geração
+ * pega por troca condicional (só uma chamada vence). Não usa a fila de jobs: pode ser chamada de dentro de um job.
+ * `true` = a vez (ou o turno dos adversários) foi aberta.
+ */
+export async function ensureCombatTurn(campaignOrId: Types.ObjectId | CampaignDoc, reason: CombatTurnRecoveryReason): Promise<boolean> {
+    const campaign = campaignOrId instanceof Types.ObjectId ? await MaddoxCampaignModel.findById(campaignOrId).lean<CampaignDoc>() : campaignOrId
+    if (!campaign || !combatTurnMissing(campaign)) return false
+    const tactical = await import("./tactical-combat")
+    const combat = await tactical.findActiveTactical(campaign._id)
+    if (!combat || combat.tactical.phase !== "running") return false
+    const token = randomUUID()
+    const turnNumber = campaign.turn.number
+    const claimed = await MaddoxCampaignModel.updateOne(
+        { _id: campaign._id, status: "active", "turn.number": turnNumber, "turn.phase": "players", "turn.combatActor": null, "turn.generating": null },
+        { $set: { "turn.generating": { token, startedAt: new Date() }, "turn.opexActor": null } },
+    )
+    if (claimed.modifiedCount === 0) return false
+    log.warn({ campaignId: String(campaign._id), combatId: String(combat._id), turnNumber, reason, round: combat.tactical.round, activeIndex: combat.tactical.activeIndex, nextKey: combat.tactical.nextKey ?? null }, "[maddox] combate tático sem vez aberta: retomando a vez")
+    let result: "done" | null = null
+    try {
+        result = await openCombatTurn(campaign, token, turnNumber, "recovery")
+    } finally {
+        // Sem vez para abrir (o combate terminou pelo servidor, por exemplo): a trava volta e o turno segue como estava.
+        if (result !== "done") await MaddoxCampaignModel.updateOne({ _id: campaign._id, "turn.generating.token": token }, { $set: { "turn.generating": null } })
+    }
+    log.info({ campaignId: String(campaign._id), combatId: String(combat._id), turnNumber, reason, recovered: result === "done" }, "[maddox] retomada da vez do combate")
+    // Sem retomada, a mesa não mudou: nenhum aviso (evita o ciclo leitura → aviso → leitura).
+    if (result === "done") await publishGameChanged(campaign._id)
+    return result === "done"
+}
+
+/** Pré-condição barata (só o documento da campanha) do estado sem saída de `ensureCombatTurn`. */
+function combatTurnMissing(campaign: CampaignDoc): boolean {
+    return campaign.status === "active" && MADDOX_TACTICAL_COMBAT_RIGORS.includes(campaign.rigor) && campaign.turn?.phase === "players" && !campaign.turn.combatActor && !campaign.turn.generating && !campaign.rewind
 }
 
 /** Fecha a vez do personagem sem declaração (o jogador da vez saiu da campanha): o turno do mestre segue. */
@@ -1117,6 +1219,15 @@ export async function getGameState(campaignId: string, userId: string): Promise<
     if (campaign.status === "active") {
         if (await resumeMasterTurn(campaign)) campaign = await reloadCampaign(campaign._id)
         campaign = await fillEmptyTurn(campaign)
+        // DND-62: combate tático em andamento num turno de jogadores sem vez: a leitura retoma a vez sozinha.
+        // Falha na retomada (corrida no combate, por exemplo) não derruba a leitura: a próxima leitura tenta de novo.
+        if (combatTurnMissing(campaign)) {
+            const recovered = await ensureCombatTurn(campaign, "state").catch((error: unknown) => {
+                log.error({ err: error instanceof Error ? error.message : String(error), campaignId: String(campaign._id), turnNumber: campaign.turn?.number }, "[maddox] falha ao retomar a vez do combate na leitura da mesa")
+                return false
+            })
+            if (recovered) campaign = await reloadCampaign(campaign._id)
+        }
         // Personagem Opex na vez (DND-26): depois de um reinício, a leitura da mesa retoma a execução (idempotente).
         if (campaign.turn?.phase === "players" && (campaign.turn.opexActor || campaign.turn.combatActor)) void import("./opex-table").then(({ driveOpex }) => driveOpex(campaign._id)).catch(() => undefined)
     }

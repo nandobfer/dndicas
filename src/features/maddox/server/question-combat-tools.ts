@@ -4,7 +4,7 @@ import { DomainError } from "@/lib/api/route"
 import { loggerFor } from "@/lib/logger"
 import { applyConditionChange, conditionDisplayLabel, hpBand, HP_BAND_LABELS } from "../combat-rules"
 import type { CombatActionStep, IMaddoxCombatAction } from "../combat-types"
-import { MADDOX_CAMPAIGN_AUDIT_ENTITY, MADDOX_CONDITION_LABELS, MADDOX_CONDITIONS, MADDOX_TACTICAL_COMBAT_RIGORS } from "../constants"
+import { MADDOX_CAMPAIGN_AUDIT_ENTITY, MADDOX_COMBAT_FIX_TOOL_NAMES, MADDOX_CONDITION_LABELS, MADDOX_CONDITIONS, MADDOX_TACTICAL_COMBAT_RIGORS } from "../constants"
 import { MaddoxCampaignMessageModel, MaddoxCampaignModel, type IMaddoxCampaign, type IMaddoxCampaignMessage } from "../models"
 import { questionRun, type QuestionRun } from "./question-runs"
 import { findActiveTactical, findActorByName, mutateTactical, type CombatActor, type TacticalCombat } from "./tactical-combat"
@@ -104,6 +104,7 @@ export async function readCombatForFix(jobId: string | undefined): Promise<Recor
     const cards = await pendingCards(context.campaign._id, context.combat)
     return {
         ...view,
+        vez: turnView(context),
         economia: context.combat.tactical.characters
             .filter((state) => !state.left && !state.dead)
             .map((state) => ({
@@ -125,6 +126,35 @@ export async function readCombatForFix(jobId: string | undefined): Promise<Recor
             }
         }),
     }
+}
+
+/**
+ * DND-62: de quem é a vez, como a mesa está gravada — o card de ações (Ação, Ação bônus, Encerrar turno) só aparece com a
+ * vez aberta (`turn.combatActor`). A resposta sobre o card ou a vez só afirma o que está aqui.
+ */
+function turnView(context: FixContext): Record<string, unknown> {
+    const turn = context.campaign.turn
+    const combat = context.combat
+    const actor = turn?.phase === "players" ? turn.combatActor : null
+    if (actor) {
+        const name = combat.tactical.characters.find((item) => item.actorKey === actor.actorKey)?.name ?? "Personagem"
+        return { aberta: true, personagem: name, rodada: combat.tactical.round, nota: `O card de ações está aberto para ${name}.` }
+    }
+    if (combat.tactical.phase === "initiative") return { aberta: false, motivo: "A ordem de iniciativa ainda não fechou (rolagens ou preparação das fichas pendentes)." }
+    if (turn?.phase === "master") return { aberta: false, motivo: "É a vez dos adversários: o Maddox está narrando ou esperando rolagens." }
+    return { aberta: false, motivo: `Nenhum personagem está com a vez aberta: ninguém tem o card de ações. Chame ${MADDOX_COMBAT_FIX_TOOL_NAMES[5]} para retomar a vez.` }
+}
+
+/** DND-62: retoma a vez do combate quando a mesa ficou num turno de jogadores sem vez aberta (ver `ensureCombatTurn`). */
+export async function resumeCombatTurnForFix(jobId: string | undefined): Promise<Record<string, unknown>> {
+    const context = await fixContext(jobId)
+    const { ensureCombatTurn } = await import("./game")
+    const resumed = await ensureCombatTurn(context.campaign._id, "question")
+    const campaign = await MaddoxCampaignModel.findById(context.campaign._id).select("rigor turn showEnemyHp showAllyHp").lean<FixContext["campaign"]>()
+    const combat = await findActiveTactical(context.campaign._id)
+    const vez = campaign && combat ? turnView({ ...context, campaign, combat }) : { aberta: false, motivo: "O combate terminou." }
+    log.info({ campaignId: context.run.campaignId, jobId: context.run.jobId, resumed, vez }, "[maddox] retomada da vez pedida pelo mestre")
+    return resumed ? { retomada: true, vez, nota: "A vez foi aberta agora: só diga isso ao jogador com o que está em `vez`." } : { retomada: false, vez, nota: "Nada foi retomado: diga ao jogador o que está em `vez`." }
 }
 
 // ── Condições ─────────────────────────────────────────────────────────────────

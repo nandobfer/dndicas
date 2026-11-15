@@ -145,6 +145,7 @@ const { CharacterTrait } = await import("@/features/character-sheets/models/char
 const { ItemModel } = await import("@/features/items/database/item")
 const { MaddoxCombatPrepModel } = await import("@/features/maddox/models")
 const combatPrep = await import("@/features/maddox/server/combat-prep")
+const checks = await import("@/features/maddox/server/game-checks")
 const adjustments = await import("@/features/maddox/server/combat-adjustments")
 const { combatPrepAi, readCatalog } = await import("../../helpers/combat-prep-mock")
 /** DND-49: a regra lida no catálogo nesta execução e a fonte que a cita. */
@@ -1220,6 +1221,36 @@ describe("DND-51 — a preparação pergunta ao jogador quando falta uma escolha
         await expect(combatPrep.answerCombatPrep(id, String(prep._id), "de novo", lyra.userId)).rejects.toMatchObject({ code: "PREP_NOT_ASKING" })
     })
 
+    it("DND-62: a pergunta pendente segura a continuação; com a ordem fechada a vez do primeiro personagem abre com o card", async () => {
+        reviewFor((answer) => answer)
+        const { id, kael, lyra, cardOf } = await initiativeScene()
+        await rollInitiatives(id, { kael, lyra }, cardOf)
+        await settleCampaign(id)
+        expect((await prepsOf(id)).find((item) => item.characterName === "Lyra")!.status).toBe("awaiting-player")
+        // A preparação parada na pergunta conta como espera da rodada da iniciativa (mesma lista de `preparationPending`).
+        expect(await checks.hasRoundWaits(new mongoose.Types.ObjectId(id), 3, 0, true)).toBe(true)
+        // A leitura da mesa (retomada do turno do mestre) não pode narrar a continuação antes de a ordem fechar.
+        await game.getGameState(id, kael.userId)
+        await settleCampaign(id)
+        expect(await MaddoxCampaignMessageModel.exists({ campaignId: id, kind: "narration", turnNumber: 3 })).toBeNull()
+        expect((await MaddoxCampaignModel.findById(id).lean())!.turn).toMatchObject({ phase: "master", awaitingChecks: true, combatActor: null })
+
+        const prep = (await prepsOf(id)).find((item) => item.characterName === "Lyra")!
+        await combatPrep.answerCombatPrep(id, String(prep._id), "Quero Sabedoria", lyra.userId)
+        await combatPrep.waitForCombatPreps()
+        await settleCampaign(id)
+        const combat = (await MaddoxCombatModel.findOne({ campaignId: id }).lean())!
+        expect(combat.tactical!.phase).toBe("running")
+        expect(combat.tactical!.order[combat.tactical!.activeIndex]!.name).toBe("Kael")
+        expect(await MaddoxCampaignMessageModel.exists({ campaignId: id, kind: "narration", turnNumber: 3 })).toBeTruthy()
+        const turn = (await MaddoxCampaignModel.findById(id).lean())!.turn
+        expect(turn).toMatchObject({ phase: "players", combatActor: expect.objectContaining({ actorKey: kael.actorKey }) })
+        expect(turn.eligibleMemberIds.map(String)).toEqual([kael.memberId])
+        const view = await game.getGameState(id, kael.userId)
+        expect(view.me.combat!.myTurn).toBe(true)
+        expect(view.turn.combatActor).toMatchObject({ characterName: "Kael" })
+    }, 20_000)
+
     it("F10: descartada ou com falha depois da resposta, o card fica num estado final (sem 'concluindo')", async () => {
         reviewFor((answer) => answer)
         const { id, kael, lyra, cardOf } = await initiativeScene()
@@ -1304,6 +1335,123 @@ describe("DND-51 — a preparação pergunta ao jogador quando falta uma escolha
         } finally {
             combatPrep.combatPrepTiming.answerMs = 3 * 60_000
         }
+    })
+})
+
+/** DND-62: o estado da campanha 6af8db71…: combate em andamento sem vez (`activeIndex -1`, fila nunca preparada) e um turno de jogadores genérico. */
+async function brokenTurn(id: string, options: { goblinFirst?: boolean } = {}) {
+    const combat = (await MaddoxCombatModel.findOne({ campaignId: id }).lean())!
+    const order = options.goblinFirst ? [combat.tactical!.order[1]!, combat.tactical!.order[0]!, combat.tactical!.order[2]!] : combat.tactical!.order
+    await MaddoxCombatModel.updateOne({ campaignId: id }, { $set: { "tactical.activeIndex": -1, "tactical.order": order, "tactical.queue": [], "tactical.nextKey": null, "tactical.block": null, "tactical.queueTurn": null } })
+    const members = await MaddoxCampaignMemberModel.find({ campaignId: id }).select("_id").lean()
+    await MaddoxCampaignModel.updateOne({ _id: id }, { $set: { "turn.combatActor": null, "turn.eligibleMemberIds": members.map((member) => member._id), "turn.declaredMemberIds": [] } })
+}
+
+describe("DND-62 — a vez do combate nunca fica sem card", () => {
+    it("advanceToNextCharacter sem fila preparada (nextKey nulo) monta o plano na hora e abre a vez do personagem", async () => {
+        const { id, kael } = await scene()
+        await brokenTurn(id)
+        const next = await tactical.advanceToNextCharacter(new mongoose.Types.ObjectId(id), 2)
+        expect(next).toMatchObject({ kind: "player", actorKey: kael.actorKey, preparedNow: true })
+        const combat = (await MaddoxCombatModel.findOne({ campaignId: id }).lean())!
+        expect(combat.tactical!).toMatchObject({ activeIndex: 0, round: 1, nextKey: null })
+    })
+
+    it("com um adversário antes do próximo personagem, a vez passa aos adversários (nunca 'none')", async () => {
+        const { id } = await scene()
+        await brokenTurn(id, { goblinFirst: true })
+        expect(await tactical.advanceToNextCharacter(new mongoose.Types.ObjectId(id), 2)).toEqual({ kind: "monsters", preparedNow: true })
+    })
+
+    it("a leitura da mesa no estado inconsistente retoma a vez sozinha (uma vez só, com aviso à mesa)", async () => {
+        const { id, kael, lyra } = await scene()
+        await brokenTurn(id)
+        const { publishToChannels } = await import("@/lib/pusher/channels")
+        vi.mocked(publishToChannels).mockClear()
+        // Duas leituras ao mesmo tempo: só uma retoma (troca condicional); a seguinte já vê a vez aberta.
+        await Promise.all([game.getGameState(id, lyra.userId), game.getGameState(id, kael.userId)])
+        const [lyraView, kaelView] = [await game.getGameState(id, lyra.userId), await game.getGameState(id, kael.userId)]
+        const turn = (await MaddoxCampaignModel.findById(id).lean())!.turn
+        expect(turn).toMatchObject({ number: 2, phase: "players", generating: null, combatActor: expect.objectContaining({ actorKey: kael.actorKey }) })
+        expect(turn.eligibleMemberIds.map(String)).toEqual([kael.memberId])
+        expect(kaelView.me.combat!.myTurn).toBe(true)
+        expect(lyraView.me.combat!.myTurn).toBe(false)
+        expect(vi.mocked(publishToChannels)).toHaveBeenCalled()
+        expect((await MaddoxCombatModel.findOne({ campaignId: id }).lean())!.tactical!.activeIndex).toBe(0)
+    })
+
+    it("adversário primeiro: a retomada abre o turno do mestre do bloco dele e depois a vez do personagem", async () => {
+        const { id, kael } = await scene()
+        await brokenTurn(id, { goblinFirst: true })
+        await game.getGameState(id, kael.userId)
+        await settleCampaign(id)
+        const turn = (await MaddoxCampaignModel.findById(id).lean())!.turn
+        expect(turn).toMatchObject({ number: 3, phase: "players", combatActor: expect.objectContaining({ actorKey: kael.actorKey }) })
+        expect(await MaddoxCampaignMessageModel.exists({ campaignId: id, kind: "narration", turnNumber: 3 })).toBeTruthy()
+    })
+
+    it("a ordem de iniciativa fecha com a mesa já num turno de jogadores genérico: a vez abre sozinha com o card", async () => {
+        const { id, kael } = await scene()
+        await brokenTurn(id)
+        await MaddoxCombatModel.updateOne({ campaignId: id }, { $set: { "tactical.phase": "initiative", "tactical.round": 0 } })
+        expect(await tactical.finishInitiativeIfReady(new mongoose.Types.ObjectId(id), 2, 1)).toBe(true)
+        await vi.waitFor(async () => expect((await MaddoxCampaignModel.findById(id).lean())!.turn.combatActor).toMatchObject({ actorKey: kael.actorKey }))
+        expect((await game.getGameState(id, kael.userId)).me.combat!.myTurn).toBe(true)
+    })
+
+    it("a retomada falha (corrida no combate): a leitura da mesa responde, não avisa a mesa, e a leitura seguinte retoma", async () => {
+        const { id, kael } = await scene()
+        await brokenTurn(id)
+        const { publishToChannels } = await import("@/lib/pusher/channels")
+        vi.mocked(publishToChannels).mockClear()
+        const race = vi.spyOn(MaddoxCombatModel, "findOneAndUpdate").mockImplementationOnce((() => ({ lean: async () => null })) as never)
+        try {
+            const view = await game.getGameState(id, kael.userId)
+            expect(view.turn.combatActor).toBeNull()
+        } finally {
+            race.mockRestore()
+        }
+        expect((await MaddoxCampaignModel.findById(id).lean())!.turn).toMatchObject({ phase: "players", combatActor: null, generating: null })
+        expect(vi.mocked(publishToChannels)).not.toHaveBeenCalled()
+        expect((await game.getGameState(id, kael.userId)).me.combat!.myTurn).toBe(true)
+    })
+
+    it("fim da narração sem vez aberta com o combate em andamento: nunca vira turno genérico; a retomada reabre a vez", async () => {
+        const { id, lyra } = await scene()
+        // Vez do Goblin acabou de passar: a fila do turno 3 do mestre vai direto para a Lyra (bloco do personagem, sem adversário).
+        await MaddoxCombatModel.updateOne({ campaignId: id }, { $set: { "tactical.activeIndex": 1 } })
+        await MaddoxCampaignModel.updateOne({ _id: id }, { $set: { "turn.number": 3, "turn.phase": "master", "turn.combatActor": null, "turn.eligibleMemberIds": [], "turn.generating": null, "turn.failedAt": null, "turn.awaitingChecks": false, "turn.checkRound": 0 } })
+        const refused = vi.spyOn(tactical, "advanceToNextCharacter").mockResolvedValueOnce({ kind: "none" })
+        let refusedCalls = 0
+        try {
+            await game.getGameState(id, lyra.userId)
+            await settleCampaign(id)
+            refusedCalls = refused.mock.calls.length
+        } finally {
+            refused.mockRestore()
+        }
+        expect(refusedCalls).toBeGreaterThan(0)
+        expect(await MaddoxCampaignMessageModel.exists({ campaignId: id, kind: "narration", turnNumber: 3 })).toBeTruthy()
+        let turn = (await MaddoxCampaignModel.findById(id).lean())!.turn
+        expect(turn).toMatchObject({ number: 3, phase: "master", generating: null, combatActor: null })
+        expect(turn.failedAt).toBeInstanceOf(Date)
+
+        // Passado o prazo da nova tentativa, a leitura da mesa refaz o fim da narração (sem narrar de novo) e abre a vez.
+        await MaddoxCampaignModel.updateOne({ _id: id }, { $set: { "turn.failedAt": new Date(Date.now() - 24 * 60 * 60_000) } })
+        await game.getGameState(id, lyra.userId)
+        await settleCampaign(id)
+        turn = (await MaddoxCampaignModel.findById(id).lean())!.turn
+        expect(turn).toMatchObject({ number: 3, phase: "players", combatActor: expect.objectContaining({ actorKey: lyra.actorKey }) })
+        expect(turn.eligibleMemberIds.map(String)).toEqual([lyra.memberId])
+        expect(await MaddoxCampaignMessageModel.countDocuments({ campaignId: id, kind: "narration", turnNumber: 3 })).toBe(1)
+    })
+
+    it("sem combate tático em andamento, o turno de jogadores comum fica como está", async () => {
+        const { id, kael } = await scene()
+        await brokenTurn(id)
+        await MaddoxCombatModel.updateOne({ campaignId: id }, { $set: { status: "ended" } })
+        await game.getGameState(id, kael.userId)
+        expect((await MaddoxCampaignModel.findById(id).lean())!.turn).toMatchObject({ phase: "players", combatActor: null, generating: null })
     })
 })
 

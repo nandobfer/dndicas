@@ -413,6 +413,9 @@ export async function finishInitiativeIfReady(campaignId: Types.ObjectId, turnNu
     }
     await MaddoxCampaignMessageModel.create({ campaignId, turnNumber, phase: "master", kind: "combat", content: "", segment, combat: { event: "order", combatId: combat._id } })
     log.info({ campaignId: String(campaignId), combatId: String(combat._id), order: combat.tactical.order.map((slot) => `${slot.name}:${slot.total}`) }, "[maddox] ordem de iniciativa definida")
+    // DND-62: a ordem fechou com a mesa já num turno de jogadores sem vez (narração que rodou antes da ordem): a vez é
+    // retomada agora. No caminho normal (turno do mestre esperando a iniciativa) não faz nada.
+    void import("./game").then(({ ensureCombatTurn }) => ensureCombatTurn(campaignId, "initiative")).catch((error) => log.warn({ err: error instanceof Error ? error.message : String(error), campaignId: String(campaignId) }, "[maddox] falha ao retomar a vez do combate"))
     return true
 }
 
@@ -654,7 +657,8 @@ export async function countBlockWait(campaignId: Types.ObjectId, round: number):
     })
 }
 
-export type OpenResult = { kind: "player"; memberId: Types.ObjectId; actorKey: string; offline: boolean } | { kind: "monsters" } | { kind: "none" }
+/** `preparedNow` (DND-62): a fila não estava preparada (`nextKey` nulo) e o plano foi montado na hora. */
+export type OpenResult = { kind: "player"; memberId: Types.ObjectId; actorKey: string; offline: boolean; preparedNow?: boolean } | { kind: "monsters"; preparedNow?: boolean } | { kind: "none"; preparedNow?: boolean }
 
 /**
  * Depois da narração (sem esperas): a vez passa ao próximo personagem — começo do turno dele, teste contra a morte se
@@ -664,8 +668,24 @@ export type OpenResult = { kind: "player"; memberId: Types.ObjectId; actorKey: s
 export async function advanceToNextCharacter(campaignId: Types.ObjectId, turnNumber: number): Promise<OpenResult> {
     const combat = await findActiveTactical(campaignId)
     if (!combat || combat.tactical.phase !== "running") return { kind: "none" }
-    const nextKey = combat.tactical.nextKey
-    if (!nextKey) return { kind: "none" }
+    let nextKey = combat.tactical.nextKey
+    let preparedNow = false
+    if (!nextKey) {
+        // DND-62: a ordem fechou depois da narração (fila nunca preparada, `activeIndex -1`): o plano é montado agora. Com
+        // adversários antes do próximo personagem, eles agem num novo turno do mestre (que prepara a fila com a rodada certa).
+        const plan = planQueue(combat)
+        preparedNow = true
+        if (plan.monsters.length) {
+            combat.tactical.queueTurn = null
+            combat.tactical.block = null
+            await saveTactical(combat)
+            return { kind: "monsters", preparedNow }
+        }
+        if (!plan.next) return { kind: "none", preparedNow }
+        // A ordem voltou ao topo sem adversário no caminho: rodada nova.
+        if (plan.wraps.length) combat.tactical.round += 1
+        nextKey = plan.next
+    }
     const index = combat.tactical.order.findIndex((slot) => slot.actorKey === nextKey)
     const nextActor = findActor(combat, nextKey)
     combat.tactical.activeIndex = index
@@ -678,12 +698,12 @@ export async function advanceToNextCharacter(campaignId: Types.ObjectId, turnNum
         // agem num novo turno do mestre.
         combat.tactical.queueTurn = null
         await saveTactical(combat)
-        return consciousOrDying(combat) ? { kind: "monsters" } : { kind: "none" }
+        return consciousOrDying(combat) ? { kind: "monsters", preparedNow } : { kind: "none", preparedNow }
     }
     await startActorTurn(combat, nextKey)
     const saved = await saveTactical(combat)
     const actor = findActor(saved, nextKey)
-    if (!actor || actor.kind !== "character") return { kind: "none" }
+    if (!actor || actor.kind !== "character") return { kind: "none", preparedNow }
     if (actor.state.hpZero && !actor.state.stable && !actor.state.dead) {
         // DND-58: a exaustão da ficha também vale no teste contra a morte.
         const exhaustion = await (await import("./combat-sheet")).characterExhaustionPenalty(actor.state.sheetId)
@@ -702,7 +722,7 @@ export async function advanceToNextCharacter(campaignId: Types.ObjectId, turnNum
     }
     const { onlineUserIds } = await import("./game-presence")
     const online = await onlineUserIds(String(campaignId))
-    return { kind: "player", memberId: new Types.ObjectId(actor.state.memberId), actorKey: nextKey, offline: online ? !online.has(actor.state.userId) && !isOpexUserId(actor.state.userId) : false }
+    return { kind: "player", memberId: new Types.ObjectId(actor.state.memberId), actorKey: nextKey, offline: online ? !online.has(actor.state.userId) && !isOpexUserId(actor.state.userId) : false, preparedNow }
 }
 
 // ── Ausência na própria vez ───────────────────────────────────────────────────

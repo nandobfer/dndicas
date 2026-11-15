@@ -10,7 +10,7 @@ import { detectSneakAttack, riderLabel } from "../combat-prep"
 import { combatAddSchema, combatModifySchema, combatPrepResponseSchema, combatRemoveSchema, combatSheetChangeSchema, parseList, requiresCatalogSource, sneakAttackSchema, type CombatSheetChange } from "../combat-prep-schemas"
 import { abilityModifier } from "../combat-rules"
 import { emptyOverlay, type CombatOptionPatch, type CombatPrepChange, type CombatPrepOverlay, type CombatPrepRider, type PreparedCombatOption, type TacticalCharacterState } from "../combat-types"
-import { MADDOX_CAMPAIGN_AUDIT_ENTITY, MADDOX_COMBAT_PREP_ANSWER_TIMEOUT_MS, MADDOX_COMBAT_PREP_CONFLICT_RETRIES, MADDOX_COMBAT_PREP_EXPIRED_NOTICE, MADDOX_COMBAT_PREP_STALE_MS, MADDOX_COMBAT_PREP_TRAIT_TEXT_MAX } from "../constants"
+import { MADDOX_CAMPAIGN_AUDIT_ENTITY, MADDOX_COMBAT_PREP_ANSWER_TIMEOUT_MS, MADDOX_COMBAT_PREP_BLOCKING_STATUSES, MADDOX_COMBAT_PREP_CONFLICT_RETRIES, MADDOX_COMBAT_PREP_EXPIRED_NOTICE, MADDOX_COMBAT_PREP_STALE_MS, MADDOX_COMBAT_PREP_TRAIT_TEXT_MAX } from "../constants"
 import { MaddoxCampaignMessageModel, MaddoxCampaignModel, MaddoxCombatPrepModel, type IMaddoxCampaign, type IMaddoxCombatPrep } from "../models"
 import { masteryKeyFromName, masteryLabel, masteryLimit, type MaddoxMasteryKey } from "../weapon-mastery"
 import { MADDOX_HIT_POINT_OPERATIONS } from "../hit-points-ops"
@@ -46,7 +46,7 @@ const track = (promise: Promise<void>) => {
 }
 
 // DND-51: a pergunta ao jogador também segura a ordem (até a resposta ou o prazo).
-const BLOCKING: IMaddoxCombatPrep["status"][] = ["pending", "running", "awaiting-player", "failed"]
+const BLOCKING: IMaddoxCombatPrep["status"][] = [...MADDOX_COMBAT_PREP_BLOCKING_STATUSES]
 
 /** DND-51: prazo da resposta do jogador (testes encurtam). */
 export const combatPrepTiming = ((globalThis as unknown as { __maddoxCombatPrepTiming?: { answerMs: number } }).__maddoxCombatPrepTiming ??= { answerMs: MADDOX_COMBAT_PREP_ANSWER_TIMEOUT_MS })

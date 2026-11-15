@@ -162,6 +162,28 @@ describe("combate tático — barra da minha vez e menu de ações (Maddox 7)", 
         render(<CombatWaitBar combat={combat} canAsk onAsk={vi.fn()} />)
         expect(screen.getByTestId("combat-wait-bar")).toHaveTextContent("Vez de Kael (iniciativa 18) · Rodada 2")
     })
+
+    it("DND-62: combate em andamento sem vez aberta mostra a retomada (nunca só 'Vez dos adversários') e o Perguntar ao mestre", () => {
+        const noActive = { ...combat, activeKey: null, order: combat.order.map((slot) => ({ ...slot, active: false })) }
+        render(<CombatWaitBar combat={noActive} recovering canAsk onAsk={vi.fn()} />)
+        expect(screen.getByTestId("combat-wait-text")).toHaveTextContent("O Maddox está retomando a vez do combate…")
+        expect(screen.getByTestId("combat-wait-bar")).not.toHaveTextContent("Vez dos adversários")
+        expect(screen.getByRole("button", { name: /Perguntar ao mestre/ })).toBeInTheDocument()
+    })
+})
+
+describe("combate tático — vez sem card (DND-62)", () => {
+    const turn = (over: Record<string, unknown> = {}) => ({ phase: "players", combatActor: null, opexActor: null, ...over })
+    it("combatTurnRecovering só com combate em andamento, turno dos jogadores e nenhuma vez aberta; a faixa fala do combate", async () => {
+        const { combatTurnRecovering, combatRecoveringBannerText } = await import("@/features/maddox/game-view")
+        const state = (t: Record<string, unknown>, phase: MaddoxTacticalCombatDto["phase"] = "running") => ({ status: "active", turn: t, combat: { tactical: { ...combat, phase } } }) as never
+        expect(combatTurnRecovering(state(turn()))).toBe(true)
+        expect(combatTurnRecovering(state(turn({ combatActor: { actorKey: "pc:kael", memberId: "m1", characterName: "Kael" } })))).toBe(false)
+        expect(combatTurnRecovering(state(turn({ phase: "master" })))).toBe(false)
+        expect(combatTurnRecovering(state(turn(), "initiative"))).toBe(false)
+        expect(combatTurnRecovering(state(turn({ opexActor: { combat: true } })))).toBe(false)
+        expect(combatRecoveringBannerText({ combat: { tactical: combat } } as never)).toBe("Combate — rodada 2: retomando a vez…")
+    })
 })
 
 describe("combate tático — rastreador de iniciativa", () => {

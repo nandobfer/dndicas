@@ -5,7 +5,7 @@ import { AcaoAuditoria, recordAudit } from "@/lib/db"
 import { DomainError } from "@/lib/api/route"
 import { loggerFor } from "@/lib/logger"
 import type { DiceRollResponse } from "@/features/dice-roller/types"
-import { MADDOX_CAMPAIGN_AUDIT_ENTITY } from "../constants"
+import { MADDOX_CAMPAIGN_AUDIT_ENTITY, MADDOX_COMBAT_PREP_BLOCKING_STATUSES } from "../constants"
 import { checkModifier, checkTitle, type MaddoxCheckSheet } from "../check-modifier"
 import { MaddoxCampaignMemberModel, MaddoxCampaignMessageModel, MaddoxCampaignModel, type IMaddoxCampaignMessage } from "../models"
 import type { MaddoxGameStateDto } from "../game-types"
@@ -153,9 +153,10 @@ export async function hasRoundWaits(campaignId: Types.ObjectId, turnNumber: numb
         ],
     })
     if (found || !pendingOnly) return Boolean(found)
-    // DND-41: a preparação da mesa de combate aberta nesta rodada (iniciativa) também é espera.
+    // DND-41: a preparação da mesa de combate aberta nesta rodada (iniciativa) também é espera — inclusive a parada numa
+    // pergunta ao jogador (DND-62: a mesma lista de `preparationPending`).
     const { MaddoxCombatPrepModel } = await import("../models")
-    if (await MaddoxCombatPrepModel.exists({ campaignId, turnNumber, waitRound: round, status: { $in: ["pending", "running", "failed"] } })) return true
+    if (await MaddoxCombatPrepModel.exists({ campaignId, turnNumber, waitRound: round, status: { $in: [...MADDOX_COMBAT_PREP_BLOCKING_STATUSES] } })) return true
     // Iniciativa dos inimigos (DND-25): o dado ainda está rolando na tela de todos.
     const revealing = await MaddoxCampaignMessageModel.exists({ campaignId, turnNumber, kind: "combat-roll", "combatRoll.waitRound": round, "combatRoll.kind": "enemy-initiative", "combatRoll.revealUntil": { $gt: new Date() } })
     return Boolean(revealing)
