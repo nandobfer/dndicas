@@ -145,14 +145,17 @@ export function getLevelOneHpMax(hitDice: string, constitutionModifier: number):
 }
 
 /**
- * PV do nível 1 sincronizados pelo catálogo (DND-64): o máximo segue a classe e a Constituição, mas o PV atual nunca é
- * reposto. Ele só é preenchido quando ainda não existe (ficha nova) e só é rebaixado quando passa do novo máximo; o dano
- * gravado pela campanha ou anotado pelo jogador fica como está.
+ * PV do nível 1 sincronizados pelo catálogo (DND-64): o máximo segue a classe e a Constituição, mas o PV atual de quem
+ * tem dano nunca é reposto. Ele é preenchido quando ainda não existe (ficha nova), acompanha o novo máximo quando a ficha
+ * estava cheia e só é rebaixado quando passa do novo máximo; o dano gravado pela campanha ou anotado pelo jogador fica
+ * como está.
  */
 export function levelOneHitPointsPatch(input: { nextHpMax: number; currentHpMax: number | null; currentHpCurrent: number | null }): { hpMax?: number; hpCurrent?: number } {
     const patch: { hpMax?: number; hpCurrent?: number } = {}
     if (input.nextHpMax !== input.currentHpMax) patch.hpMax = input.nextHpMax
-    if (input.currentHpCurrent == null || input.currentHpCurrent > input.nextHpMax) patch.hpCurrent = input.nextHpMax
+    const current = input.currentHpCurrent
+    const full = current != null && input.currentHpMax != null && current >= input.currentHpMax
+    if (current == null || current > input.nextHpMax || (full && current !== input.nextHpMax)) patch.hpCurrent = input.nextHpMax
     return patch
 }
 

@@ -36,9 +36,13 @@ describe("PV do nível 1 na sincronização (DND-64)", () => {
         expect(levelOneHitPointsPatch({ nextHpMax: 12, currentHpMax: 12, currentHpCurrent: 12 })).toEqual({})
     })
 
-    it("troca de classe recalcula o máximo e mantém o número do PV atual", () => {
+    it("troca de classe com dano recalcula o máximo e mantém o número do PV atual", () => {
         expect(levelOneHitPointsPatch({ nextHpMax: 24, currentHpMax: 30, currentHpCurrent: 12 })).toEqual({ hpMax: 24 })
-        expect(levelOneHitPointsPatch({ nextHpMax: 30, currentHpMax: 24, currentHpCurrent: 24 })).toEqual({ hpMax: 30 })
+        expect(levelOneHitPointsPatch({ nextHpMax: 30, currentHpMax: 24, currentHpCurrent: 12 })).toEqual({ hpMax: 30 })
+    })
+
+    it("ficha cheia acompanha o novo máximo (sem dano falso na criação): 12/12 com CON maior vira 14/14", () => {
+        expect(levelOneHitPointsPatch({ nextHpMax: 14, currentHpMax: 12, currentHpCurrent: 12 })).toEqual({ hpMax: 14, hpCurrent: 14 })
     })
 
     it("o PV atual só baixa quando passa do novo máximo", () => {
