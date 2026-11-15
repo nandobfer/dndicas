@@ -483,6 +483,8 @@ export interface MaddoxGameStateDto {
         rewind?: { atTurn: number; originTurn: number; hasNewActions: boolean } | null
         /** O dono está levando a mesa a outro turno agora (trava da volta). */
         rewinding?: boolean
+        /** DND-59: o mestre está respondendo uma pergunta ou corrigindo um lembrete; o Rolar dos cards de ação espera. */
+        masterReviewing?: boolean
     }
     /** Mostra a CD dos testes aos jogadores. */
     showCheckDc: boolean

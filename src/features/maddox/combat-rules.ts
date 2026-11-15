@@ -18,6 +18,24 @@ export interface CombatCondition {
     level?: number
     /** De onde veio ("Esconder", "Teia", "Lobo — Mordida"). */
     source?: string
+    /** DND-59: Invisível do Esconder-se — o total do teste de Furtividade, a CD para os inimigos acharem quem se escondeu. */
+    dc?: number | null
+}
+
+/** Origem do Invisível que vem do Esconder-se (DND-49: sai depois de um ataque ou de uma magia com componente Verbal). */
+export const HIDDEN_CONDITION_SOURCE = "Esconder"
+
+export const isHiddenCondition = (condition: { key: string; source?: string }) => condition.key === "invisible" && condition.source === HIDDEN_CONDITION_SOURCE
+
+/** DND-59: Invisível do Esconder-se com a CD para ser encontrado (`dc` = total do teste de Furtividade). */
+export const hiddenCondition = (dc: number | null): CombatCondition => ({ key: "invisible", untilRound: null, source: HIDDEN_CONDITION_SOURCE, ...(dc !== null ? { dc } : {}) })
+
+/** Rótulo exibido de uma condição: "Invisível (Esconder-se · CD 15)" no Esconder-se; o nome da condição nos demais. */
+export function conditionDisplayLabel(condition: Pick<CombatCondition, "key" | "source" | "dc" | "level">): string {
+    const base = MADDOX_CONDITION_LABELS[condition.key]
+    if (isHiddenCondition(condition)) return `${base} (Esconder-se${typeof condition.dc === "number" ? ` · CD ${condition.dc}` : ""})`
+    if (condition.key === "exhaustion" && condition.level) return `${base} ${condition.level}`
+    return base
 }
 
 /** Flags que valem até o início do próximo turno de quem as tem (ou até serem usadas). */
@@ -93,6 +111,8 @@ export interface AttackModeInput {
     helped?: boolean
     /** DND-49: chave do alvo (Maestria Afligir do atacante contra ele). */
     targetKey?: string | null
+    /** DND-59: vantagem ou desvantagem pela situação, decidida pelo mestre na correção do card (com o motivo). */
+    situational?: { mode: Exclude<RollMode, "normal">; reason: string } | null
 }
 
 /** Vantagem/desvantagem de uma jogada de ataque pelas condições e flags dos dois lados (PHB 2024). */
@@ -109,6 +129,7 @@ export function attackMode(input: AttackModeInput): { mode: RollMode; reasons: s
     if (hasCondition(target, "prone")) (ranged ? dis : adv).push(ranged ? "alvo caído (à distância)" : "alvo caído")
     if (hasCondition(target, "invisible") && !hasCondition(attacker, "invisible")) dis.push("alvo invisível")
     if (target.flags?.dodging && canAct(target)) dis.push("alvo esquivando")
+    if (input.situational) (input.situational.mode === "advantage" ? adv : dis).push(input.situational.reason.trim() || "situação")
     return { mode: combineModes(adv.length > 0, dis.length > 0), reasons: [...adv, ...dis], advantage: adv.length > 0, disadvantage: dis.length > 0 }
 }
 
@@ -340,4 +361,76 @@ export function modeReasonText(mode: RollMode, reasons: readonly string[]): stri
     if (mode === "advantage") return `Vantagem: ${reasons.join(", ")}`
     if (mode === "disadvantage") return `Desvantagem: ${reasons.join(", ")}`
     return `Normal: vantagem e desvantagem se anulam (${reasons.join(", ")})`
+}
+
+/**
+ * DND-59: a rolagem bate com o modo que o servidor calculou? Vantagem e desvantagem trazem os dois d20 (o mantido e o
+ * descartado, em `selectedD20`); o modo normal, um só. Rolagem sem d20 (dano) sempre bate.
+ */
+export function rollMatchesMode(roll: { mode?: RollMode | null; terms: readonly Pick<DiceTerm, "dice">[]; selectedD20?: { reason?: string | null; discarded?: number | null } | null }, mode: RollMode): boolean {
+    if (!roll.terms.some((term) => term.dice === "d20")) return true
+    if ((roll.mode ?? "normal") !== mode) return false
+    const twoDice = typeof roll.selectedD20?.discarded === "number"
+    return mode === "normal" ? !twoDice : twoDice && roll.selectedD20?.reason === mode
+}
+
+export interface ConditionChange {
+    key: MaddoxConditionKey
+    remove?: boolean
+    /** Rodada em que termina (`null` = até alguém remover). */
+    untilRound?: number | null
+    source?: string | null
+    /** Invisível do Esconder-se: a CD para ser encontrado. */
+    hiddenDc?: number | null
+    hidden?: boolean
+}
+
+/**
+ * DND-59: aplica ou remove uma condição na lista (regra única do `apply_effect` da narração e da correção pelo "Pergunte
+ * ao mestre"). Devolve a lista nova e a frase do que mudou; `immune` = o alvo é imune (a lista não muda).
+ */
+export function applyConditionChange(
+    conditions: readonly CombatCondition[],
+    change: ConditionChange,
+    options: { name: string; immunities?: readonly string[] } = { name: "" },
+): { conditions: CombatCondition[]; line: string; changed: boolean } {
+    const label = MADDOX_CONDITION_LABELS[change.key]
+    if (change.remove) {
+        const had = conditions.some((condition) => condition.key === change.key)
+        return { conditions: conditions.filter((condition) => condition.key !== change.key), line: had ? `${options.name} não está mais ${label}` : `${options.name} já não estava ${label}`, changed: had }
+    }
+    if (options.immunities?.includes(change.key)) return { conditions: [...conditions], line: `${options.name} é imune a ${label}`, changed: false }
+    const hidden = change.key === "invisible" && (change.hidden || typeof change.hiddenDc === "number")
+    const next: CombatCondition = hidden
+        ? { ...hiddenCondition(typeof change.hiddenDc === "number" ? change.hiddenDc : null), untilRound: change.untilRound ?? null }
+        : { key: change.key, untilRound: change.untilRound ?? null, ...(change.source ? { source: change.source.slice(0, 80) } : {}) }
+    const shown = conditionDisplayLabel(next)
+    return { conditions: [...conditions.filter((condition) => condition.key !== change.key), next], line: `${options.name} está ${shown}`, changed: true }
+}
+
+const foldText = (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
+
+/** Formas que aparecem no texto (masculino/feminino/plural) de cada condição. */
+const CONDITION_STEMS: Record<MaddoxConditionKey, RegExp> = {
+    blinded: /\bceg[oa]s?\b/,
+    charmed: /\benfeiticad[oa]s?\b/,
+    deafened: /\bsurd[oa]s?\b/,
+    exhaustion: /\bexaust[oa]s?\b|\bexaustao\b/,
+    frightened: /\bamedrontad[oa]s?\b/,
+    grappled: /\bagarrad[oa]s?\b/,
+    incapacitated: /\bincapacitad[oa]s?\b/,
+    invisible: /\binvisive(l|is)\b/,
+    paralyzed: /\bparalisad[oa]s?\b/,
+    petrified: /\bpetrificad[oa]s?\b/,
+    poisoned: /\benvenenad[oa]s?\b/,
+    prone: /\bcaid[oa]s?\b/,
+    restrained: /\bcontid[oa]s?\b/,
+    stunned: /\batordoad[oa]s?\b/,
+    unconscious: /\binconscientes?\b/,
+}
+
+/** DND-59: condições do combate citadas num texto livre (estado da história ou do personagem). */
+export function mentionedConditions(text: string): MaddoxConditionKey[] {
+    const folded = foldText(text)
+    return (Object.keys(CONDITION_STEMS) as MaddoxConditionKey[]).filter((key) => CONDITION_STEMS[key].test(folded))
 }

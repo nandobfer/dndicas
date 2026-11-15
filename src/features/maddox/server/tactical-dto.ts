@@ -1,6 +1,6 @@
 import { Types } from "mongoose"
-import { MADDOX_COMBAT_ADJUST_FAILED_MESSAGE, MADDOX_CONDITION_LABELS } from "../constants"
-import { hpBand } from "../combat-rules"
+import { MADDOX_COMBAT_ADJUST_FAILED_MESSAGE } from "../constants"
+import { conditionDisplayLabel, hpBand } from "../combat-rules"
 import type { IMaddoxCombatAction, IMaddoxCombatReaction, IMaddoxCombatRoll } from "../combat-types"
 import type { MaddoxCombatActionDto, MaddoxCombatReactionDto, MaddoxCombatRollDto, MaddoxMyCombatDto, MaddoxTacticalCombatDto, MaddoxTacticalSlotDto } from "../game-types"
 import { MaddoxCharacterModel, type IMaddoxCombatPrep } from "../models"
@@ -35,7 +35,7 @@ export function tacticalSnapshot(combat: TacticalCombat, hp: HpMap = new Map(), 
             .map((slot) => {
                 const actor = findActor(combat, slot.actorKey)
                 if (!actor) return null
-                const conditions = actor.state.conditions.map((condition) => ({ key: condition.key, label: MADDOX_CONDITION_LABELS[condition.key] }))
+                const conditions = actor.state.conditions.map((condition) => ({ key: condition.key, label: conditionDisplayLabel(condition) }))
                 if (actor.kind === "character") {
                     const points = hp.get(actor.key)
                     return {

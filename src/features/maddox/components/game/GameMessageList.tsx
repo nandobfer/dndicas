@@ -22,6 +22,7 @@ import { ReminderLine } from "./ReminderLine"
 import { RewindNoticeLine } from "./RewindNoticeLine"
 import { HitPointsLine } from "./HitPointsLine"
 import { SheetChangeLine } from "./SheetChangeLine"
+import { CombatFixLine } from "./CombatFixLine"
 import { ChapterLine, ExperienceCard, LevelUpCard } from "./ProgressionCards"
 import { RestCard, type RestHandlers } from "./rest/RestCard"
 
@@ -78,6 +79,8 @@ export interface CombatHandlers {
     /** DND-49: "Somar ataque furtivo" / "Não somar" depois do acerto. */
     onSneakChoice?: (actionId: string, add: boolean) => void
     sneakChoosing?: boolean
+    /** DND-59: o mestre está respondendo uma pergunta ou um lembrete; o Rolar dos cards de ação espera. */
+    masterReviewing?: boolean
     onDecideReaction: (reactionId: string, choice: string) => void
     /** DND-51: resposta à pergunta da preparação do combate (card privado). */
     onAnswerPrep?: (prepId: string, text: string) => Promise<void>
@@ -194,7 +197,7 @@ export function GameMessageList({ messages, myMemberId, maddoxAvatarUrl, color, 
                                         )
                                     ) : null
                                 ) : message.kind === "combat-action" && message.combatAction ? (
-                                    <CombatActionCard message={message} mine={actsAs(message)} replay={replays.get(message.id) ?? null} stepReplays={stepReplaysOf(replays, message.id, message.combatAction.steps.length)} onRoll={combat.onRollAction} onCancel={combat.onCancelAction} onSneakChoice={combat.onSneakChoice} sneakChoosing={combat.sneakChoosing} />
+                                    <CombatActionCard message={message} mine={actsAs(message)} replay={replays.get(message.id) ?? null} stepReplays={stepReplaysOf(replays, message.id, message.combatAction.steps.length)} onRoll={combat.onRollAction} onCancel={combat.onCancelAction} onSneakChoice={combat.onSneakChoice} sneakChoosing={combat.sneakChoosing} masterReviewing={combat.masterReviewing} />
                                 ) : message.kind === "combat-roll" && message.combatRoll ? (
                                     <CombatRollCard message={message} mine={actsAs(message)} replay={replays.get(message.id) ?? null} onRoll={combat.onRollCombat} />
                                 ) : message.kind === "combat-reaction" && message.combatReaction ? (
@@ -209,6 +212,8 @@ export function GameMessageList({ messages, myMemberId, maddoxAvatarUrl, color, 
                                     <HitPointsLine message={message} />
                                 ) : message.kind === "sheet-change" ? (
                                     <SheetChangeLine message={message} />
+                                ) : message.kind === "combat-fix" ? (
+                                    <CombatFixLine message={message} />
                                 ) : message.kind === "level-up" ? (
                                     <LevelUpCard message={message} onComplete={readOnly ? undefined : (onLevelUp ?? undefined)} onRetry={readOnly ? undefined : (onRetryLevelUp ?? undefined)} retryingId={retryingLevelUpId} />
                                 ) : message.kind === "experience" ? (

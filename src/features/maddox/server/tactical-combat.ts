@@ -7,7 +7,7 @@ import { loggerFor } from "@/lib/logger"
 import type { DiceModifierPart, DiceRollResponse } from "@/features/dice-roller/types"
 import { MADDOX_COMBAT_OFFLINE_GRACE_MS, MADDOX_COMBAT_ROLL_CLAIM_STALE_MS, MADDOX_ENEMY_INITIATIVE_REVEAL_MS, MADDOX_NPC_BLOCK_PAUSE_MS, MADDOX_TACTICAL_COMBAT_RIGORS, type MaddoxRigorLevel } from "../constants"
 import { normalizeCatalogName } from "../catalog-markup"
-import { canAct, freshEconomy, formatDiceExpression, parseDiceExpression, sortInitiative, type RollMode } from "../combat-rules"
+import { canAct, freshEconomy, hiddenCondition, formatDiceExpression, parseDiceExpression, sortInitiative, type RollMode } from "../combat-rules"
 import type { IMaddoxCombatRoll, InitiativeSlot, MonsterStats, TacticalCharacterState, TacticalCombatState, TacticalCombatantState } from "../combat-types"
 import { MaddoxCampaignMemberModel, MaddoxCampaignMessageModel, MaddoxCampaignModel, MaddoxCharacterModel, MaddoxCombatModel, type IMaddoxCampaign, type IMaddoxCombat, type IMaddoxCombatant } from "../models"
 import { rechargeHit } from "./combat-monsters"
@@ -238,7 +238,7 @@ export async function createTacticalCombat(
     campaign: Pick<IMaddoxCampaign, "_id">,
     turnNumber: number,
     waitRound: number,
-    event: { title: string; location: string; surprise: "personagens" | "adversarios" | null; combatants: TacticalDraftCombatant[] },
+    event: { title: string; location: string; surprise: "personagens" | "adversarios" | null; combatants: TacticalDraftCombatant[]; hidden?: readonly { characterId: string; dc: number }[] },
     linkNpc: (combatant: TacticalDraftCombatant & { individual: string }) => Promise<Types.ObjectId | null>,
 ): Promise<TacticalStartPlan | null> {
     const individuals = expandCombatants(event.combatants)
@@ -258,6 +258,11 @@ export async function createTacticalCombat(
         })
     }
     const characters = await combatCharacters(campaign._id)
+    // DND-59: quem venceu a Furtividade antes da luta começa Invisível (Esconder-se), com o total como CD para ser achado.
+    for (const hidden of event.hidden ?? []) {
+        const state = characters.find((character) => character.characterId === hidden.characterId)
+        if (state && !state.conditions.some((condition) => condition.key === "invisible")) state.conditions.push(hiddenCondition(hidden.dc))
+    }
     // DND-25: a iniciativa dos inimigos só é rolada depois do último personagem (`rollEnemyInitiativeIfReady`).
     const monsterSlots = pendingMonsterSlots(
         combatants.map((item) => ({ actorKey: item.tactical!.actorKey, name: item.name, groupKey: item.tactical!.groupKey, stats: item.tactical!.stats })),

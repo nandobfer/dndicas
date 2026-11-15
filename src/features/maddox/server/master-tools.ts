@@ -42,6 +42,7 @@ import {
     maddoxOpexNpcFallbackNote,
     MADDOX_OPEX_NPC_CONSULTS_PER_NARRATION,
     MADDOX_SHEET_FIX_TOOL_NAMES,
+    MADDOX_COMBAT_FIX_TOOL_NAMES,
     MADDOX_CATALOG_TOOL_NAMES,
     MADDOX_EXPERIENCE_GRANT_MAX,
     MADDOX_PROGRESSION_TOOL_NAMES,
@@ -201,6 +202,25 @@ async function requestNpcPortraitDraft(context: MaddoxToolContext, name: string)
     return "pedido: o retrato é pintado depois que a narração for gravada."
 }
 
+/**
+ * DND-59: o texto livre (estado da história ou do personagem) cita uma condição que o combate tático em andamento não
+ * tem? Devolve o aviso para o modelo (o texto é só do Diário; a condição do combate muda pela ferramenta própria).
+ */
+async function combatConditionWarning(campaignId: Types.ObjectId, text: string, characterName: string | null): Promise<string | null> {
+    const { mentionedConditions } = await import("../combat-rules")
+    const mentioned = mentionedConditions(text)
+    if (!mentioned.length) return null
+    const { findActiveTactical, findActorByName } = await import("./tactical-combat")
+    const combat = await findActiveTactical(campaignId)
+    if (!combat) return null
+    const actors = characterName ? [findActorByName(combat, characterName)].filter((actor) => actor !== null) : [...combat.tactical.characters, ...combat.combatants.map((item) => item.tactical).filter((item) => item !== null && item !== undefined)].map((state) => ({ state }))
+    const present = new Set(actors.flatMap((actor) => actor!.state.conditions.map((condition) => condition.key)))
+    const missing = mentioned.filter((key) => !present.has(key))
+    if (!missing.length) return null
+    const labels = missing.map((key) => MADDOX_CONDITION_LABELS[key]).join(", ")
+    return `Isto é só texto do Diário: o combate tático NÃO tem ${labels}${characterName ? ` em ${characterName}` : ""}, e a vantagem/desvantagem vem do combate. Para valer, aplique com set_combat_condition (resposta ou lembrete) ou apply_effect (narração); sem isso, não diga que aplicou.`
+}
+
 export const MADDOX_MASTER_TOOLS: readonly MaddoxMasterTool[] = [
     define({
         name: "get_campaign_state",
@@ -234,7 +254,8 @@ export const MADDOX_MASTER_TOOLS: readonly MaddoxMasterTool[] = [
             // Regravado com o aviso de que é público: passa a aparecer no Diário da campanha (Maddox 9).
             await MaddoxCampaignModel.updateOne({ _id: context.campaignId }, { $set: set, ...(written.length ? { $addToSet: { "state.publicFields": { $each: written } } } : {}) }, { timestamps: false })
             const campaign = await MaddoxCampaignModel.findById(context.campaignId).select("state").lean<Pick<IMaddoxCampaign, "state">>()
-            return { saved: true, state: stateShape(campaign), ...fit.notice() }
+            const warning = await combatConditionWarning(context.campaignId, written.map((field) => input[field] ?? "").join("\n"), null)
+            return { saved: true, state: stateShape(campaign), ...(warning ? { aviso: warning } : {}), ...fit.notice() }
         },
     }),
     define({
@@ -397,7 +418,8 @@ export const MADDOX_MASTER_TOOLS: readonly MaddoxMasterTool[] = [
             if (!target) throw new MaddoxToolError(`Nenhum personagem jogador chamado "${input.characterName}". Personagens: ${characters.map((character) => character.name).join(", ") || "nenhum"}.`)
             const fit = fitter()
             await MaddoxCharacterModel.updateOne({ _id: target._id }, { $set: { currentState: fit.fit("currentState", input.currentState), currentStatePublic: true } })
-            return { saved: true, characterName: target.name, ...fit.notice() }
+            const warning = await combatConditionWarning(context.campaignId, input.currentState, target.name)
+            return { saved: true, characterName: target.name, ...(warning ? { aviso: warning } : {}), ...fit.notice() }
         },
     }),
     define({
@@ -560,6 +582,19 @@ export const MADDOX_COMBAT_TOOL_NAMES = ["get_combat", "start_combat", "update_c
 export const MADDOX_TACTICAL_TOOL_NAMES = ["monster_action", "apply_effect", "request_damage_roll", "offer_reaction"] as const
 
 /** Garante grau e geração certos e devolve o estado efetivo do combate (gravado + rascunho deste job). */
+async function stealthAtStart(context: MaddoxToolContext, hidden: readonly string[] | undefined, revealed: readonly string[] | undefined) {
+    const { decideStealthStart, loadStealthChecks } = await import("./stealth-start")
+    return decideStealthStart(await loadStealthChecks(context.campaignId, context.turnNumber), { turnNumber: context.turnNumber, hidden, revealed })
+}
+
+function stealthNotes(decision: import("./stealth-start").StealthStartDecision): Record<string, unknown> {
+    return {
+        ...(decision.hidden.length ? { comecamInvisiveis: decision.hidden.map((item) => `${item.characterName}: Invisível (Esconder-se), CD ${item.dc} para ser encontrado — sai quando atacar ou conjurar com componente Verbal`) } : {}),
+        ...(decision.refused.length ? { escondidosRecusados: decision.refused.map((name) => `${name}: sem teste de Furtividade bem-sucedido recente`) } : {}),
+        ...(decision.unconfirmed.length ? { furtividadeAnterior: decision.unconfirmed.map((item) => `${item.characterName} venceu a Furtividade no turno ${item.turnNumber} (total ${item.total}) e NÃO começa escondido: se ainda faz sentido, liste em "escondidos" (ou aplique depois com apply_effect, esconderse: true e cd ${item.total})`) } : {}),
+    }
+}
+
 async function combatContext(context: MaddoxToolContext) {
     const campaign = await MaddoxCampaignModel.findById(context.campaignId).select("rigor").lean<Pick<IMaddoxCampaign, "rigor">>()
     const tactical = Boolean(campaign && MADDOX_TACTICAL_COMBAT_RIGORS.includes(campaign.rigor))
@@ -712,6 +747,8 @@ export const MADDOX_COMBAT_TOOLS: readonly MaddoxMasterTool[] = [
             local: optionalText.describe("Onde a luta acontece"),
             adversarios: z.array(tacticalCombatantInput).min(1).max(MADDOX_COMBATANTS_MAX),
             surpresa: z.enum(["personagens", "adversarios"]).optional().describe("Combate tático: quem foi surpreendido (rola a iniciativa com desvantagem)"),
+            escondidos: z.array(z.string().min(1)).max(MADDOX_COMBAT_TARGETS_MAX).optional().describe("Combate tático: personagens que venceram a Furtividade num turno ANTERIOR e, na ficção, continuam escondidos agora (o teste deste turno já vale sozinho)"),
+            revelados: z.array(z.string().min(1)).max(MADDOX_COMBAT_TARGETS_MAX).optional().describe("Combate tático: personagens que venceram a Furtividade mas já se revelaram (não começam Invisíveis)"),
         }),
         async execute(context, input) {
             const { state, tactical, rigor } = await combatContext(context)
@@ -719,7 +756,9 @@ export const MADDOX_COMBAT_TOOLS: readonly MaddoxMasterTool[] = [
             assertUniqueCombatants(input.adversarios)
             const fit = fitter()
             const combatants = input.adversarios.map((item) => toDraftCombatant(item, fit))
-            const tacticalPlan = tactical ? { surprise: input.surpresa ?? null, combatants: await tacticalDrafts(rigor, input.adversarios, fit) } : undefined
+            // DND-59: Esconder-se antes da luta — quem venceu a Furtividade começa Invisível (CD = total do teste).
+            const stealth = tactical ? await stealthAtStart(context, input.escondidos, input.revelados) : null
+            const tacticalPlan = tactical ? { surprise: input.surpresa ?? null, combatants: await tacticalDrafts(rigor, input.adversarios, fit), hidden: stealth!.hidden.map((item) => ({ characterId: item.characterId, dc: item.dc })) } : undefined
             const added = addDraftCombat(String(context.campaignId), context.jobId!, { type: "start", title: clip(input.titulo, MADDOX_TOOL_NAME_MAX), location: clip(input.local, MADDOX_TOOL_NAME_MAX), combatants, ...(tacticalPlan ? { tactical: tacticalPlan } : {}) })
             if (!added) throw new MaddoxToolError("Esta narração já terminou.")
             if (tactical) {
@@ -727,6 +766,7 @@ export const MADDOX_COMBAT_TOOLS: readonly MaddoxMasterTool[] = [
                     started: true,
                     title: clip(input.titulo, MADDOX_TOOL_NAME_MAX),
                     adversarios: tacticalPlan!.combatants.map((item) => ({ nome: item.name, quantidade: item.quantity, ca: item.stats.ac, pv: item.stats.hpMax, acoes: item.stats.actions.map((action) => action.name) })),
+                    ...stealthNotes(stealth!),
                     note: "Combate tático: narre o começo da luta até o momento em que todos sacam as armas e PARE. Os jogadores rolam a iniciativa; a ordem e a vez de cada um chegam na próxima mensagem. Não conduza ataques ainda.",
                     ...fit.notice(),
                 }
@@ -908,6 +948,8 @@ export const MADDOX_TACTICAL_TOOLS: readonly MaddoxMasterTool[] = [
             tipoDano: z.string().optional(),
             cura: z.string().optional().describe("Dados de cura (\"1d8+3\")"),
             descricao: z.string().min(1).describe("O que causa o efeito (os jogadores leem)"),
+            esconderse: z.boolean().optional().describe("Invisível do Esconder-se (sai quando o personagem atacar ou conjurar com componente Verbal)"),
+            cd: z.number().int().min(1).max(40).optional().describe("Esconder-se: CD para ser encontrado (o total do teste de Furtividade)"),
         }),
         async execute(context, input) {
             return tacticalTool(context, (tactical) => tactical.applyEffect(context.campaignId, context.jobId!, context.turnNumber, input))
@@ -1308,6 +1350,101 @@ export const MADDOX_SHEET_FIX_TOOLS: readonly MaddoxMasterTool[] = [
     }),
 ]
 
+// ── Correção do combate tático (DND-59) ─────────────────────────────────────────
+
+async function questionCombatCall<T>(work: (tools: typeof import("./question-combat-tools")) => Promise<T>): Promise<T> {
+    const tools = await import("./question-combat-tools")
+    try {
+        return await work(tools)
+    } catch (error) {
+        if (error instanceof tools.QuestionCombatError) throw new MaddoxToolError(error.message)
+        throw error
+    }
+}
+
+const fixReason = z.string().min(1).describe("Motivo curto (os jogadores leem)")
+
+export const MADDOX_COMBAT_FIX_TOOLS: readonly MaddoxMasterTool[] = [
+    define({
+        name: MADDOX_COMBAT_FIX_TOOL_NAMES[0],
+        description: "Combate tático (resposta a pergunta ou lembrete): lê o combate como está gravado — ordem, PV, CA, condições, a economia de cada personagem e os cards de ação ainda não rolados (com o modo do ataque e os motivos). Leia antes de corrigir.",
+        readOnly: true,
+        input: z.object({}),
+        async execute(context) {
+            return questionCombatCall((tools) => tools.readCombatForFix(context.jobId))
+        },
+    }),
+    define({
+        name: MADDOX_COMBAT_FIX_TOOL_NAMES[1],
+        description: `Combate tático (resposta a pergunta ou lembrete): aplica ou remove uma condição (${conditionNames}) de um personagem ou adversário, gravando NA HORA. Esconder-se bem-sucedido = condicao "Invisível" com esconderse: true e cd = total do teste de Furtividade (ela sai sozinha quando o personagem ataca ou conjura com componente Verbal; o ataque escondido já sai com vantagem). Só diga que aplicou depois do retorno sem erro.`,
+        readOnly: false,
+        input: z.object({
+            alvo: z.string().min(1).describe("Nome como na ordem do combate"),
+            condicao: z.string().min(1),
+            remover: z.boolean().optional(),
+            duracaoRodadas: z.number().int().min(1).max(100).optional(),
+            esconderse: z.boolean().optional(),
+            cd: z.number().int().min(1).max(40).optional(),
+            motivo: fixReason,
+        }),
+        async execute(context, input) {
+            return questionCombatCall((tools) => tools.setCombatCondition(context.jobId, input))
+        },
+    }),
+    define({
+        name: MADDOX_COMBAT_FIX_TOOL_NAMES[2],
+        description:
+            "Combate tático (resposta a pergunta ou lembrete): corrige um card de ação AINDA NÃO ROLADO — `modo` vantagem/desvantagem pela situação (com o motivo; \"normal\" tira a da situação; as das condições o servidor já aplica sozinho), `alvo` novo (antes de qualquer rolagem) ou `cancelar` (a ação volta para o jogador escolher de novo). Identifique pelo `card` (de get_combat_details) ou pelo `ator`. Rolagem já feita é definitiva e não se corrige.",
+        readOnly: false,
+        input: z.object({
+            card: z.string().optional(),
+            ator: z.string().optional(),
+            modo: z.enum(["vantagem", "desvantagem", "normal"]).optional(),
+            alvo: z.string().optional(),
+            cancelar: z.boolean().optional(),
+            motivo: fixReason,
+        }),
+        async execute(context, input) {
+            return questionCombatCall((tools) => tools.editCombatAction(context.jobId, input))
+        },
+    }),
+    define({
+        name: MADDOX_COMBAT_FIX_TOOL_NAMES[3],
+        description: "Combate tático (resposta a pergunta ou lembrete): corrige um ADVERSÁRIO — `pv` (valor final), `ca` ou `foraDeCombate` (true = caído/fora da luta; false = volta). Personagens jogadores mudam PV com update_character_hit_points.",
+        readOnly: false,
+        input: z.object({
+            adversario: z.string().min(1),
+            pv: z.number().int().min(0).max(10_000).optional(),
+            ca: z.number().int().min(1).max(40).optional(),
+            foraDeCombate: z.boolean().optional(),
+            motivo: fixReason,
+        }),
+        async execute(context, input) {
+            return questionCombatCall((tools) => tools.correctCombatant(context.jobId, input))
+        },
+    }),
+    define({
+        name: MADDOX_COMBAT_FIX_TOOL_NAMES[4],
+        description: "Combate tático (resposta a pergunta ou lembrete): corrige a economia e as marcas de um PERSONAGEM jogador — `acao`, `acaoBonus`, `reacao` (true = disponível, false = gasta), `ataquesRestantes`, `esquivando`, `desengajado`, `disparada`, `ajudado` (vantagem no próximo ataque).",
+        readOnly: false,
+        input: z.object({
+            personagem: z.string().min(1),
+            acao: z.boolean().optional(),
+            acaoBonus: z.boolean().optional(),
+            reacao: z.boolean().optional(),
+            ataquesRestantes: z.number().int().min(0).max(8).optional(),
+            esquivando: z.boolean().optional(),
+            desengajado: z.boolean().optional(),
+            disparada: z.boolean().optional(),
+            ajudado: z.boolean().optional(),
+            motivo: fixReason,
+        }),
+        async execute(context, input) {
+            return questionCombatCall((tools) => tools.correctCharacterTurn(context.jobId, input))
+        },
+    }),
+]
+
 // ── Progressão de nível (DND-56) ───────────────────────────────────────────────
 
 /** Recusa da progressão vira mensagem para o modelo. */
@@ -1370,7 +1507,7 @@ export const MADDOX_PROGRESSION_TOOLS: readonly MaddoxMasterTool[] = [
 export const MADDOX_PROGRESSION_ANSWER_TOOL_NAMES: readonly string[] = [MADDOX_PROGRESSION_TOOL_NAMES.evaluate]
 
 /** Todas as ferramentas do narrador (persistência, testes, combate, a vez dos adversários, a imagem da cena e as sugestões de ação). */
-export const MADDOX_NARRATOR_TOOLS: readonly MaddoxMasterTool[] = [...MADDOX_MASTER_TOOLS, ...MADDOX_COMBAT_TOOLS, ...MADDOX_TACTICAL_TOOLS, ...MADDOX_SCENE_IMAGE_TOOLS, ...MADDOX_ACTION_OPTIONS_TOOLS, ...MADDOX_OPEX_NPC_TOOLS, ...MADDOX_SHEET_FIX_TOOLS, ...MADDOX_PROGRESSION_TOOLS]
+export const MADDOX_NARRATOR_TOOLS: readonly MaddoxMasterTool[] = [...MADDOX_MASTER_TOOLS, ...MADDOX_COMBAT_TOOLS, ...MADDOX_TACTICAL_TOOLS, ...MADDOX_SCENE_IMAGE_TOOLS, ...MADDOX_ACTION_OPTIONS_TOOLS, ...MADDOX_OPEX_NPC_TOOLS, ...MADDOX_SHEET_FIX_TOOLS, ...MADDOX_COMBAT_FIX_TOOLS, ...MADDOX_PROGRESSION_TOOLS]
 
 /** Ferramentas de progressão oferecidas na geração (DND-56): o modo da campanha e o tipo da geração decidem. */
 export function progressionToolNames(options: { mode: "marco" | "experiencia" | null; answer: boolean }): string[] {
@@ -1408,7 +1545,7 @@ export const MADDOX_CHECK_TOOL_NAME = "request_check"
  * imagem da cena (Maddox 10); `actionOptions: false` tira a das sugestões de ação (DND-30); `opexNpcs: false` tira a consulta
  * aos NPCs Opex (DND-27; respostas a perguntas).
  */
-export async function buildMaddoxAiTools(context: MaddoxToolContext, options: { checks?: boolean; combat?: boolean; tactical?: boolean; sceneImages?: boolean; actionOptions?: boolean; opexNpcs?: boolean; sheetFix?: boolean; progression?: string[]; rest?: boolean } = {}): Promise<ToolSet> {
+export async function buildMaddoxAiTools(context: MaddoxToolContext, options: { checks?: boolean; combat?: boolean; tactical?: boolean; sceneImages?: boolean; actionOptions?: boolean; opexNpcs?: boolean; sheetFix?: boolean; combatFix?: boolean; progression?: string[]; rest?: boolean } = {}): Promise<ToolSet> {
     const { dynamicTool } = await import("ai")
     const tools: ToolSet = {}
     const progressionNames = Object.values(MADDOX_PROGRESSION_TOOL_NAMES) as string[]
@@ -1422,6 +1559,7 @@ export async function buildMaddoxAiTools(context: MaddoxToolContext, options: { 
         if (def.name === MADDOX_ACTION_OPTIONS_TOOL_NAME && !options.actionOptions) continue
         if (def.name === MADDOX_OPEX_NPC_CONSULT_TOOL_NAME && !options.opexNpcs) continue
         if ((MADDOX_SHEET_FIX_TOOL_NAMES as readonly string[]).includes(def.name) && !options.sheetFix) continue
+        if ((MADDOX_COMBAT_FIX_TOOL_NAMES as readonly string[]).includes(def.name) && !options.combatFix) continue
         tools[def.name] = dynamicTool({
             description: def.description,
             inputSchema: def.input,

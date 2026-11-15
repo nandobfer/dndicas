@@ -315,6 +315,7 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
                             onCancelAction: (actionId) => combatCancel.mutate(actionId),
                             onSneakChoice: (actionId, add) => combatSneak.mutate({ id: actionId, add }),
                             sneakChoosing: combatSneak.isPending,
+                            masterReviewing: Boolean(state.turn.masterReviewing),
                             onDecideReaction: (reactionId, escolha) => combatReact.mutate({ id: reactionId, escolha }),
                             answeringPrep: prepAnswer.isPending,
                             onAnswerPrep: async (prepId, text) => {

@@ -485,6 +485,9 @@ async function driveOnce(id: string): Promise<void> {
     const combatActor = fresh.turn.combatActor
     if (combatActor) {
         if (!opex.has(String(combatActor.memberId))) return
+        // DND-59: com o mestre respondendo uma pergunta ou um lembrete, o card pode ser corrigido: a vez espera a resposta
+        // (o fim dela publica a mesa e chama esta passada de novo).
+        if ((await import("./game-live")).hasPendingReview(id)) return
         // A tarefa relê o ator a cada passada: uma nova passada pedida durante a vez de um Opex age pelo ator da vez
         // (o próximo Opex da iniciativa), não pelo que já encerrou.
         void runOpexOnce(combatKey(id), () => runCurrentCombatActor(campaignId))

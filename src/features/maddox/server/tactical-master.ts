@@ -24,6 +24,8 @@ import {
     HP_BAND_LABELS,
     parseDiceExpression,
     saveMode,
+    applyConditionChange,
+    conditionDisplayLabel,
     type DeathSaves,
     type RollMode,
 } from "../combat-rules"
@@ -102,7 +104,7 @@ async function workspaceOf(campaignId: Types.ObjectId, jobId: string, turnNumber
     return workspace
 }
 
-const conditionKeyOf = (value: string): MaddoxConditionKey | null => {
+export const conditionKeyOf = (value: string): MaddoxConditionKey | null => {
     const wanted = fold(value)
     return MADDOX_CONDITIONS.find((key) => key === value || fold(MADDOX_CONDITION_LABELS[key]) === wanted) ?? null
 }
@@ -491,6 +493,10 @@ export interface ApplyEffectInput {
     tipoDano?: string
     cura?: string
     descricao: string
+    /** DND-59: Invisível do Esconder-se (sai depois do ataque ou de magia com componente Verbal). */
+    esconderse?: boolean
+    /** DND-59: CD para ser encontrado (o total do teste de Furtividade). */
+    cd?: number
 }
 
 /** Efeito adjudicado pelo Maddox (ambiente, magia utilitária, ação livre): condição, dano ou cura em dados rolados pelo servidor. */
@@ -504,16 +510,13 @@ export async function applyEffect(campaignId: Types.ObjectId, jobId: string, tur
         if (!key) throw new TacticalToolError(`Condição "${input.condicao}" desconhecida. Condições: ${MADDOX_CONDITIONS.map((item) => MADDOX_CONDITION_LABELS[item]).join(", ")}.`)
         // DND-58: a exaustão de um personagem jogador mora na ficha (nível 0–6), nunca como condição do combate.
         if (key === "exhaustion" && target.kind === "character") throw new TacticalToolError("A exaustão de um personagem jogador fica na ficha: use update_character_exhaustion (com o motivo).")
-        if (input.remover) {
-            target.state.conditions = target.state.conditions.filter((condition) => condition.key !== key)
-            parts.push(`${target.name} não está mais ${MADDOX_CONDITION_LABELS[key]}`)
-        } else {
-            if (target.kind === "combatant" && target.state.stats.conditionImmunities.includes(key)) parts.push(`${target.name} é imune a ${MADDOX_CONDITION_LABELS[key]}`)
-            else {
-                target.state.conditions = [...target.state.conditions.filter((condition) => condition.key !== key), { key, untilRound: input.duracaoRodadas ? workspace.combat.tactical.round + input.duracaoRodadas : null, source: input.descricao.slice(0, 80) }]
-                parts.push(`${target.name} está ${MADDOX_CONDITION_LABELS[key]}${input.duracaoRodadas ? ` por ${input.duracaoRodadas} rodada(s)` : ""}`)
-            }
-        }
+        const change = applyConditionChange(
+            target.state.conditions,
+            { key, remove: input.remover, untilRound: input.duracaoRodadas ? workspace.combat.tactical.round + input.duracaoRodadas : null, source: input.descricao, hidden: input.esconderse, hiddenDc: input.cd ?? null },
+            { name: target.name, immunities: target.kind === "combatant" ? target.state.stats.conditionImmunities : [] },
+        )
+        target.state.conditions = change.conditions
+        parts.push(`${change.line}${!input.remover && change.changed && input.duracaoRodadas ? ` por ${input.duracaoRodadas} rodada(s)` : ""}`)
     }
     for (const [kind, raw] of [["damage", input.dano], ["heal", input.cura]] as const) {
         if (!raw) continue
@@ -651,7 +654,7 @@ export async function tacticalView(campaignId: Types.ObjectId, jobId: string | u
         ordem: combat.tactical.order.map((slot) => {
             const actor = findActor(combat, slot.actorKey)
             if (!actor) return { nome: slot.name }
-            const conditions = actor.state.conditions.map((condition) => MADDOX_CONDITION_LABELS[condition.key])
+            const conditions = actor.state.conditions.map(conditionDisplayLabel)
             // DND-49: efeitos de maestria registrados (o Maddox narra; Drenar já pesa na próxima jogada de ataque).
             if (actor.state.flags.sapped) conditions.push(`Drenado por ${actor.state.flags.sapped.byName} (desvantagem no próximo ataque)`)
             if (actor.state.flags.slowed) conditions.push(`Lentidão de ${actor.state.flags.slowed.byName} (−3 m de deslocamento)`)

@@ -39,7 +39,7 @@ import { worldCatalogOf } from "../world-catalog"
 import { restTranscriptLine } from "../rest-rules"
 import { buildNarratorInstructions, checkResultLine, narratorTaskText, narratorTranscript, usesChecks, usesCombat, usesTacticalCombat, type NarratorCheckResult, type NarratorDeclaration, type NarratorPromptContext, type NarratorTacticalTask, type NarratorTask } from "./narrator-prompt"
 import { isOpexUserId } from "./opex-members"
-import { MADDOX_OPEX_LABEL, MADDOX_SHEET_RIGORS, maddoxOpexNpcFallbackNote } from "../constants"
+import { MADDOX_OPEX_LABEL, MADDOX_SHEET_RIGORS, MADDOX_TACTICAL_COMBAT_RIGORS, maddoxOpexNpcFallbackNote } from "../constants"
 
 /**
  * Maddox narrador (Maddox 4) — SOMENTE servidor. Monta as instruções com o estado gravado da campanha, gera em
@@ -467,6 +467,8 @@ async function generate(args: GenerateArgs, sink: MaddoxMasterSink): Promise<str
     const sceneImages = Boolean(promptContext.sceneImages?.situations.length)
     // DND-51: leitura e correção da ficha só na resposta a uma pergunta dos graus com ficha.
     const sheetFix = (task.kind === "answer" && Boolean(task.sheetFix)) || task.kind === "rest-exchange"
+    // DND-59: correção do combate tático (condição, card, adversário, economia) na resposta a uma pergunta ou a um lembrete.
+    const combatFix = task.kind === "answer" && Boolean(task.combatFix)
     // DND-58: o descanso só é iniciado nas narrações dos graus com ficha.
     const rest = narrating && MADDOX_SHEET_RIGORS.includes(context.campaign.rigor)
 
@@ -475,7 +477,7 @@ async function generate(args: GenerateArgs, sink: MaddoxMasterSink): Promise<str
         await ensureMaddoxMcp(settings)
         const sessionId = await ensureMaddoxSession({ campaignId: args.campaignId, purpose: "narrator", agent: model.agent, model: model.model, variant: model.variant, title: `Maddox · narrador · ${context.campaign.name}` })
         const turnToken = createMaddoxTurnToken({ campaignId: args.campaignId, jobId: args.jobId, turnNumber: args.turnNumber })
-        const instructions = buildNarratorInstructions(promptContext, { kind: "mcp", server: MADDOX_MCP_SERVER_NAME, turnToken, checks, combat, tactical, sceneImages, actionOptions, opexNpcs, sheetFix, progression, rest })
+        const instructions = buildNarratorInstructions(promptContext, { kind: "mcp", server: MADDOX_MCP_SERVER_NAME, turnToken, checks, combat, tactical, sceneImages, actionOptions, opexNpcs, sheetFix, combatFix, progression, rest })
         for await (const event of streamAi({
             provider: "opencode",
             model: model.model,
@@ -494,7 +496,7 @@ async function generate(args: GenerateArgs, sink: MaddoxMasterSink): Promise<str
         }
     } else {
         failure = await generateWithTools(
-            { model, instructions: buildNarratorInstructions(promptContext, { kind: "ai-sdk" }), userText, campaignId, turnNumber: args.turnNumber, jobId: args.jobId, checks, combat, tactical, sceneImages, actionOptions, opexNpcs, sheetFix, progression, rest, signal: args.signal },
+            { model, instructions: buildNarratorInstructions(promptContext, { kind: "ai-sdk" }), userText, campaignId, turnNumber: args.turnNumber, jobId: args.jobId, checks, combat, tactical, sceneImages, actionOptions, opexNpcs, sheetFix, combatFix, progression, rest, signal: args.signal },
             stream,
             sink,
         )
@@ -527,6 +529,7 @@ interface ToolGeneration {
     actionOptions: boolean
     opexNpcs: boolean
     sheetFix: boolean
+    combatFix: boolean
     progression: string[]
     rest: boolean
     signal?: AbortSignal
@@ -550,7 +553,7 @@ async function generateWithTools(input: ToolGeneration, stream: ReturnType<typeo
             model: prepared.model,
             instructions: input.instructions,
             messages: [{ role: "user", content: input.userText }],
-            tools: await buildMaddoxAiTools({ campaignId: input.campaignId, turnNumber: input.turnNumber, jobId: input.jobId }, { checks: input.checks, combat: input.combat, tactical: input.tactical, sceneImages: input.sceneImages, actionOptions: input.actionOptions, opexNpcs: input.opexNpcs, sheetFix: input.sheetFix, progression: input.progression, rest: input.rest }),
+            tools: await buildMaddoxAiTools({ campaignId: input.campaignId, turnNumber: input.turnNumber, jobId: input.jobId }, { checks: input.checks, combat: input.combat, tactical: input.tactical, sceneImages: input.sceneImages, actionOptions: input.actionOptions, opexNpcs: input.opexNpcs, sheetFix: input.sheetFix, combatFix: input.combatFix, progression: input.progression, rest: input.rest }),
             stopWhen: stepCountIs(MADDOX_NARRATOR_MAX_STEPS),
             abortSignal: input.signal,
             providerOptions: prepared.providerOptions,
@@ -668,8 +671,11 @@ export const aiMaddoxMaster: MaddoxMaster = {
             import("./question-runs"),
         ])
         // DND-51: a conversa da pergunta (réplicas seguem `replyToId`) e, nos graus com ficha, a correção da ficha.
-        const thread = (await runs.questionThread(campaignId, questionId)).slice(0, -1)
+        // DND-59: o lembrete (Injetar Lembrança) corrigido na hora não tem conversa: é uma mensagem só.
+        const thread = context.reminderId ? [] : (await runs.questionThread(campaignId, questionId)).slice(0, -1)
         const sheetFix = Boolean(campaign && MADDOX_SHEET_RIGORS.includes(campaign.rigor))
+        // DND-59: com o combate tático em andamento, a resposta corrige o combate na hora (condição, card, adversário, economia).
+        const combatFix = Boolean(campaign && MADDOX_TACTICAL_COMBAT_RIGORS.includes(campaign.rigor) && (await (await import("./tactical-combat")).findActiveTactical(campaignId)))
         const characterId = question?.characterId ?? null
         const playerTexts = [...thread.filter((entry) => entry.role === "player").map((entry) => entry.content), context.question, ...(await runs.interviewPlayerTexts(campaignId, characterId))]
         runs.openQuestionRun({
@@ -688,9 +694,9 @@ export const aiMaddoxMaster: MaddoxMaster = {
                     campaignId: context.campaignId,
                     jobId: context.jobId,
                     turnNumber: context.turnNumber,
-                    task: { kind: "answer", turnNumber: context.turnNumber, characterName: context.characterName, question: context.question, declarations: declarationsOf(actions), thread: thread.map(({ role, characterName, content }) => ({ role, characterName, content })), sheetFix },
+                    task: { kind: "answer", turnNumber: context.turnNumber, characterName: context.characterName, question: context.question, declarations: declarationsOf(actions), thread: thread.map(({ role, characterName, content }) => ({ role, characterName, content })), sheetFix, combatFix, ...(context.reminderId ? { reminderRef: context.reminderId.slice(-6) } : {}) },
                     excludeIds: new Set([context.questionId, ...thread.map((entry) => entry.id), ...actions.map((action) => String(action._id))]),
-                    title: `Maddox · pergunta · turno ${context.turnNumber}`,
+                    title: context.reminderId ? `Maddox · lembrete · turno ${context.turnNumber}` : `Maddox · pergunta · turno ${context.turnNumber}`,
                     signal: context.signal,
                 },
                 sink,

@@ -28,12 +28,15 @@ interface CampaignHub {
     jobs: Map<string, MaddoxJobState>
     /** Sobe a cada `cancelCampaignJobs` (DND-50): o job que entrou antes dela é pulado quando chega a vez dele. */
     epoch: number
+    /** DND-59: respostas e correções (pergunta ou lembrete) na fila ou rodando — o Rolar dos cards espera por elas. */
+    reviews: number
 }
 
 /** O que a geração faz: narração do turno do mestre (rodada de testes `round`) ou resposta a uma pergunta. */
 export interface MaddoxJobMeta {
-    /** `rest-exchange` (DND-58): o Maddox avalia as trocas pedidas depois de um descanso. */
-    kind: "narration" | "answer" | "rest-exchange"
+    /** `rest-exchange` (DND-58): o Maddox avalia as trocas pedidas depois de um descanso. `reminder` (DND-59): o Maddox
+     * corrige na hora o que o lembrete de um jogador pediu. */
+    kind: "narration" | "answer" | "rest-exchange" | "reminder"
     turnNumber: number
     round: number
 }
@@ -88,7 +91,7 @@ export interface MaddoxDraftCombatReward {
  * aplicado (`applyCombatDrafts`): se a geração falhar, o combate não muda.
  */
 export type MaddoxDraftCombatEvent =
-    | { type: "start"; title: string; location: string; combatants: MaddoxDraftCombatant[]; tactical?: { surprise: "personagens" | "adversarios" | null; combatants: TacticalDraftCombatant[] } }
+    | { type: "start"; title: string; location: string; combatants: MaddoxDraftCombatant[]; tactical?: { surprise: "personagens" | "adversarios" | null; combatants: TacticalDraftCombatant[]; hidden?: { characterId: string; dc: number }[] } }
     | { type: "update"; combatants: (Partial<Omit<MaddoxDraftCombatant, "name">> & { name: string })[]; tactical?: TacticalDraftCombatant[] }
     | {
           type: "end"
@@ -194,7 +197,7 @@ const ABORTED_JOBS_MAX = 500
 function hubOf(campaignId: string): CampaignHub {
     let hub = hubs.get(campaignId)
     if (!hub) {
-        hub = { tail: Promise.resolve(), pending: 0, live: new Map(), listeners: new Set(), jobs: new Map(), epoch: 0 }
+        hub = { tail: Promise.resolve(), pending: 0, live: new Map(), listeners: new Set(), jobs: new Map(), epoch: 0, reviews: 0 }
         hubs.set(campaignId, hub)
     }
     return hub
@@ -237,11 +240,14 @@ const whenAborted = (signal: AbortSignal) =>
 export function enqueueMaddoxJob(campaignId: string, label: string, run: (job: MaddoxJob) => Promise<void>, meta: MaddoxJobMeta | null = null): Promise<void> {
     const hub = hubOf(campaignId)
     hub.pending += 1
+    const review = isReviewMeta(meta)
+    if (review) hub.reviews += 1
     const jobId = randomUUID()
     const epoch = hub.epoch
     const next = hub.tail.then(async () => {
         if (hub.epoch !== epoch) {
             hub.pending -= 1
+            if (review) hub.reviews -= 1
             prune(campaignId)
             log.info({ campaignId, job: label }, "[maddox] geração da mesa descartada: a campanha foi reiniciada")
             return
@@ -267,11 +273,19 @@ export function enqueueMaddoxJob(campaignId: string, label: string, run: (job: M
         } finally {
             hub.jobs.delete(jobId)
             hub.pending -= 1
+            if (review) hub.reviews -= 1
             prune(campaignId)
         }
     })
     hub.tail = next
     return next
+}
+
+const isReviewMeta = (meta: MaddoxJobMeta | null) => meta?.kind === "answer" || meta?.kind === "reminder"
+
+/** DND-59: o mestre está respondendo ou corrigindo (pergunta ou lembrete na fila ou rodando): o Rolar dos cards espera. */
+export function hasPendingReview(campaignId: string): boolean {
+    return (hubs.get(campaignId)?.reviews ?? 0) > 0
 }
 
 /** Há geração do Maddox na fila ou rodando neste processo. */

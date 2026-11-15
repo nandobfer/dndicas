@@ -46,7 +46,7 @@ import { checkSucceeded, keptD20 } from "../check-modifier"
 import { isHiddenPlayerAction, type PlayerActionsViewer } from "../player-actions-visibility"
 import { assertMemberCanPlay, isMemberReadyToPlay, loadMembership } from "./campaigns"
 import { getMaddoxMaster, type MaddoxMasterDeclaration } from "./game-master"
-import { beginLive, enqueueMaddoxJob, isActiveMaddoxJob, isCampaignBusy, maddoxJobSignal, takeDraftActionOptions, takeDraftChecks, takeDraftCombat, takeDraftImages, takeDraftOpexNpcFailures, takeDraftRest } from "./game-live"
+import { beginLive, enqueueMaddoxJob, hasPendingReview, isActiveMaddoxJob, isCampaignBusy, maddoxJobSignal, takeDraftActionOptions, takeDraftChecks, takeDraftCombat, takeDraftImages, takeDraftOpexNpcFailures, takeDraftRest } from "./game-live"
 import { onlineUserIds } from "./game-presence"
 import { isOpexMember, isOpexUserId, realUserIds } from "./opex-members"
 
@@ -759,13 +759,13 @@ async function lastAnswerTo(campaignId: Types.ObjectId, turnNumber: number, memb
  * Gera e grava a resposta do mestre a uma pergunta, transmitindo a todos; falha grava a resposta com `error`. Roda DENTRO
  * de um job da fila da campanha (a resposta de uma pergunta do Personagem Opex, DND-26, roda no job do próprio Opex).
  */
-export async function answerQuestion(campaignId: Types.ObjectId, jobId: string, turnNumber: number, questionId: Types.ObjectId, characterName: string, question: string): Promise<{ content: string; error: string | null }> {
+export async function answerQuestion(campaignId: Types.ObjectId, jobId: string, turnNumber: number, questionId: Types.ObjectId, characterName: string, question: string, options: { reminder?: boolean } = {}): Promise<{ content: string; error: string | null }> {
     const live = beginLive(String(campaignId), { kind: "answer", turnNumber, replyToId: String(questionId) })
     let content = ""
     let error: string | null = null
     try {
         const master = await getMaddoxMaster()
-        content = await withGenerationTimeout((signal) => master.answer({ campaignId: String(campaignId), jobId, turnNumber, questionId: String(questionId), characterName, question, signal }, live), maddoxJobSignal(String(campaignId), jobId))
+        content = await withGenerationTimeout((signal) => master.answer({ campaignId: String(campaignId), jobId, turnNumber, questionId: String(questionId), characterName, question, reminderId: options.reminder ? String(questionId) : null, signal }, live), maddoxJobSignal(String(campaignId), jobId))
         if (!isActiveMaddoxJob(String(campaignId), jobId)) throw new GenerationInterruptedError()
     } catch (failure) {
         // Reinício da campanha (DND-50): a resposta não é gravada (a pergunta também some na limpeza).
@@ -783,12 +783,38 @@ export async function answerQuestion(campaignId: Types.ObjectId, jobId: string, 
         live.end({ messageId: String(message._id), error })
         // "Avaliar marco de nível" (DND-56): a subida acionada pela resposta entra logo abaixo dela.
         if (!error) await (await import("./level-ups")).commitProgression(campaignId, jobId, turnNumber)
+        // DND-59: o lembrete corrigido na hora fica resolvido por esta resposta (guardado como memória ou usado agora);
+        // na falha, volta a esperar a próxima narração.
+        if (options.reminder) {
+            const reminders = await import("./reminders")
+            if (error) await reminders.releaseReminders(campaignId, jobId)
+            else await reminders.commitReminders(campaignId, jobId, turnNumber)
+        }
     } catch (failure) {
         live.end({ messageId: null, error: MADDOX_ANSWER_FAILED_MESSAGE })
         throw failure
     }
     await publishGameChanged(campaignId)
     return { content: error ? "" : stored, error }
+}
+
+/**
+ * DND-59: o lembrete (Injetar Lembrança) é corrigido NA HORA por um job da fila, com as mesmas ferramentas do "Pergunte
+ * ao mestre" (ficha, PV e, no combate tático, condição, card pendente, adversário e economia). Se uma narração pegar o
+ * lembrete antes (ela reivindica os pendentes no começo), o job não faz nada. Nunca espera outro job.
+ */
+export function scheduleReminderFix(campaignId: Types.ObjectId, reminderId: Types.ObjectId): Promise<void> {
+    return enqueueMaddoxJob(
+        String(campaignId),
+        "correção do lembrete",
+        async ({ jobId }) => {
+            const { claimReminder } = await import("./reminders")
+            const claimed = await claimReminder(campaignId, jobId, reminderId)
+            if (!claimed) return
+            await answerQuestion(campaignId, jobId, claimed.turnNumber, reminderId, claimed.characterName, claimed.text, { reminder: true })
+        },
+        { kind: "reminder", turnNumber: 0, round: 0 },
+    )
 }
 
 /** Responde a pergunta na fila da campanha, transmitindo a todos; falha grava a resposta com `error`. */
@@ -1169,6 +1195,7 @@ export async function getGameState(campaignId: string, userId: string): Promise<
             generating: Boolean(campaign.turn?.generating) && !campaign.turn?.generating?.rewind,
             rewinding: Boolean(campaign.turn?.generating?.rewind),
             rewind: rewindBanner,
+            masterReviewing: hasPendingReview(String(campaign._id)),
             failed: campaign.turn?.phase === "master" && !campaign.turn?.generating && !campaign.turn?.awaitingChecks && Boolean(campaign.turn?.failedAt),
             awaitingChecks: campaign.turn?.phase === "master" && Boolean(campaign.turn?.awaitingChecks),
             pendingChecks: pendingChecks.map((check) => ({ checkId: String(check._id), memberId: String(check.memberId), characterName: check.characterName ?? "Personagem" })),

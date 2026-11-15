@@ -1253,7 +1253,12 @@ desabilitado vazio ou acima do limite; botão desabilitado com o motivo de `remi
   `INTERVIEW_REQUIRED`). Grava a mensagem `kind: "reminder"` (`content` = texto; `reminder { status, jobId, … }`), audita (`CRIAR`,
   com o tamanho) e avisa a mesa. **Não** é declaração, não muda o turno e vale dentro e fora de combate, inclusive na vez de outro.
   Sem edição nem exclusão; várias por narração.
-- **Consumo:** no começo de cada **narração** (não nas respostas a perguntas) `claimReminders` reivindica as pendentes para o job
+- **Correção na hora (DND-59):** o envio entra na fila um job `kind: "reminder"` (`scheduleReminderFix` em `server/game.ts`) que
+  reivindica SÓ aquele lembrete (`claimReminder`) e gera uma resposta curta (`answerQuestion` com `{ reminder: true }`, tarefa "# Lembrete
+  de X", resposta `kind: "answer"` com `replyToId` = lembrete) com as ferramentas do "Pergunte ao mestre" (ficha, PV e, no combate
+  tático, as de correção do combate) e `resolve_reminder`. Se uma narração pegou o lembrete antes, o job não faz nada; se a correção
+  falha, o lembrete volta a `pending` (`releaseReminders`) e a próxima narração o considera como abaixo.
+- **Consumo (fallback):** no começo de cada **narração** (não nas respostas a perguntas) `claimReminders` reivindica as pendentes para o job
   (`reminder.jobId`; também as de um job que já não roda) — a enviada durante a geração fica para a seguinte; no combate tático cada
   bloco é uma narração. A tarefa ganha "## Lembranças dos jogadores (considere nesta narração)" com `[id curto] **Personagem**: texto` e
   a orientação (contexto, não muda as regras; no Rigoroso e no Fiel a ficha prevalece). As lembranças ficam fora da transcrição.
@@ -1992,7 +1997,8 @@ as apagou por "não constar na referência".
 
 O "Pergunte ao mestre" é o canal de correção: nos graus com ficha, a resposta à pergunta recebe as ferramentas de leitura e
 correção da ficha (`MADDOX_SHEET_FIX_TOOL_NAMES`, em `MADDOX_SHEET_FIX_TOOLS` de `server/master-tools.ts`, implementadas em
-`server/question-sheet-tools.ts`) e as regras fixas `MADDOX_SHEET_FIX_TASK_RULES` na tarefa (`narrator-prompt.ts`):
+`server/question-sheet-tools.ts`) e as regras fixas `MADDOX_SHEET_FIX_TASK_RULES` na tarefa (`narrator-prompt.ts`). Desde a DND-59, com combate tático em andamento, também as ferramentas de correção do combate (ver a seção DND-59) e, sempre, a
+regra "estado ou silêncio" (`MADDOX_STATE_OR_SILENCE_RULE`):
 
 | Ferramenta | O que faz |
 | --- | --- |
@@ -2217,6 +2223,50 @@ Campo `exhaustion` (0–6) da ficha (linha "Exaustão" no card de dados de vida,
 Penalidade −2 × nível (parcela "Exaustão") em todo d20: `checkModifier` (perícia, atributo, resistência), iniciativa, salvaguarda,
 concentração, teste contra a morte (`deathSave(d20, …, penalidade)`: o natural decide 1/20, o total decide o 10) e ataque de
 oportunidade; no combate, o nível vem da ficha (`exhaustionOfSheet`).
+
+## Condição gravada de verdade, correção do combate e Esconder-se (DND-59)
+
+Caso real: o Maddox disse "Registrei a condição em Lizwan" depois de gravar só texto (`update_character_state`), o combate seguiu sem
+`invisible` e o ataque saiu normal; depois ele "anulou" a rolagem em prosa. Correções:
+
+- **Estado ou silêncio:** `MADDOX_STATE_OR_SILENCE_RULE` (`narrator-prompt.ts`) entra em toda resposta a pergunta e a lembrete: só
+  afirmar mudança depois do retorno sem erro da ferramenta. `update_character_state` e `update_campaign_state` devolvem `aviso` quando
+  o texto cita uma condição (`mentionedConditions`, `combat-rules.ts`) que o combate tático em andamento não tem. A regra da ficha
+  (`MADDOX_SHEET_FIX_TASK_RULES`) diz que `update_character_state` é só texto do Diário.
+- **Correção do combate na hora** (`server/question-combat-tools.ts`, nomes `MADDOX_COMBAT_FIX_TOOL_NAMES`): com combate tático
+  ativo, a resposta (pergunta ou lembrete) recebe `combatFix` (`buildMaddoxAiTools` / lista do MCP) e a seção
+  `MADDOX_COMBAT_FIX_TASK_RULES`. Só funcionam dentro do `questionRun(jobId)`; qualquer membro pode pedir, o mestre decide.
+  - `get_combat_details` — `tacticalView` + `economia` dos personagens + `cardsPendentes` (ref curta = 6 últimos do id).
+  - `set_combat_condition { alvo, condicao, remover?, duracaoRodadas?, esconderse?, cd?, motivo }` — regra pura
+    `applyConditionChange` (a mesma do `apply_effect`, que também ganhou `esconderse`/`cd`).
+  - `edit_combat_action { card? | ator?, modo?, alvo?, cancelar?, motivo }` — só card `pending` com `rollingStep: null`; `modo`
+    grava `situationalMode` no passo de ataque (entra em `attackMode` como `situational`); `cancelar` usa `cancelPendingAction`
+    (`byMaster`), que devolve a economia.
+  - `correct_combatant { adversario, pv?, ca?, foraDeCombate?, motivo }` e `correct_character_turn { personagem, acao?, acaoBonus?,
+    reacao?, ataquesRestantes?, esquivando?, desengajado?, disparada?, ajudado?, motivo }`.
+  - Cada correção grava via `mutateTactical`, chama `refreshPendingAttackPreviews` (a prévia do card pendente já mostra
+    "Vantagem: atacante invisível"), cria a linha pública `kind: "combat-fix"` (`CombatFixLine.tsx`; na transcrição do narrador
+    "[Turno N — combate corrigido]"), audita (`CampanhaMaddox`, `ATUALIZAR`, `combatFix`) e loga `[maddox] combate corrigido pelo mestre`.
+- **Rolar espera a revisão:** `hasPendingReview(campaignId)` (`game-live.ts`, contador `reviews` dos jobs `answer`/`reminder` na fila
+  ou rodando). `rollCombatAction` responde 409 `MASTER_REVIEWING` (`MADDOX_MASTER_REVIEWING_MESSAGE`) para humanos; o DTO leva
+  `turn.masterReviewing` e o card desabilita o Rolar com o aviso. O Personagem Opex não é barrado no meio da vez: `driveOpex` só não
+  começa a vez dele enquanto há revisão (o fim da resposta publica a mesa e o chama de novo).
+- **Modo do ataque conferido:** `rollClaimedStep` recalcula o modo (condições + `situationalMode`), confere a rolagem com
+  `rollMatchesMode` (vantagem/desvantagem = `selectedD20.discarded` presente; normal = um d20) e recusa com 409 `ROLL_MODE_MISMATCH`
+  ("A rolagem não saiu no modo calculado (…). Role de novo.") — o passo volta a `pending`. Log `[maddox] modo do ataque` (ou o aviso
+  quando a prévia mudou) com modo, motivos e condições do atacante e do alvo; o passo guarda `modeContext { attacker, target }`.
+  Rolagem gravada é definitiva: a regra do combate tático proíbe dizer que ela "não vale".
+- **Esconder-se:** `CombatCondition.dc` = CD para ser encontrado; `hiddenCondition(dc)`, `isHiddenCondition` e
+  `conditionDisplayLabel` ("Invisível (Esconder-se · CD 15)", usado no DTO da iniciativa e no `get_combat`) em `combat-rules.ts`. O card
+  `standard:hide` grava `dc = total`. Antes da luta (`server/stealth-start.ts`): `start_combat` aceita `escondidos`/`revelados`;
+  `loadStealthChecks` lê os testes de Furtividade `rolled` desde o fim do último combate e no máximo `STEALTH_START_LOOKBACK_TURNS` (5)
+  turnos atrás; `decideStealthStart` aplica o sucesso do turno do combate sozinho, o de turno anterior só com o nome em `escondidos`
+  (se ainda faz sentido na ficção), e tira os `revelados`. O plano vai em `tactical.hidden` do rascunho e `createTacticalCombat` põe a
+  condição. O retorno do `start_combat` lista `comecamInvisiveis`, `escondidosRecusados` e `furtividadeAnterior`. A condição sai com o
+  ataque ou com magia de componente Verbal (DND-49).
+
+Sem permissão nova (`maddox.play` cobre). Testes: `tests/backend/maddox/question-combat-fix.test.ts`, `dnd59-rules.test.ts`, os casos
+"DND-59" de `tactical-combat.test.ts`, `reminders.test.ts` e `tests/frontend/maddox/maddox-dnd59-combat.test.tsx`.
 
 ## Testes
 
