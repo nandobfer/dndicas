@@ -659,6 +659,49 @@ describe("DND-70: XP de adversário fora do catálogo e XP no Pergunte ao mestre
         await expect(pendingCombatExperience(t.campaignId)).resolves.toEqual([])
     })
 
+    it("estimativa do mestre falha logo na 1ª ficha depois do owed gravado: a pendência da fera volta, sem repetir o owed", async () => {
+        const t = await table({ mode: "experiencia", rigor: "rigoroso" })
+        const goblin = new Types.ObjectId()
+        await mongoose.connection.collection("monsters").insertOne({ _id: goblin, name: "Goblin", challengeRating: "1/4", status: "active" })
+        const combat = await beastCombat(t, {
+            title: "Goblins e a besta",
+            combatants: [
+                { name: "Goblin", nameKey: "goblin", side: "inimigo", quantity: 2, outcome: "morto", tactical: { defeated: true, stats: { source: "catalog", monsterId: String(goblin) } } },
+                { name: "A besta da estrada sul", nameKey: "a besta", side: "inimigo", quantity: 1, outcome: "morto", tactical: { defeated: true, stats: { source: "custom", monsterId: null } } },
+            ],
+            tactical: { characters: t.members.map((member) => ({ characterId: String(member.characterId), name: member.name, left: false })) },
+        })
+        const original = CharacterSheet.collection.findOneAndUpdate.bind(CharacterSheet.collection)
+        let calls = 0
+        let failAt = 2
+        const spy = vi.spyOn(CharacterSheet.collection, "findOneAndUpdate").mockImplementation(((...args: Parameters<typeof original>) => {
+            calls += 1
+            if (calls === failAt) return Promise.reject(new Error("falha transitória"))
+            return original(...args)
+        }) as never)
+        await expect(grantCombatExperience(t.campaignId, (await MaddoxCombatModel.findById(combat._id).lean())!, 34)).rejects.toThrow("falha transitória")
+        // Concessão do mestre: as 2 fichas do owed passam e a 1ª da estimativa falha.
+        calls = 0
+        failAt = 3
+        await answer(t, (jobId) => runMaddoxTool(tool("grant_experience"), { campaignId: t.campaignId, turnNumber: 35, jobId }, { personagens: ["grupo"], valor: 30, motivo: "Besta comparável a ND 1/2.", combate: String(combat._id) }), 0, true)
+        spy.mockRestore()
+        expect([await xpOf(t.members[0]!), await xpOf(t.members[1]!), await xpOf(t.members[2]!)]).toEqual([33, 33, 33])
+        const stored = (await MaddoxCombatModel.findById(combat._id).lean())!
+        expect(stored.experienceResolved ?? null).toBeNull()
+        expect(stored.experiencePending).toMatchObject({ adversaries: [{ name: "A besta da estrada sul", quantity: 1 }], owed: null, credited: [] })
+        const { pendingCombatExperience } = await import("@/features/maddox/server/combat-experience")
+        const pending = await pendingCombatExperience(t.campaignId)
+        expect(pending).toEqual([expect.objectContaining({ characterNames: ["Nala", "Uther", "Vaelyra"], owed: null })])
+        const { progressionTaskLines } = await import("@/features/maddox/server/narrator-prompt")
+        const lines = progressionTaskLines({ milestone: null, levelUps: [], pendingCombatXp: pending })!
+        expect(lines).not.toContain("não conceda de novo")
+        expect(lines).not.toContain("sai junto")
+        // O mestre tenta de novo: só a fera, para os três (o owed não se repete).
+        await answer(t, (jobId) => runMaddoxTool(tool("grant_experience"), { campaignId: t.campaignId, turnNumber: 36, jobId }, { personagens: ["grupo"], valor: 30, motivo: "Besta comparável a ND 1/2.", combate: String(combat._id) }), 0, true)
+        expect([await xpOf(t.members[0]!), await xpOf(t.members[1]!), await xpOf(t.members[2]!)]).toEqual([63, 63, 63])
+        await expect(pendingCombatExperience(t.campaignId)).resolves.toEqual([])
+    })
+
     it("se nem a pendência grava, o claim perde a marca de processamento e o combate volta a ser pendência recuperável", async () => {
         const t = await table({ mode: "experiencia", rigor: "rigoroso" })
         const combat = await beastCombat(t)

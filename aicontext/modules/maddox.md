@@ -2278,7 +2278,9 @@ podia lançar a XP.
   aos que faltam e a tarefa avisa o mestre para não conceder de novo aos creditados. Combate misto (há derrotado sem ND, revisão 4): a pendência
   é dos sem ND para todos os participantes, e a parte oficial que faltou fica em `owed { characterIds, characterNames, amount }`
   (valor da tabela); `resolveCombatExperience` a concede primeiro (card `source: "combat"`) e depois a estimativa do mestre, e a
-  tarefa diz que a oficial sai junto, automaticamente.
+  tarefa diz que a oficial sai junto, automaticamente. O `owed` e a estimativa contam as fichas à parte (revisão 5): se a
+  estimativa falha sem gravar nada, a pendência volta (`experienceResolved: null`) só com o `owed` que ainda falta (pago = sai;
+  todo pago = `owed: null` e `credited: []`), e o mestre concede de novo só a dos sem ND.
 - Testes: bloco DND-70 de `tests/backend/maddox/level-progression.test.ts` e o de `tests/frontend/maddox/level-up-cards.test.tsx`.
 
 ## Bônus de CA nomeados e CA no card "Na mesa" (DND-66)

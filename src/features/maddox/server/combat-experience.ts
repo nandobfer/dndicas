@@ -271,25 +271,36 @@ export async function resolveCombatExperience(campaignId: Types.ObjectId, grant:
         return 0
     }
     // Fichas já somadas antes de uma falha: a pendência NÃO volta (a próxima concessão duplicaria a XP de quem recebeu).
+    // A parte oficial devida (`owed`) e a estimativa do mestre são contadas à parte: se a estimativa não gravou nada, a
+    // pendência volta só com o que ainda falta (o `owed` creditado sai dela).
+    const owedApplied: { characterId: Types.ObjectId; amount: number }[] = []
     const applied: { characterId: Types.ObjectId; amount: number }[] = []
-    const onSheetUpdated = (characterId: Types.ObjectId, value: number) => applied.push({ characterId, amount: value })
+    const owed = claimed.experiencePending?.owed ?? null
+    let owedTotal = 0
     try {
         // A parte oficial que faltou (combate misto com falha no meio) sai primeiro, pelo valor da tabela, como XP de combate.
-        const owed = claimed.experiencePending?.owed
-        let owedTotal = 0
         if (owed?.characterIds.length && owed.amount > 0) {
-            owedTotal = (await grantExperience(campaignId, owed.characterIds.map((characterId) => ({ characterId, amount: owed.amount })), combatExperienceReason(claimed), "combat", turnNumber, { combatId, onSheetUpdated })).total
+            owedTotal = (await grantExperience(campaignId, owed.characterIds.map((characterId) => ({ characterId, amount: owed.amount })), combatExperienceReason(claimed), "combat", turnNumber, { combatId, onSheetUpdated: (characterId, value) => owedApplied.push({ characterId, amount: value }) })).total
         }
-        const result = await grantExperience(campaignId, grant.entries, grant.reason, "grant", turnNumber, { combatId, estimated: true, requestedBy: grant.requestedBy ?? null, onSheetUpdated })
+        const result = await grantExperience(campaignId, grant.entries, grant.reason, "grant", turnNumber, { combatId, estimated: true, requestedBy: grant.requestedBy ?? null, onSheetUpdated: (characterId, value) => applied.push({ characterId, amount: value }) })
         if (!result.total) throw new Error("nenhum personagem recebeu XP")
         await MaddoxCombatModel.updateOne({ _id: combatId }, { $set: { "experienceResolved.total": result.total + owedTotal, "experienceResolved.messageId": result.messageId } })
         return result.total + owedTotal
     } catch (error) {
         if (!applied.length) {
-            await MaddoxCombatModel.updateOne({ _id: combatId }, { $set: { experienceResolved: null } })
+            const reopen: Record<string, unknown> = { experienceResolved: null }
+            if (owed && owedApplied.length) {
+                const paid = new Set(owedApplied.map((item) => String(item.characterId)))
+                const left = owed.characterIds.map((id, index) => ({ id, name: owed.characterNames[index] ?? "" })).filter((item) => !paid.has(item.id))
+                reopen["experiencePending.owed"] = left.length ? { characterIds: left.map((item) => item.id), characterNames: left.map((item) => item.name), amount: owed.amount } : null
+                // Sem `owed`, a pendência mista é dos sem ND para todos: o aviso "já recebeu, não conceda" não vale.
+                if (!left.length) reopen["experiencePending.credited"] = []
+            }
+            await MaddoxCombatModel.updateOne({ _id: combatId }, { $set: reopen })
+            if (owedApplied.length) log.error({ campaignId: String(campaignId), combatId: grant.combatId, owed: owedApplied.map((item) => String(item.characterId)), err: error instanceof Error ? error.message : String(error) }, "[maddox] XP estimada do combate não gravada; a oficial devida saiu e a pendência volta com o resto")
             throw error
         }
-        const total = applied.reduce((sum, item) => sum + item.amount, 0)
+        const total = [...owedApplied, ...applied].reduce((sum, item) => sum + item.amount, 0)
         await MaddoxCombatModel.updateOne({ _id: combatId }, { $set: { "experienceResolved.total": total, "experienceResolved.partial": true } })
         log.error({ campaignId: String(campaignId), combatId: grant.combatId, applied: applied.map((item) => String(item.characterId)), total, err: error instanceof Error ? error.message : String(error) }, "[maddox] XP estimada do combate gravada em parte das fichas; combate mantido como resolvido")
         return total
