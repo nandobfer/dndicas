@@ -758,6 +758,8 @@ export const MADDOX_REST_TOOL_NAME = "start_rest"
 export const MADDOX_EXHAUSTION_TOOL_NAME = "update_character_exhaustion"
 /** DND-66: bônus de CA nomeados na ficha (narração e "Pergunte ao mestre"). */
 export const MADDOX_ARMOR_CLASS_TOOL_NAMES = { add: "add_armor_class_bonus", remove: "remove_armor_class_bonus" } as const
+/** DND-69: efeitos que somam dados aos testes pedidos (narração, "Pergunte ao mestre" e lembrete). */
+export const MADDOX_CHECK_EFFECT_TOOL_NAMES = { apply: "apply_check_effect", end: "end_check_effect" } as const
 /** Duração do bônus de CA como o modelo pede (a ferramenta converte para a duração gravada na ficha). */
 export const MADDOX_AC_DURATIONS = ["permanente", "rodadas", "fim-do-combate", "concentracao", "descanso-curto", "descanso-longo", "momento"] as const
 export type MaddoxAcDuration = (typeof MADDOX_AC_DURATIONS)[number]

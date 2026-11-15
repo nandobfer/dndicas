@@ -48,6 +48,8 @@ export interface ICharacterSheet extends Document {
     exhaustion: number
     armorClassOverride: number | null
     armorClassBonuses: ArmorClassBonus[]
+    /** DND-69: efeitos que somam dados aos testes pedidos pelo Maddox (gravados só pelo servidor do Maddox). */
+    checkEffects?: unknown[]
     unarmoredDefense: { enabled: boolean; base: number; attributes: AttributeType[] }
     initiativeOverride: number | null
     initiativeProficiency: boolean
@@ -156,6 +158,8 @@ const CharacterSheetSchema = new Schema<ICharacterSheet>(
         armorClassOverride: { type: Number, default: null },
         // DND-66: bônus de CA nomeados (validados por `armorClassBonusSchema` em quem grava).
         armorClassBonuses: { type: Schema.Types.Mixed, default: () => [] },
+        // DND-69: efeitos de teste do Maddox (validados por `checkEffectSchema` em `maddox/check-effects.ts`).
+        checkEffects: { type: Schema.Types.Mixed, default: undefined },
         unarmoredDefense: {
             type: new Schema(
                 {

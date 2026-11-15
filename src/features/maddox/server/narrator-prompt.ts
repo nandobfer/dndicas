@@ -1,8 +1,9 @@
 import { memoriesSection } from "@/features/ai/memories-prompt"
-import { MADDOX_ACTION_OPTIONS_MAX, MADDOX_CATALOG_TOOL_NAMES, MADDOX_COMBAT_DIFFICULTY_DEFAULT, MADDOX_COMBAT_DIFFICULTY_LEVEL_DEFS, MADDOX_DEFAULT_DENSITY, MADDOX_DENSITY_LEVEL_DEFS, MADDOX_CHECK_RIGORS, MADDOX_CHECK_ROUNDS_MAX, MADDOX_COMBAT_LONG_TURNS, MADDOX_COMBAT_RIGORS, MADDOX_DECLARATION_VALIDATION_RIGORS, MADDOX_PROFILE_SECTIONS, MADDOX_COMBAT_FIX_TOOL_NAMES, MADDOX_SHEET_FIX_TOOL_NAMES, MADDOX_ARMOR_CLASS_TOOL_NAMES, MADDOX_SHEET_RIGORS, MADDOX_TACTICAL_COMBAT_RIGORS, MADDOX_TOOL_TEXT_GUIDE, MADDOX_WORLD_CATALOG_RIGORS, type MaddoxCampaignMemoryKind, type MaddoxCombatDifficultyLevel, type MaddoxDensityLevel, type MaddoxGameMessageKind, type MaddoxQuestStatus, type MaddoxRigorLevel, type MaddoxVisibility } from "../constants"
+import { MADDOX_ACTION_OPTIONS_MAX, MADDOX_CATALOG_TOOL_NAMES, MADDOX_COMBAT_DIFFICULTY_DEFAULT, MADDOX_COMBAT_DIFFICULTY_LEVEL_DEFS, MADDOX_DEFAULT_DENSITY, MADDOX_DENSITY_LEVEL_DEFS, MADDOX_CHECK_RIGORS, MADDOX_CHECK_ROUNDS_MAX, MADDOX_COMBAT_LONG_TURNS, MADDOX_COMBAT_RIGORS, MADDOX_DECLARATION_VALIDATION_RIGORS, MADDOX_PROFILE_SECTIONS, MADDOX_COMBAT_FIX_TOOL_NAMES, MADDOX_SHEET_FIX_TOOL_NAMES, MADDOX_ARMOR_CLASS_TOOL_NAMES, MADDOX_CHECK_EFFECT_TOOL_NAMES, MADDOX_SHEET_RIGORS, MADDOX_TACTICAL_COMBAT_RIGORS, MADDOX_TOOL_TEXT_GUIDE, MADDOX_WORLD_CATALOG_RIGORS, type MaddoxCampaignMemoryKind, type MaddoxCombatDifficultyLevel, type MaddoxDensityLevel, type MaddoxGameMessageKind, type MaddoxQuestStatus, type MaddoxRigorLevel, type MaddoxVisibility } from "../constants"
 import { CATALOG_CITATION_RULE, rigorBlock } from "./interview-prompt"
 import { MADDOX_PROGRESSION_TOOL_NAMES, MADDOX_MILESTONE_TRIGGER_LABELS, type MaddoxMilestoneTrigger, type MaddoxProgressionMode } from "../constants"
 import { checkSucceeded } from "../check-modifier"
+import { entryTotal, type MaddoxCheckEffectEntry } from "../check-effects"
 import { worldCatalogLines, type WorldCatalog } from "../world-catalog"
 
 /**
@@ -142,6 +143,17 @@ export const MADDOX_ARMOR_CLASS_RULE = [
     `- Magia, item, talento ou situação que muda a CA de um personagem jogador (Escudo da Fé +2, Armadura Arcana, cobertura parcial +2, três quartos +5) só vale depois de \`${MADDOX_ARMOR_CLASS_TOOL_NAMES.add}\` com nome, valor, origem e duração. Nunca diga que a CA mudou sem o retorno dela: sem a ferramenta, o ataque seguinte é comparado com a CA antiga.`,
     "- Magia de concentração usa `duracao: \"concentracao\"` com o `conjurador` (sai sozinha quando ele perde ou troca a concentração); efeito curto usa `rodadas`; o que dura a luta toda usa `fim-do-combate`. Os bônus com duração saem sozinhos; o de `momento` você remove quando o prazo chegar.",
     `- O efeito acabou antes (cobertura deixada para trás, magia dissipada): \`${MADDOX_ARMOR_CLASS_TOOL_NAMES.remove}\` pelo nome.`,
+].join("\n")
+
+/**
+ * DND-69: efeitos que somam dados aos testes (Orientação +1d4). Narrar o uso não soma nada: o dado só entra com o
+ * efeito gravado na ficha.
+ */
+export const MADDOX_CHECK_EFFECT_RULE = [
+    "## Efeitos de teste (Orientação, Inspiração de Bardo)",
+    `- Magia ou recurso de classe que SOMA UM DADO a testes (Orientação: +1d4 em testes de atributo da perícia escolhida) só vale depois de \`${MADDOX_CHECK_EFFECT_TOOL_NAMES.apply}\`, com a fonte da ficha, a perícia escolhida quando o catálogo pede e o trecho literal do catálogo com o dado. O servidor confere a ficha e o catálogo, gasta o espaço ou o uso e soma o dado sozinho nos testes compatíveis do \`request_check\`.`,
+    "- Quando a declaração ou o lembrete do jogador diz que usa um desses efeitos antes de um teste, registre ANTES do `request_check`. NUNCA narre o personagem usando a magia ou o recurso sem o retorno da ferramenta: se ela recusar (fora da ficha, sem espaço ou uso, alvo errado, fora do catálogo), narre que não funcionou, pelo motivo.",
+    `- O efeito vale até você encerrá-lo com \`${MADDOX_CHECK_EFFECT_TOOL_NAMES.end}\` (a duração do catálogo passou, a concentração caiu, a cena acabou), até um descanso, até outra concentração de quem conjurou ou, no recurso de uso único, até o primeiro teste. A ficha de cada personagem mostra os efeitos ativos.`,
 ].join("\n")
 
 export const MADDOX_HIT_POINTS_RULE = [
@@ -362,7 +374,7 @@ function toolsBlock(mode: NarratorToolMode): string | null {
     if (mode.kind === "ai-sdk") return null
     return [
         "## Ferramentas desta narração",
-        `- As ferramentas de anotações da campanha estão no servidor MCP \`${mode.server}\` (get_campaign_state, update_campaign_state, list_npcs, get_npc, save_npc, search_memories, save_memory, update_character_state, update_character_hit_points, update_character_exhaustion, add_armor_class_bonus, remove_armor_class_bonus, update_character_coins, resolve_reminder${mode.checks ? ", request_check" : ""}${mode.rest ? ", start_rest" : ""}${mode.combat ? ", get_combat, start_combat, update_combat, end_combat" : ""}${mode.tactical ? ", monster_action, apply_effect, request_damage_roll, offer_reaction" : ""}${mode.sceneImages ? ", request_scene_image" : ""}${mode.actionOptions ? ", suggest_actions" : ""}, promover_npc_opex, desfazer_npc_opex, gravar_memoria_npc_opex${mode.opexNpcs ? ", consultar_npc_opex" : ""}${mode.sheetFix ? `, ${MADDOX_SHEET_FIX_TOOL_NAMES.join(", ")}` : ""}${mode.combatFix ? `, ${MADDOX_COMBAT_FIX_TOOL_NAMES.join(", ")}` : ""}${mode.progression?.length ? `, ${mode.progression.join(", ")}` : ""}, ${MADDOX_CATALOG_TOOL_NAMES.search}, ${MADDOX_CATALOG_TOOL_NAMES.get}).`,
+        `- As ferramentas de anotações da campanha estão no servidor MCP \`${mode.server}\` (get_campaign_state, update_campaign_state, list_npcs, get_npc, save_npc, search_memories, save_memory, update_character_state, update_character_hit_points, update_character_exhaustion, add_armor_class_bonus, remove_armor_class_bonus, ${MADDOX_CHECK_EFFECT_TOOL_NAMES.apply}, ${MADDOX_CHECK_EFFECT_TOOL_NAMES.end}, update_character_coins, resolve_reminder${mode.checks ? ", request_check" : ""}${mode.rest ? ", start_rest" : ""}${mode.combat ? ", get_combat, start_combat, update_combat, end_combat" : ""}${mode.tactical ? ", monster_action, apply_effect, request_damage_roll, offer_reaction" : ""}${mode.sceneImages ? ", request_scene_image" : ""}${mode.actionOptions ? ", suggest_actions" : ""}, promover_npc_opex, desfazer_npc_opex, gravar_memoria_npc_opex${mode.opexNpcs ? ", consultar_npc_opex" : ""}${mode.sheetFix ? `, ${MADDOX_SHEET_FIX_TOOL_NAMES.join(", ")}` : ""}${mode.combatFix ? `, ${MADDOX_COMBAT_FIX_TOOL_NAMES.join(", ")}` : ""}${mode.progression?.length ? `, ${mode.progression.join(", ")}` : ""}, ${MADDOX_CATALOG_TOOL_NAMES.search}, ${MADDOX_CATALOG_TOOL_NAMES.get}).`,
         `- Em TODA chamada a essas ferramentas, envie o campo \`turno\` exatamente com este valor: \`${mode.turnToken}\`.`,
         "- Não use outras ferramentas (arquivos, terminal, web): a campanha vive só nessas anotações.",
     ].join("\n")
@@ -476,6 +488,8 @@ export interface NarratorCheckResult {
     modifier: number | null
     rolledByOwner: boolean
     cancelReason: string | null
+    /** DND-69: efeitos de teste (entrou com o resultado do dado; não entrou com o motivo). */
+    effects?: readonly MaddoxCheckEffectEntry[]
 }
 
 /** Combate tático (Maddox 7): quem age nesta narração e o que fechar. */
@@ -566,7 +580,11 @@ export function checkResultLine(result: NarratorCheckResult): string {
     const mode = result.mode !== "normal" && result.discarded !== null ? `; ${result.mode === "advantage" ? "vantagem" : "desvantagem"}: ${result.d20} e ${result.discarded}` : ""
     const natural = result.d20 === 20 ? "; 20 natural" : result.d20 === 1 ? "; 1 natural" : ""
     const owner = result.rolledByOwner ? "; rolado pelo dono no lugar do jogador" : ""
-    return `${head}: total ${result.total} (d20 ${result.d20}, modificador ${signedNumber(result.modifier ?? 0)}${mode}${natural}${owner}) — ${checkSucceeded(result.total, result.dc, result.d20) ? "sucesso" : "falha"}.`
+    const applied = (result.effects ?? []).filter((entry) => entry.status === "applied")
+    const skipped = (result.effects ?? []).filter((entry) => entry.status === "skipped")
+    const extra = applied.map((entry) => `, ${entry.name} +${entry.dice}: ${entryTotal(entry)}`).join("")
+    const notIn = skipped.length ? ` Não entraram: ${skipped.map((entry) => `${entry.name} (${entry.reason ?? "não vale neste teste"})`).join("; ")}.` : ""
+    return `${head}: total ${result.total} (d20 ${result.d20}${extra}, modificador ${signedNumber(result.modifier ?? 0)}${mode}${natural}${owner}) — ${checkSucceeded(result.total, result.dc, result.d20) ? "sucesso" : "falha"}.${notIn}`
 }
 
 /** O que a vez dos adversários pede nesta narração (combate tático). */
@@ -721,6 +739,7 @@ function taskBody(task: NarratorTask): string {
             `[${task.reminderRef}] **${task.characterName}** lembra: ${task.question.trim()}`,
             ...(task.declarations.length ? ["", "Declarações já feitas neste turno (ainda não resolvidas):", ...declarationLines(task.declarations)] : []),
             "",
+            `Se o lembrete diz que o personagem usa uma magia ou recurso que soma dado a testes (Orientação, Inspiração de Bardo), registre já com \`${MADDOX_CHECK_EFFECT_TOOL_NAMES.apply}\` (o dado entra nos próximos testes pedidos e no teste ainda não rolado); se a ferramenta recusar, diga o motivo ao jogador. Nunca diga que o efeito vale sem o retorno dela.`,
             "O jogador quer que você considere isto AGORA. Se o lembrete aponta algo errado no estado do jogo (condição, card de ação ainda não rolado, PV, ficha, economia), CORRIJA já com as ferramentas, antes que o jogador role. Se não houver nada a corrigir, diga em uma frase como isso vale. Depois chame `resolve_reminder` com o id entre colchetes (`guardar: true` só quando for um fato durável da campanha).",
             "Responda ao jogador em poucas frases: o que mudou de fato (pelo retorno das ferramentas) ou por que não mudou. NÃO avance a cena, não resolva declarações e não atribua ações a ninguém: o turno continua aberto.",
             ...(task.sheetFix ? ["", MADDOX_SHEET_FIX_TASK_RULES] : []),
@@ -814,6 +833,7 @@ export const MADDOX_REST_RULE = [
     "## Exaustão",
     "- A exaustão (0 a 6) fica na ficha: cada nível tira 2 de todo teste de d20, e no nível 6 o personagem morre. Quando a história causar ou aliviar exaustão (marcha forçada, fome, frio, magia), chame `update_character_exhaustion` com a variação e o motivo. O descanso longo concluído já tira 1 nível.",
     MADDOX_ARMOR_CLASS_RULE,
+    MADDOX_CHECK_EFFECT_RULE,
 ].join("\n")
 
 // ── Transcrição recente ────────────────────────────────────────────────────────

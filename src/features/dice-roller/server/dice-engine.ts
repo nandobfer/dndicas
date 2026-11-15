@@ -1,6 +1,6 @@
 import crypto from "node:crypto"
 import { alignModifierParts } from "../dice-breakdown"
-import { clampDiceValue, getDiceFaces } from "../dice-utils"
+import { clampDiceValue, getDiceFaces, hasPrimaryD20 } from "../dice-utils"
 import type {
     DiceRollMode,
     DiceRollOverrideInput,
@@ -44,7 +44,7 @@ function buildDiscardedRoll(mode: Exclude<DiceRollMode, "normal">, kept: number,
 }
 
 function canUseD20Mode(input: DiceRollRequest) {
-    return input.terms.length === 1 && input.terms[0]?.dice === "d20" && input.terms[0]?.quantity === 1
+    return hasPrimaryD20(input.terms.filter((term) => term.quantity > 0))
 }
 
 export function rollDice(

@@ -1,3 +1,4 @@
+import type { MaddoxCheckEffectEntry } from "./check-effects"
 import type { MaddoxXpProgressDto } from "./campaign-types"
 import type { CalcPart } from "@/features/character-sheets/utils/dnd-calculations"
 import type { AttributeType, SkillName } from "@/features/character-sheets/types/character-sheet.types"
@@ -417,6 +418,8 @@ export interface MaddoxGameCheckDto {
     /** Sucesso ou falha (só com a CD visível). */
     success: boolean | null
     cancelReason: string | null
+    /** DND-69: efeitos de teste (prévia no pendente; entrou com os dados ou não entrou com o motivo, no rolado). */
+    effects?: MaddoxCheckEffectEntry[]
 }
 
 /** Teste pendente do turno do mestre, sem detalhes (para a faixa, o painel e o "Rolar no lugar"). */

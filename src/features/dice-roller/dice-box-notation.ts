@@ -1,3 +1,4 @@
+import { hasPrimaryD20 } from "./dice-utils"
 import type { DiceRollMode, DiceRollResponse, DiceTerm, DiceType } from "./types"
 
 export type VisualRollRole = "single" | "kept" | "discarded"
@@ -22,7 +23,7 @@ const MAX_DICE_FACE: Record<DiceType, number> = {
 }
 
 function isSingleD20(terms: DiceTerm[]) {
-    return terms.length === 1 && terms[0]?.dice === "d20" && terms[0]?.quantity === 1
+    return hasPrimaryD20(terms)
 }
 
 function expandD100(value?: number | null): VisualDie[] {
@@ -67,6 +68,7 @@ export function expandVisualTerms(terms: DiceTerm[], mode: DiceRollMode): Visual
         return [
             { dice: "d20", sourceDice: "d20", rollRole: "kept" },
             { dice: "d20", sourceDice: "d20", rollRole: "discarded" },
+            ...terms.slice(1).flatMap((term) => Array.from({ length: term.quantity }, () => expandDie(term.dice)).flat()),
         ]
     }
 
@@ -78,6 +80,7 @@ export function expandStandbyVisualTerms(terms: DiceTerm[], mode: DiceRollMode):
         return [
             { dice: "d20", sourceDice: "d20", value: MAX_DICE_FACE.d20, rollRole: "kept" },
             { dice: "d20", sourceDice: "d20", value: MAX_DICE_FACE.d20, rollRole: "discarded" },
+            ...terms.slice(1).flatMap((term) => Array.from({ length: term.quantity }, () => expandDie(term.dice, MAX_DICE_FACE[term.dice])).flat()),
         ]
     }
 
@@ -87,10 +90,11 @@ export function expandStandbyVisualTerms(terms: DiceTerm[], mode: DiceRollMode):
 }
 
 export function expandVisualResult(result: DiceRollResponse): VisualDie[] {
-    if (result.selectedD20 && result.selectedD20.discarded !== undefined && result.terms.length === 1 && result.terms[0]?.dice === "d20") {
+    if (result.selectedD20 && result.selectedD20.discarded !== undefined && hasPrimaryD20(result.terms)) {
         return [
             { dice: "d20", sourceDice: "d20", value: result.selectedD20.kept, rollRole: "kept" },
             { dice: "d20", sourceDice: "d20", value: result.selectedD20.discarded, rollRole: "discarded" },
+            ...result.terms.slice(1).flatMap((term) => term.results.flatMap((value) => expandDie(term.dice, value))),
         ]
     }
 

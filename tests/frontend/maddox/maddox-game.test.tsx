@@ -39,7 +39,7 @@ vi.mock("@/features/dice-roller/components/dice-roller-panel", async () => {
     const { useEffect, useState } = await import("react")
     return {
         DiceRollerPanel: (props: {
-            preset?: { modifier?: number; mode?: string } | null
+            preset?: { modifier?: number; mode?: string; terms?: { dice: string; quantity: number }[] } | null
             externalResult?: { total: number } | null
             hideRollButton?: boolean
             disableRolling?: boolean
@@ -65,6 +65,7 @@ vi.mock("@/features/dice-roller/components/dice-roller-panel", async () => {
                 <div
                     data-testid="fake-dice-panel"
                     data-modifier={props.preset?.modifier}
+                    data-terms={(props.preset?.terms ?? []).map((term: { dice: string; quantity: number }) => `${term.quantity}${term.dice}`).join("+")}
                     data-mode={props.preset?.mode}
                     data-external={props.externalResult?.total ?? ""}
                     data-shown={shown ?? ""}
@@ -842,6 +843,40 @@ describe("mesa Maddox — testes pedidos pelo Maddox (Maddox 5)", () => {
         // Parado: o botão e o aviso saem; o resultado fica.
         expect(screen.queryByRole("button", { name: "Rolar" })).not.toBeInTheDocument()
         expect(screen.queryByText("Resultado enviado ao Maddox.")).not.toBeInTheDocument()
+    })
+
+    it("DND-69: Orientação ativa aparece na prévia (+1d4 no painel) e no resultado; efeito que não entrou mostra o motivo", async () => {
+        const expected = [
+            { id: "e1", name: "Orientação", dice: "1d4", status: "expected" as const, results: null, reason: null },
+            { id: "e2", name: "Inspiração de Bardo", dice: "1d6", status: "skipped" as const, results: null, reason: "vale só em testes de resistência" },
+        ]
+        const rollWithD4 = { ...roll17, terms: [...roll17.terms, { dice: "d4" as const, quantity: 1, results: [3] }], diceTotal: 15, total: 20 }
+        const rolledEffects = [{ ...expected[0]!, status: "applied" as const, results: [3] }, expected[1]!]
+        post.mockResolvedValue(ok({ roll: rollWithD4, state: gameState({ me: ME({ memberId: "m2", isOwner: false }), turn: { ...awaitingTurn, awaitingChecks: false, pendingChecks: [], generating: true }, messages: [checkMessage({ status: "rolled", roll: rollWithD4, effects: rolledEffects })] }) }))
+        await renderGame(gameState({ rigor: "fiel-dnd", me: ME({ memberId: "m2", isOwner: false }), turn: awaitingTurn, messages: [checkMessage({ effects: expected })] }))
+        const card = screen.getByTestId("game-check-request")
+        expect(within(card).getByTestId("check-effect-chip")).toHaveTextContent("Orientação +1d4")
+        expect(within(card).getByTestId("check-modifier-total")).toHaveTextContent("= d20 + 1d4 +5")
+        expect(within(card).getByTestId("check-effect-skipped")).toHaveTextContent("Inspiração de Bardo não entrou: vale só em testes de resistência.")
+        const panel = within(card).getByTestId("fake-dice-panel")
+        expect(panel).toHaveAttribute("data-terms", "1d20+1d4")
+        expect(panel).toHaveAttribute("data-mode", "advantage")
+        fireEvent.click(within(panel).getByRole("button", { name: "Rolar" }))
+        await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns/c1/game/checks/k1/roll", {}))
+        fireEvent.click(await screen.findByRole("button", { name: "fim da animação" }))
+        const result = await screen.findByTestId("check-roll-result")
+        expect(within(result).getByTestId("check-roll-total")).toHaveTextContent("20")
+        expect(within(result).getByTestId("check-effect-result")).toHaveTextContent("+ 1d4 Orientação 3")
+        // O preset do painel ficou o do clique (d20 + d4): o dado não reinicia no meio da rolagem.
+        expect(screen.getByTestId("fake-dice-panel")).toHaveAttribute("data-terms", "1d20+1d4")
+    })
+
+    it("teste sem efeito: a fórmula e o painel seguem como antes (só o d20)", async () => {
+        await renderGame(gameState({ rigor: "fiel-dnd", me: ME({ memberId: "m2", isOwner: false }), turn: awaitingTurn, messages: [checkMessage()] }))
+        const card = screen.getByTestId("game-check-request")
+        expect(within(card).queryByTestId("check-effect-chip")).not.toBeInTheDocument()
+        expect(within(card).queryByTestId("check-effect-skipped")).not.toBeInTheDocument()
+        expect(within(card).getByTestId("fake-dice-panel")).toHaveAttribute("data-terms", "1d20")
     })
 
     it("'Rolar' espera a ficha carregar; o modificador do servidor diferente da prévia não zera o dado de quem rolou", async () => {

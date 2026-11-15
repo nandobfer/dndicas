@@ -16,6 +16,7 @@ import {
     type MaddoxTurnPhase,
 } from "../constants"
 import type { CombatPrepChange, IMaddoxCombatAction, IMaddoxCombatReaction, IMaddoxCombatRoll } from "../combat-types"
+import type { MaddoxCheckEffectEntry } from "../check-effects"
 import { applyDiscardFilter, type IMaddoxDiscardMark } from "./discard-filter"
 import type { MaddoxRestType, RestLine, RestMissLine } from "../rest-rules"
 
@@ -43,6 +44,8 @@ export interface IMaddoxCheck {
     rolledAt: Date | null
     /** Motivo do cancelamento (o jogador saiu da campanha). */
     cancelReason: string | null
+    /** DND-69: efeitos de teste (prévia no pedido; entrou com os dados ou não entrou com o motivo, na rolagem). */
+    effects?: MaddoxCheckEffectEntry[]
 }
 
 /** Rolagem de um dado de vida no descanso curto (DND-58): valores absolutos gravados antes de escrever a ficha. */
@@ -263,6 +266,7 @@ const MaddoxCampaignMessageSchema = new Schema<IMaddoxCampaignMessage>(
                     rolledBy: { type: String, default: null },
                     rolledAt: { type: Date, default: null },
                     cancelReason: { type: String, default: null },
+                    effects: { type: Schema.Types.Mixed, default: () => [] },
                 },
                 { _id: false },
             ),

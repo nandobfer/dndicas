@@ -37,6 +37,26 @@ describe("dice box notation", () => {
         expect(expandVisualResult(result).map((die) => die.rollRole)).toEqual(["kept", "discarded"])
     })
 
+    it("DND-69: advantage with an extra d4 shows kept, discarded and the d4", () => {
+        const result = {
+            rollId: "roll-adv-d4",
+            terms: [
+                { dice: "d20" as const, quantity: 1, results: [18] },
+                { dice: "d4" as const, quantity: 1, results: [3] },
+            ],
+            mode: "advantage" as const,
+            selectedD20: { kept: 18, discarded: 7, reason: "advantage" as const },
+            diceTotal: 21,
+            modifier: 2,
+            total: 23,
+            createdAt: "2026-01-01T00:00:00.000Z",
+        }
+
+        expect(buildDiceBoxNotation(result)).toBe("1d20+1d20+1d4@18,7,3!!")
+        expect(expandVisualResult(result).map((die) => die.rollRole)).toEqual(["kept", "discarded", "single"])
+        expect(expandStandbyVisualTerms([{ dice: "d20", quantity: 1 }, { dice: "d4", quantity: 1 }], "advantage").map((die) => `${die.dice}:${die.rollRole}`)).toEqual(["d20:kept", "d20:discarded", "d4:single"])
+    })
+
     it("represents d100 as two d10 dice", () => {
         const result = {
             rollId: "roll-d100",

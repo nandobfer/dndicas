@@ -554,3 +554,17 @@ describe("Maddox 5 — regras dos testes", () => {
         expect((await game.getGameState(table.id, table.owner)).turn.phase).toBe("players")
     })
 })
+
+describe("DND-69 — efeito registrado depois do request_check aparece na prévia gravada", () => {
+    it("request_check e depois apply_check_effect na mesma narração: o card gravado já traz Orientação +1d4", async () => {
+        const table = await faithfulTable()
+        const { Spell } = await import("@/features/spells/models/spell")
+        const { CharacterSpell } = await import("@/features/character-sheets/models/character-spell")
+        const guidance = new mongoose.Types.ObjectId()
+        await Spell.collection.insertOne({ _id: guidance, name: "Orientação", description: "<p>Você toca uma criatura voluntária e escolhe uma perícia. Até que a magia termine, a criatura adiciona 1d4 a qualquer teste de atributo usando a perícia escolhida.</p>", circle: 0, component: ["Verbal", "Somático", "Concentração"], range: "Pessoal", duration: "Concentração, até 1 minuto", status: "active" })
+        await CharacterSpell.collection.insertOne({ sheetId: new mongoose.Types.ObjectId(table.lyra.sheetId!), catalogSpellId: guidance, name: "Orientação", circle: 0, prepared: true, components: [], createdAt: new Date() })
+        await untilCheckRequested(table, { tools: [{ name: "apply_check_effect", input: { personagem: "Lyra", fonte: { tipo: "magia", nome: "Orientação" }, pericia: "Furtividade", trecho: "a criatura adiciona 1d4 a qualquer teste de atributo usando a perícia escolhida", motivo: "Lyra murmura a prece" } }] })
+        const saved = await MaddoxCampaignMessageModel.findOne({ campaignId: table.id, kind: "check" }).lean()
+        expect(saved!.check!.effects).toEqual([expect.objectContaining({ name: "Orientação", dice: "1d4", status: "expected" })])
+    })
+})

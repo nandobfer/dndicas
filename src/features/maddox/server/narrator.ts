@@ -35,6 +35,7 @@ import type { MaddoxSettings } from "../schemas"
 import { resolveNarratorModel, type MaddoxResolvedModel } from "../model-resolution"
 import type { MaddoxAnswerContext, MaddoxMaster, MaddoxMasterSink, MaddoxNarrationContext, MaddoxRestExchangeContext } from "./game-master"
 import { checkTitle, sheetSummary, type MaddoxCheckSheet } from "../check-modifier"
+import { readCheckEffectEntries } from "../check-effects"
 import { worldCatalogOf } from "../world-catalog"
 import { restTranscriptLine } from "../rest-rules"
 import { buildNarratorInstructions, checkResultLine, narratorTaskText, narratorTranscript, usesChecks, usesCombat, usesTacticalCombat, type NarratorCheckResult, type NarratorDeclaration, type NarratorPromptContext, type NarratorTacticalTask, type NarratorTask } from "./narrator-prompt"
@@ -315,6 +316,7 @@ export function checkResultOf(message: IMaddoxCampaignMessage): NarratorCheckRes
         modifier: roll ? roll.modifier : null,
         rolledByOwner: Boolean(check.rolledBy && check.rolledBy !== message.userId),
         cancelReason: check.cancelReason ?? null,
+        effects: readCheckEffectEntries(check.effects),
     }
 }
 

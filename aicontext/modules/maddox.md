@@ -574,7 +574,8 @@ a CA não é gravada na ficha: `loadSheetSummaries` a calcula dos itens equipado
    narração); se a geração falhar, somem com o job e a nova tentativa não duplica nada.
 2. Com teste pendente, o turno fica em `master` com `awaitingChecks: true` e sem trava (`resumeMasterTurn` ignora). Declarar,
    perguntar e passar seguem em 409 `MASTER_TURN`: **os testes fazem parte do turno do mestre**.
-3. Rolar (`rollCheck`): o servidor calcula o modificador da ficha na hora (`checkModifier`) e rola o d20 com o **motor de dados**
+3. Rolar (`rollCheck`): o servidor calcula o modificador da ficha na hora (`checkModifier`), soma os efeitos de teste ativos da
+   ficha como dados próprios (DND-69, seção "Efeitos de teste") e rola o d20 com o **motor de dados**
    (`rollGeneralDice`, vantagem/desvantagem do pedido; valem as regras de dado — *overrides* — do jogador do personagem). A troca
    `pending → rolled` é condicional (rolagem dupla = 409 `CHECK_ALREADY_ROLLED`). Grava `check.roll`, as partes do modificador e
    quem rolou; avisa a mesa e o stream (`check-rolled`).
@@ -1267,6 +1268,9 @@ desabilitado vazio ou acima do limite; botão desabilitado com o motivo de `remi
   tag `lembranca`; rede fora = fila `engramind_pending_writes`) → `saved` ("Guardada como memória"); as demais → `discarded` ("Usada só
   neste turno"). Geração que falha devolve as lembranças a `pending` (`releaseReminders`); `commitReminders` nunca lança (falha ao gravar a situação = aviso no log e as lembranças voltam a esperar, sem refazer a narração gravada). Sem narração, fica "Aguardando o Maddox".
 - **Tela:** linha discreta para toda a mesa "{Personagem} lembrou o Maddox: “…”" com o aviso da situação abaixo.
+- **Efeitos de teste (DND-69):** lembrete de usar magia ou recurso que soma dado a testes (Orientação) é registrado pelo job de
+  correção com `apply_check_effect` (vale nos testes seguintes e no teste ainda não rolado); recusa vira linha com o motivo. O
+  texto do lembrete continua fora da transcrição: o que chega às narrações seguintes é o efeito na ficha ("Efeitos de teste ativos").
 
 Sem permissão nova (`maddox.play` cobre).
 
@@ -1895,7 +1899,7 @@ Toda rolagem do Maddox leva as parcelas nomeadas do modificador dentro do própr
 
 | Rolagem | Parcelas |
 |---|---|
-| Teste pedido pelo Maddox (`game-checks.ts`) | `partsFromCalc(checkModifier(...).parts)` (atributo, Prof., especialização); rolagens antigas sem parcelas usam `check.modifierParts` no card |
+| Teste pedido pelo Maddox (`game-checks.ts`) | `partsFromCalc(checkModifier(...).parts)` (atributo, Prof., especialização); rolagens antigas sem parcelas usam `check.modifierParts` no card. Efeitos de teste (DND-69) são dados próprios depois do d20, com o resultado em `check.effects` (não mudam as parcelas) |
 | Ataque com arma do personagem | `attack.bonusParts` da opção (`combat-options.ts`: atributo usado — Força, Destreza ou o maior na Acuidade — e "Proficiência") + "Exaustão" |
 | Dano da arma | `attack.damageParts` (o atributo; na outra mão, só se negativo) |
 | Ataque desarmado | Força + Proficiência |
@@ -2282,6 +2286,58 @@ podia lançar a XP.
   estimativa falha sem gravar nada, a pendência volta (`experienceResolved: null`) só com o `owed` que ainda falta (pago = sai;
   todo pago = `owed: null` e `credited: []`), e o mestre concede de novo só a dos sem ND.
 - Testes: bloco DND-70 de `tests/backend/maddox/level-progression.test.ts` e o de `tests/frontend/maddox/level-up-cards.test.tsx`.
+## Efeitos de teste: Orientação e dados extras nos testes pedidos (DND-69)
+
+Caso real (campanha `6af8db71abcd65f7e78ebb00`, turnos 25–27): Lizwan mandou o lembrete "vou lançar orientação em mim mesma" e
+depois declarou "Conjuro Orientação em mim"; o Maddox narrou a prece e escreveu "sob a Orientação" no motivo do teste, mas os dois
+testes de Sobrevivência saíram só com d20 + Sabedoria + Prof. Causa: não existia estado de "efeito que soma dado a teste" — o
+`request_check` não tinha campo, o `rollCheck` só lia a ficha e o job do lembrete (DND-59) só podia responder ("nada na ficha precisa
+mudar"). Agora o efeito é registro verificável na ficha, nunca texto da narração. Graus com ficha (`MADDOX_SHEET_RIGORS`). Sem
+permissão nova (`maddox.play` e ser membro cobrem a rolagem; as ferramentas são do narrador).
+
+- **Gravação:** `checkEffects[]` na ficha de QUEM RECEBE (campo `Mixed` do `CharacterSheet`; entra no retrato do turno e no reinício,
+  que copiam a ficha inteira). Regras puras em `src/features/maddox/check-effects.ts` (`checkEffectSchema`, `parseCheckEffectQuote`,
+  `effectsForCheck`, `checkEffectLabel`); serviço em `server/check-effects.ts` (troca condicional pelo driver, auditoria
+  `FichaPersonagem`, `publishPatched`, linha `sheet-change` e `publishGameChanged`).
+- **Ferramentas** (`MADDOX_CHECK_EFFECT_TOOL_NAMES`, narração, "Pergunte ao mestre" e lembrete, também no MCP):
+  `apply_check_effect { personagem, conjurador?, fonte: { tipo: magia|recurso, nome }, pericia?, trecho, motivo }` e
+  `end_check_effect { personagem, nome, motivo }`. Regra no prompt: `MADDOX_CHECK_EFFECT_RULE` (junto da de CA); a tarefa do lembrete
+  manda registrar o efeito na hora. Na pergunta/lembrete de quem não é o dono, só o próprio personagem é `conjurador`.
+- **O catálogo é a fonte:** magia = item da lista de magias da ficha de quem conjura com `catalogSpellId` ativo (círculo 1+ precisa
+  estar preparada e gasta o espaço do círculo base, `spellSlots.N.used`); recurso = `resourceCharges` com `source.entityId`
+  (Habilidade, Talento ou Item) e uso sobrando (gasta 1; o efeito é de uso único). O `trecho` precisa estar no texto normalizado da
+  entidade (≥ 3 palavras) e dele saem o dado (`NdX`, d4–d12, um só) e o tipo de teste: "teste de atributo/perícia" ⇒ atributo e
+  perícia; "salvaguarda"/"teste de resistência" ⇒ resistência; "teste de D20" ⇒ os três. "Perícia escolhida" no texto INTEIRO
+  da entidade (`mentionsSkillChoice`, não só no trecho) ⇒ `pericia` obrigatória (o efeito vale só nela): trecho curto não solta
+  a restrição. O efeito é gravado antes do gasto do espaço ou uso; se o gasto falhar, a gravação é desfeita. Dados que subtraem ou reduzem dano (Perdição, Resistência) são recusados. Concentração vem dos
+  componentes/duração do catálogo; alcance "Pessoal" exige alvo = conjurador. Mesmo nome substitui (não acumula).
+- **Duração (decisão do dono):** fora do combate não há relógio: o efeito vale até o Maddox encerrar (`end_check_effect`; o resumo da
+  ficha de cada turno mostra "Efeitos de teste ativos: … duração no catálogo: …"), até um descanso concluído (`restCheckEffects` no
+  `commitPrep` de `rest.ts`), até outra concentração do mesmo conjurador (em qualquer personagem) ou, no recurso, até o primeiro teste
+  em que entra. No combate tático, `expireCombatCheckEffects` (depois de todo `saveTactical`) encerra o de concentração quando quem
+  conjurou morre, sai ou passa a se concentrar em outra magia.
+- **No teste** (só os do `request_check` nesta etapa; salvaguarda pedida por adversário, concentração, Esconder-se e iniciativa do
+  combate tático ficam para depois): o `request_check` devolve `efeitos` (o que entra), `efeitosQueNaoEntram` (com o motivo) e grava a
+  prévia em `check.effects` (`status: "expected"`), recalculada da ficha ao gravar os rascunhos (`refreshDraftCheckEffects` em
+  `game.ts`): o efeito registrado depois do pedido já aparece no card. Sem trava (decisão do dono): quando a declaração, o lembrete ou a pergunta recente
+  do personagem (turno atual e anterior) ou o motivo citam pelo nome uma magia/recurso da ficha sem efeito ativo, o retorno traz um
+  `aviso` mandando registrar (vale até a rolagem) ou narrar que não funcionou. Efeito registrado que só não vale neste teste não
+  gera aviso (ele já vem em `efeitosQueNaoEntram`). Na rolagem (`rollCheck`), o servidor relê os efeitos
+  (`takeCheckEffectsForRoll`): os que entram viram termos próprios depois do d20 (`d20 + 1d4`; vantagem/desvantagem seguem no d20
+  principal), os de uso único saem da ficha com troca condicional (rolagem que perde a corrida ou falha no motor/gravação os
+  devolve, e o teste continua pendente), e `check.effects` grava cada
+  um como `applied` (com `results`) ou `skipped` com o motivo ("vale só em testes de Sobrevivência", "o efeito terminou antes da
+  rolagem", "o efeito já foi usado em outro teste"). A linha do narrador (`checkResultLine`) traz "Orientação +1d4: 3" e "Não
+  entraram: …".
+- **Recusa nunca silenciosa:** toda recusa de `apply_check_effect` com personagem conhecido vira linha pública "Orientação não entrou
+  para Lizwan: motivo." e erro ao Maddox (narre que não funcionou).
+- **Tela** (`GameCheckCard`): chip "Orientação +1d4" e fórmula "= d20 + 1d4 +4" na prévia; linha "X não entrou: motivo."; o painel
+  recebe `primaryD20Mode` e os termos d20 + dados (congelados no clique, como o modificador); quem assiste repete os termos do
+  resultado; o resultado mostra "+ 1d4 Orientação 3" e o crítico segue o d20 principal (`getDiceCriticalState(roll, { primaryD20: true })`).
+  Sem efeito, o card é o de antes.
+- Testes: `tests/backend/maddox/check-effects.test.ts`, `check-effects-rules.test.ts`, linha do resultado em `narrator-prompt.test.ts`,
+  tarefa do lembrete em `dnd59-rules.test.ts`, motor em `tests/backend/dice/dice-engine.test.ts`, card em
+  `tests/frontend/maddox/maddox-game.test.tsx`.
 
 ## Bônus de CA nomeados e CA no card "Na mesa" (DND-66)
 

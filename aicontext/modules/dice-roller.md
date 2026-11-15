@@ -26,6 +26,10 @@ O dice roller fornece rolagens manuais e originadas de ficha/Owlbear com resulta
 - Ao voltar para standby depois de uma rolagem, a stage limpa o canvas 3D anterior sem iniciar nova fisica/animacao.
 - A Dice Box usa `baseScale: 67` para manter os dados menores dentro da janela do roller.
 - Vantagem/desvantagem em `1d20` renderiza dois d20 visuais com papeis `kept` e `discarded`.
+- DND-69: o motor aplica vantagem/desvantagem quando há um **d20 principal** (`hasPrimaryD20` em `dice-utils.ts`: o primeiro termo
+  é 1d20 e nenhum outro termo é d20), então `1d20 + 1d4` com vantagem rola dois d20 e o d4 (visual: `kept`, `discarded` e os
+  extras). O painel manual segue só com 1d20 exato; com `primaryD20Mode` (o teste do Maddox com Orientação) o painel mantém o modo
+  e o crítico vale no d20 principal (`getDiceCriticalState(result, { primaryD20: true })`).
 - `d100` e renderizado como dois `d10` visuais; o resumo numerico continua exibindo o valor oficial de 1 a 100.
 - Falhas de WebGL ou inicializacao da lib mostram mensagem na stage, mas nao bloqueiam o resumo numerico da rolagem.
 

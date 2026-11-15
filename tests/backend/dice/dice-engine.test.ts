@@ -120,14 +120,11 @@ describe("dice engine", () => {
         expect(result.total).toBe(100)
     })
 
-    it("forces non-single d20 advantage rolls to normal", () => {
+    it("forces advantage to normal when there is more than one d20", () => {
         const values = [12, 3]
         const result = rollDice(
             {
-                terms: [
-                    { dice: "d20", quantity: 1 },
-                    { dice: "d4", quantity: 1 },
-                ],
+                terms: [{ dice: "d20", quantity: 2 }],
                 modifier: 0,
                 mode: "advantage",
                 source: "manual",
@@ -140,5 +137,48 @@ describe("dice engine", () => {
         expect(result.mode).toBe("normal")
         expect(result.selectedD20).toEqual({ kept: 12, reason: "normal" })
         expect(result.total).toBe(15)
+    })
+
+    it("DND-69: keeps advantage on the primary d20 with an extra die of another type (Orientação +1d4)", () => {
+        const values = [12, 5, 3]
+        const result = rollDice(
+            {
+                terms: [
+                    { dice: "d20", quantity: 1 },
+                    { dice: "d4", quantity: 1 },
+                ],
+                modifier: 4,
+                mode: "advantage",
+                source: "sheet",
+            },
+            {
+                randomInt: () => values.shift()!,
+            }
+        )
+
+        expect(result.mode).toBe("advantage")
+        expect(result.selectedD20).toEqual({ kept: 12, discarded: 5, reason: "advantage" })
+        expect(result.terms).toEqual([
+            { dice: "d20", quantity: 1, results: [12] },
+            { dice: "d4", quantity: 1, results: [3] },
+        ])
+        expect(result.total).toBe(19)
+    })
+
+    it("DND-69: a d20 after another die is not the primary d20 (mode stays normal)", () => {
+        const values = [3, 12]
+        const result = rollDice(
+            {
+                terms: [
+                    { dice: "d4", quantity: 1 },
+                    { dice: "d20", quantity: 1 },
+                ],
+                modifier: 0,
+                mode: "advantage",
+                source: "manual",
+            },
+            { randomInt: () => values.shift()! }
+        )
+        expect(result.mode).toBe("normal")
     })
 })

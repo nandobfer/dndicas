@@ -3,6 +3,7 @@ import type { AttributeType, CharacterSheet, SkillName } from "@/features/charac
 import { exhaustionLevel, exhaustionPenaltyOf } from "./exhaustion-rules"
 import { armorClassBonusLabel, readArmorClassBonuses } from "@/features/character-sheets/utils/armor-class-bonuses"
 import { coinsText } from "./coin-rules"
+import { checkEffectLabel, readCheckEffects } from "./check-effects"
 import { MADDOX_CHECK_KIND_LABELS, MADDOX_CHECK_MODE_LABELS, type MaddoxCheckKind, type MaddoxCheckMode } from "./constants"
 
 /**
@@ -27,7 +28,7 @@ export const MADDOX_SKILLS = Object.keys(SKILL_ATTRIBUTE_MAP) as SkillName[]
 
 /** Campos da ficha usados nos testes e no resumo do narrador. */
 export type MaddoxCheckSheet = Pick<CharacterSheet, AttributeType | "level" | "proficiencyBonusOverride" | "savingThrows" | "skills"> &
-    Partial<Pick<CharacterSheet, "name" | "class" | "subclass" | "race" | "hpMax" | "hpCurrent" | "hpTemp" | "computedArmorClass" | "exhaustion" | "armorClassBonuses" | "coins">>
+    Partial<Pick<CharacterSheet, "name" | "class" | "subclass" | "race" | "hpMax" | "hpCurrent" | "hpTemp" | "computedArmorClass" | "exhaustion" | "armorClassBonuses" | "coins">> & { checkEffects?: unknown }
 
 export interface MaddoxCheckSpec {
     kind: MaddoxCheckKind
@@ -125,6 +126,7 @@ export function sheetSummary(sheet: MaddoxCheckSheet): string {
     const hp = sheet.hpMax != null ? `PV ${sheet.hpCurrent ?? sheet.hpMax}/${sheet.hpMax}${sheet.hpTemp ? ` (+${sheet.hpTemp} temporários)` : ""}` : null
     // DND-66: os bônus nomeados com a duração (o de "momento" o Maddox remove quando o prazo chegar).
     const acBonuses = readArmorClassBonuses(sheet.armorClassBonuses)
+    const checkEffects = readCheckEffects(sheet.checkEffects)
     const ac = sheet.computedArmorClass != null ? `CA ${sheet.computedArmorClass}${acBonuses.length ? ` (bônus: ${acBonuses.map(armorClassBonusLabel).join("; ")})` : ""}` : null
     const abilities = MADDOX_ABILITIES.map((ability) => `${MADDOX_ABILITY_ABBR[ability]} ${attributes[ability]} (${signed(getAttributeModifier(attributes[ability]).value)})`).join(", ")
     const saves = MADDOX_ABILITIES.filter((ability) => sheet.savingThrows?.[ability]).map((ability) => MADDOX_ABILITY_ABBR[ability])
@@ -139,5 +141,7 @@ export function sheetSummary(sheet: MaddoxCheckSheet): string {
         `Perícias treinadas: ${skills.length ? skills.join(", ") : "nenhuma"}`,
         // DND-65: o saldo de moedas da ficha (muda com update_character_coins).
         ...(sheet.coins ? [`Moedas: ${coinsText(sheet.coins)}`] : []),
+        // DND-69: efeitos de teste ativos (somam dados aos testes pedidos; você encerra com end_check_effect).
+        ...(checkEffects.length ? [`Efeitos de teste ativos: ${checkEffects.map((effect) => `${checkEffectLabel(effect)}, duração no catálogo: ${effect.duration}`).join("; ")}`] : []),
     ].join("\n")
 }

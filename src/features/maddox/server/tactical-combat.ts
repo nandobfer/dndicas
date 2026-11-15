@@ -95,6 +95,8 @@ export async function saveTactical(combat: TacticalCombat): Promise<TacticalComb
     const normalized = normalizeTactical(saved)
     // DND-66: bônus de CA por rodadas ou concentração vencem logo depois da gravação que mudou a rodada ou a concentração.
     await (await import("./armor-class-bonuses")).expireCombatArmorClassBonuses(normalized)
+    // DND-69: efeitos de teste de concentração saem quando quem conjurou cai, sai ou troca a concentração.
+    await (await import("./check-effects")).expireCombatCheckEffects(normalized)
     return normalized
 }
 

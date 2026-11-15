@@ -61,3 +61,12 @@ describe("modificador dos testes pedidos pelo Maddox (Maddox 5)", () => {
         expect(mentioned.split("\n")[0]).toBe("Nível 5 · Guerreiro (Campeão) · Meio & Elfo · Proficiência +3")
     })
 })
+
+describe("DND-69 — efeitos de teste no resumo da ficha do narrador", () => {
+    it("com efeito ativo, a linha aparece com o rótulo e a duração do catálogo; sem efeito, não", () => {
+        const effect = { id: "e1", name: "Orientação", dice: { count: 1, die: "d4" }, kinds: ["skill", "ability"], skill: "Sobrevivência", singleUse: false, concentration: true, casterCharacterId: "c1", casterName: "Lizwan", duration: "Concentração, até 1 minuto", source: { kind: "spell", ref: "Magia:x", quote: "adiciona 1d4" }, campaignId: "c", turnNumber: 1, createdAt: "2026-11-15T00:00:00.000Z" }
+        expect(sheetSummary({ ...sheet({ hpMax: 9, hpCurrent: 9 }), checkEffects: [effect] })).toContain("Efeitos de teste ativos: Orientação +1d4 em testes de Sobrevivência (concentração de Lizwan), duração no catálogo: Concentração, até 1 minuto")
+        expect(sheetSummary(sheet({ hpMax: 9, hpCurrent: 9 }))).not.toContain("Efeitos de teste")
+    })
+})
+

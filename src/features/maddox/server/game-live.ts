@@ -54,6 +54,8 @@ export interface MaddoxDraftCheck {
     dc: number
     mode: "normal" | "advantage" | "disadvantage"
     reason: string
+    /** DND-69: prévia dos efeitos de teste da ficha (o que entra e o que não entra). */
+    effects?: import("../check-effects").MaddoxCheckEffectEntry[]
 }
 
 /** Descanso pedido pelo narrador (`start_rest`, DND-58), gravado logo abaixo da narração. */
