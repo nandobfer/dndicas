@@ -1466,6 +1466,10 @@ imagens (DND-33).
 (só automáticas): a última automática precisa estar `minNarrationsBetween` turnos do mestre antes. Uma automática por turno: índice
 único parcial `{ campaignId, turnNumber, slot }` com `counts: true, slot: "auto"` (a duplicata vira `skipped`). Teto: todas as origens
 nas últimas 24 h; a reserva reconta depois de gravar e descarta (`skipped`, `daily-limit`) o que passou em pedidos simultâneos.
+As reservas da mesma campanha são **serializadas no processo** (`withReservationLock`, cadeia de promises em
+`globalThis.__maddoxSceneImages.reservations`; o app roda numa instância só): o `_id` nasce no processo antes do insert, e em paralelo
+um pedido de `_id` maior podia gravar e recontar antes do menor, deixando os dois com a vaga (quebrou o CI após a DND-66). O trecho
+travado é só o insert + recontagem, nunca espera job da fila da campanha. Com mais de uma instância, trocar por contador atômico.
 
 **Referências de aparência.** Os **dados** de quem aparece vão no pedido ao gerador e as **imagens cadastradas** vão como referência
 (`prompt: { text, images }` da SDK `ai`), até 6, na ordem personagens (retrato da campanha ou, sem ele, a foto da ficha) → NPCs (retrato)

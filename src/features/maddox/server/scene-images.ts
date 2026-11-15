@@ -187,6 +187,26 @@ export async function scheduleSceneImage(request: SceneImageRequest, env?: Scene
 
 /** Grava o pedido ocupando a vaga. Corrida: a duplicata do turno e o que passou do teto viram `skipped` (sem vaga). */
 export async function reserveSceneImage(request: SceneImageRequest, scene: MaddoxSceneImagesSettings): Promise<IMaddoxSceneImage | null> {
+    return withReservationLock(String(request.campaignId), () => reserveSlot(request, scene))
+}
+
+/**
+ * Reservas da mesma campanha uma de cada vez, no processo (o app roda numa instância só). O `_id` nasce no processo, antes do
+ * insert: em paralelo, um pedido de `_id` maior podia chegar ao banco e contar antes do menor, e os dois ficavam com a vaga.
+ * O trecho travado são só o insert e a recontagem — nunca espera job da fila da campanha.
+ */
+function withReservationLock<T>(campaignId: string, run: () => Promise<T>): Promise<T> {
+    const previous = runtime.reservations.get(campaignId) ?? Promise.resolve()
+    const current = previous.catch(() => undefined).then(run)
+    const tail = current.catch(() => undefined)
+    runtime.reservations.set(campaignId, tail)
+    void tail.then(() => {
+        if (runtime.reservations.get(campaignId) === tail) runtime.reservations.delete(campaignId)
+    })
+    return current
+}
+
+async function reserveSlot(request: SceneImageRequest, scene: MaddoxSceneImagesSettings): Promise<IMaddoxSceneImage | null> {
     const base = {
         campaignId: request.campaignId,
         turnNumber: request.turnNumber,
@@ -210,7 +230,7 @@ export async function reserveSceneImage(request: SceneImageRequest, scene: Maddo
         log.info({ campaignId: String(request.campaignId), turnNumber: request.turnNumber, source: request.source }, "[maddox] imagem descartada: já há uma automática neste turno")
         return null
     }
-    // Pedidos simultâneos: só os primeiros (pela ordem do `_id`) dentro do teto ficam com a vaga.
+    // Só os primeiros (pela ordem do `_id`) dentro do teto ficam com a vaga; com a reserva serializada, é a segunda proteção.
     const rank = await MaddoxSceneImageModel.countDocuments({ campaignId: request.campaignId, counts: true, createdAt: { $gte: windowStart() }, _id: { $lte: created._id } }).setOptions(INCLUDE_DISCARDED)
     if (rank > scene.maxPerDay) {
         await MaddoxSceneImageModel.updateOne({ _id: created._id }, { $set: { status: "skipped", counts: false, skipReason: "daily-limit" } })
@@ -224,14 +244,17 @@ export async function reserveSceneImage(request: SceneImageRequest, scene: Maddo
 
 interface SceneImageRuntime {
     running: Map<string, Promise<void>>
+    /** Cauda da fila de reservas por campanha (`withReservationLock`). */
+    reservations: Map<string, Promise<unknown>>
     /** Imagens manuais reservadas que esperam a descrição na fila da campanha (ainda não começaram a gerar). */
     queued: Set<string>
     active: number
     waiting: (() => void)[]
 }
 const globalRuntime = globalThis as unknown as { __maddoxSceneImages?: SceneImageRuntime }
-const runtime: SceneImageRuntime = (globalRuntime.__maddoxSceneImages ??= { running: new Map(), queued: new Set(), active: 0, waiting: [] })
+const runtime: SceneImageRuntime = (globalRuntime.__maddoxSceneImages ??= { running: new Map(), reservations: new Map(), queued: new Set(), active: 0, waiting: [] })
 runtime.queued ??= new Set()
+runtime.reservations ??= new Map()
 
 async function acquire() {
     if (runtime.active < MADDOX_SCENE_IMAGE_CONCURRENCY) {
