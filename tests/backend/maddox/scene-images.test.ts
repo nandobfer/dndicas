@@ -317,6 +317,30 @@ describe("frequência", () => {
         expect(await MaddoxSceneImageModel.countDocuments({ counts: true })).toBe(1)
         expect(await MaddoxSceneImageModel.countDocuments({ status: "skipped", skipReason: "daily-limit" })).toBe(2)
     })
+
+    it("o pedido de menor _id que chega ao banco por último não passa do teto diário", async () => {
+        const { campaignId } = await table()
+        env.maxPerDay = 1
+        // Reproduz a chegada fora de ordem: o primeiro pedido ganha o menor `_id` e só grava depois dos outros.
+        const original = MaddoxSceneImageModel.create.bind(MaddoxSceneImageModel) as (doc: Record<string, unknown>) => Promise<unknown>
+        let calls = 0
+        const spy = vi.spyOn(MaddoxSceneImageModel, "create").mockImplementation((async (doc: Record<string, unknown>) => {
+            calls += 1
+            if (calls > 1) return original(doc)
+            const _id = new mongoose.Types.ObjectId()
+            await new Promise((resolve) => setTimeout(resolve, 60))
+            return original({ ...doc, _id })
+        }) as never)
+        try {
+            const request = (turnNumber: number) => images.reserveSceneImage({ campaignId, source: "manual", turnNumber, situation: null, description: "x", caption: "", byOwner: true }, scene())
+            const results = await Promise.all([request(1), request(2), request(3)])
+            expect(results.filter(Boolean)).toHaveLength(1)
+        } finally {
+            spy.mockRestore()
+        }
+        expect(await MaddoxSceneImageModel.countDocuments({ counts: true })).toBe(1)
+        expect(await MaddoxSceneImageModel.countDocuments({ status: "skipped", skipReason: "daily-limit" })).toBe(2)
+    })
 })
 
 describe("geração", () => {
