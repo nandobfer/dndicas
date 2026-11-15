@@ -37,10 +37,25 @@ export const CHECK_PART_CLASSES: Record<CalcPart["color"], string> = {
 /** Chip dos efeitos de teste (dado extra), fora das cores dos atributos. */
 const CHECK_EFFECT_CLASS = "bg-fuchsia-500/20 text-fuchsia-200 border border-fuchsia-500/30"
 
-/** d20 + os dados dos efeitos que entram (prévia ou rolados). */
-function checkEffectTerms(effects: readonly MaddoxCheckEffectEntry[]): DiceTerm[] {
-    return [{ dice: "d20", quantity: 1 }, ...effects.flatMap((entry) => {
-        const dice = entryDice(entry)
+/** Preset do painel com referência estável (o painel se reinicia quando o preset muda). */
+function useCheckPreset(title: string, termsKey: string, modifier: number, mode: DiceRollPreset["mode"]): DiceRollPreset {
+    return useMemo<DiceRollPreset>(() => ({ label: title, terms: checkEffectTerms(termsKey), modifier, mode, source: "sheet" }), [title, termsKey, modifier, mode])
+}
+
+/** Dados depois do d20 de um resultado recebido ("1d4"), para quem só assiste à rolagem. */
+function extraTermsKey(roll: DiceRollResponse | null): string | null {
+    if (!roll) return null
+    return roll.terms
+        .slice(1)
+        .map((term) => `${term.quantity}${term.dice}`)
+        .join("+")
+}
+
+/** d20 + os dados dos efeitos que entram (prévia ou rolados), a partir de "1d4+1d6". */
+function checkEffectTerms(effectsKey: string): DiceTerm[] {
+    const extra = effectsKey ? effectsKey.split("+") : []
+    return [{ dice: "d20", quantity: 1 }, ...extra.flatMap((text) => {
+        const dice = entryDice({ dice: text })
         return dice ? [{ dice: dice.die, quantity: dice.count }] : []
     })]
 }
@@ -88,12 +103,12 @@ export function GameCheckCard({ message, mine, color, replay, onRoll }: Props) {
     const effects = check.effects ?? []
     const activeEffects = effects.filter((entry) => entry.status !== "skipped")
     const skippedEffects = effects.filter((entry) => entry.status === "skipped")
-    const effectTerms = useMemo(() => checkEffectTerms(activeEffects), [activeEffects.map((entry) => entry.dice).join("+")]) // eslint-disable-line react-hooks/exhaustive-deps
-    const [frozenTerms, setFrozenTerms] = useState<DiceTerm[] | null>(null)
-    const replayTerms = useMemo<DiceTerm[] | null>(() => (replay && !pendingMine && !localRoll ? replay.terms.map((term) => ({ dice: term.dice, quantity: term.quantity })) : null), [replay, pendingMine, localRoll])
-    const presetTerms = frozenTerms ?? replayTerms ?? effectTerms
-    const presetKey = presetTerms.map((term) => `${term.quantity}${term.dice}`).join("+")
-    const preset = useMemo<DiceRollPreset>(() => ({ label: title, terms: presetTerms, modifier: presetModifier, mode: check.mode, source: "sheet" }), [title, presetKey, presetModifier, check.mode]) // eslint-disable-line react-hooks/exhaustive-deps
+    // Dados do painel por chave ("1d4+1d6", sem o d20): congelados no clique; quem assiste usa os do resultado recebido.
+    const effectsKey = activeEffects.map((entry) => entry.dice).join("+")
+    const [frozenTermsKey, setFrozenTermsKey] = useState<string | null>(null)
+    const replayKey = !pendingMine && !localRoll ? extraTermsKey(replay) : null
+    const termsKey = frozenTermsKey ?? replayKey ?? effectsKey
+    const preset = useCheckPreset(title, termsKey, presetModifier, check.mode)
     // A prévia do modificador depende da ficha: "Rolar" espera ela carregar.
     const sheetLoading = pendingMine && !localRoll && !sheet.data && !sheet.isError
 
@@ -185,7 +200,7 @@ export function GameCheckCard({ message, mine, color, replay, onRoll }: Props) {
                                     externalResult={pendingMine || localRoll ? null : replay}
                                     rollRequest={async () => {
                                         setFrozenModifier(presetModifier)
-                                        setFrozenTerms(presetTerms)
+                                        setFrozenTermsKey(termsKey)
                                         const result = await onRoll(message.id)
                                         setLocalRoll(result)
                                         return result
