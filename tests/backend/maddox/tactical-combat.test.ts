@@ -1390,6 +1390,32 @@ describe("DND-62 — a vez do combate nunca fica sem card", () => {
         expect(await MaddoxCampaignMessageModel.exists({ campaignId: id, kind: "narration", turnNumber: 3 })).toBeTruthy()
     })
 
+    it("a ordem de iniciativa fecha com a mesa já num turno de jogadores genérico: a vez abre sozinha com o card", async () => {
+        const { id, kael } = await scene()
+        await brokenTurn(id)
+        await MaddoxCombatModel.updateOne({ campaignId: id }, { $set: { "tactical.phase": "initiative", "tactical.round": 0 } })
+        expect(await tactical.finishInitiativeIfReady(new mongoose.Types.ObjectId(id), 2, 1)).toBe(true)
+        await vi.waitFor(async () => expect((await MaddoxCampaignModel.findById(id).lean())!.turn.combatActor).toMatchObject({ actorKey: kael.actorKey }))
+        expect((await game.getGameState(id, kael.userId)).me.combat!.myTurn).toBe(true)
+    })
+
+    it("a retomada falha (corrida no combate): a leitura da mesa responde, não avisa a mesa, e a leitura seguinte retoma", async () => {
+        const { id, kael } = await scene()
+        await brokenTurn(id)
+        const { publishToChannels } = await import("@/lib/pusher/channels")
+        vi.mocked(publishToChannels).mockClear()
+        const race = vi.spyOn(MaddoxCombatModel, "findOneAndUpdate").mockImplementationOnce((() => ({ lean: async () => null })) as never)
+        try {
+            const view = await game.getGameState(id, kael.userId)
+            expect(view.turn.combatActor).toBeNull()
+        } finally {
+            race.mockRestore()
+        }
+        expect((await MaddoxCampaignModel.findById(id).lean())!.turn).toMatchObject({ phase: "players", combatActor: null, generating: null })
+        expect(vi.mocked(publishToChannels)).not.toHaveBeenCalled()
+        expect((await game.getGameState(id, kael.userId)).me.combat!.myTurn).toBe(true)
+    })
+
     it("sem combate tático em andamento, o turno de jogadores comum fica como está", async () => {
         const { id, kael } = await scene()
         await brokenTurn(id)

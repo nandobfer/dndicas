@@ -2286,8 +2286,9 @@ mostrava "Vez dos adversários" sem card nem campo de texto.
   no lugar do turno genérico do fim da narração. Com o combate tático ainda em `initiative`, tenta fechar a ordem; senão o turno volta
   a `master` + `awaitingChecks` na rodada da iniciativa (`waitRound` do card de iniciativa) e nada é narrado — `afterPrepSettled` e o
   prazo do dado dos inimigos retomam pela troca condicional de sempre (`advanceAfterChecks`). Log
-  `[maddox] continuação adiada: a ordem de iniciativa ainda não fechou`. Com combate `running` e sem vez, o turno genérico só fica
-  como último recurso, com `log.error`.
+  `[maddox] continuação adiada: a ordem de iniciativa ainda não fechou`. Com combate `running` e sem vez aberta no fim da narração,
+  o turno genérico é proibido: `parkWithoutCombatTurn` solta a trava com `failedAt` (`log.error`) e `resumeMasterTurn` refaz o fim da
+  narração depois de `MADDOX_MASTER_RETRY_MS` (a narração gravada é reaproveitada).
 - **Fila na hora:** `advanceToNextCharacter` com `nextKey` nulo monta o `planQueue` agora (`preparedNow: true` no `OpenResult`):
   personagem primeiro = abre a vez dele (rodada nova só se a ordem voltou ao topo); adversário antes = `monsters` (novo turno do
   mestre com `queueTurn: null`, que prepara a fila e os blocos); `none` só sem personagem que possa agir.
@@ -2295,7 +2296,8 @@ mostrava "Vez dos adversários" sem card nem campo de texto.
   `turn.phase = players` + sem `combatActor` + sem `generating` (+ sem volta pendente), pega a trava por troca condicional e chama
   `openCombatTurn(…, "recovery")`; publica a mesa. Chamada em `getGameState` (`reason: "state"`), depois de toda ordem de iniciativa
   fechada (`finishInitiativeIfReady`, `"initiative"`, fire-and-forget) e pela ferramenta `resume_combat_turn` (`"question"`). Não usa a
-  fila de jobs (pode rodar dentro de um job).
+  fila de jobs (pode rodar dentro de um job). Só publica a mesa quando retomou; em `getGameState` a falha (ex.: `COMBAT_CHANGED`) vai
+  para o log e a leitura segue com o estado atual (a próxima leitura tenta de novo).
 - **Log da decisão:** `openCombatTurn` registra `[maddox] vez do combate` (ou `… não aberta`) com `source`, combate, rodada,
   `activeIndex`, `nextKey` de antes, `preparedNow`, `result` e `actorKey`; a retomada loga `combate tático sem vez aberta: retomando a vez`.
 - **Tela:** `combatTurnRecovering(state)` (`game-view.ts`) = combate `running`, turno dos jogadores, sem `combatActor` e sem Opex de
