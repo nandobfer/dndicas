@@ -618,6 +618,47 @@ describe("DND-70: XP de adversário fora do catálogo e XP no Pergunte ao mestre
         await expect(pendingCombatExperience(t.campaignId)).resolves.toEqual([])
     })
 
+    it("falha no meio da XP oficial em combate misto: a parte oficial devida sai junto e a da fera vale para todos (inclusive o creditado)", async () => {
+        const t = await table({ mode: "experiencia", rigor: "rigoroso" })
+        const goblin = new Types.ObjectId()
+        await mongoose.connection.collection("monsters").insertOne({ _id: goblin, name: "Goblin", challengeRating: "1/4", status: "active" })
+        const combat = await beastCombat(t, {
+            title: "Goblins e a besta",
+            combatants: [
+                { name: "Goblin", nameKey: "goblin", side: "inimigo", quantity: 2, outcome: "morto", tactical: { defeated: true, stats: { source: "catalog", monsterId: String(goblin) } } },
+                { name: "A besta da estrada sul", nameKey: "a besta", side: "inimigo", quantity: 1, outcome: "morto", tactical: { defeated: true, stats: { source: "custom", monsterId: null } } },
+            ],
+            tactical: { characters: t.members.map((member) => ({ characterId: String(member.characterId), name: member.name, left: false })) },
+        })
+        const original = CharacterSheet.collection.findOneAndUpdate.bind(CharacterSheet.collection)
+        let calls = 0
+        const spy = vi.spyOn(CharacterSheet.collection, "findOneAndUpdate").mockImplementation(((...args: Parameters<typeof original>) => {
+            calls += 1
+            if (calls === 2) return Promise.reject(new Error("falha transitória"))
+            return original(...args)
+        }) as never)
+        await expect(grantCombatExperience(t.campaignId, (await MaddoxCombatModel.findById(combat._id).lean())!, 34)).rejects.toThrow("falha transitória")
+        spy.mockRestore()
+        expect([await xpOf(t.members[0]!), await xpOf(t.members[1]!), await xpOf(t.members[2]!)]).toEqual([33, 0, 0])
+        expect((await MaddoxCombatModel.findById(combat._id).lean())!.experiencePending).toMatchObject({
+            adversaries: [{ name: "A besta da estrada sul", quantity: 1 }],
+            credited: ["Nala"],
+            owed: { characterIds: [String(t.members[1]!.characterId), String(t.members[2]!.characterId)], characterNames: ["Uther", "Vaelyra"], amount: 33 },
+        })
+        const { pendingCombatExperience } = await import("@/features/maddox/server/combat-experience")
+        const pending = await pendingCombatExperience(t.campaignId)
+        expect(pending).toEqual([expect.objectContaining({ characterNames: ["Nala", "Uther", "Vaelyra"], owed: expect.objectContaining({ amount: 33 }) })])
+        const { progressionTaskLines } = await import("@/features/maddox/server/narrator-prompt")
+        const lines = progressionTaskLines({ milestone: null, levelUps: [], pendingCombatXp: pending })!
+        expect(lines).toContain("A XP oficial que faltou para Uther, Vaelyra (33 XP cada) sai junto, automaticamente")
+        expect(lines).not.toContain("não conceda de novo")
+        await answer(t, (jobId) => runMaddoxTool(tool("grant_experience"), { campaignId: t.campaignId, turnNumber: 35, jobId }, { personagens: ["grupo"], valor: 30, motivo: "Besta comparável a ND 1/2.", combate: String(combat._id) }), 0, true)
+        expect([await xpOf(t.members[0]!), await xpOf(t.members[1]!), await xpOf(t.members[2]!)]).toEqual([63, 63, 63])
+        expect((await MaddoxCombatModel.findById(combat._id).lean())!.experienceResolved).toMatchObject({ amount: 30, total: 156 })
+        expect(await MaddoxCampaignMessageModel.countDocuments({ campaignId: t.campaignId, kind: "experience", "experience.combatId": combat._id, "experience.source": "combat", "experience.total": 66 })).toBe(1)
+        await expect(pendingCombatExperience(t.campaignId)).resolves.toEqual([])
+    })
+
     it("se nem a pendência grava, o claim perde a marca de processamento e o combate volta a ser pendência recuperável", async () => {
         const t = await table({ mode: "experiencia", rigor: "rigoroso" })
         const combat = await beastCombat(t)

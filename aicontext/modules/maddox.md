@@ -2275,7 +2275,10 @@ podia lançar a XP.
   `MADDOX_XP_PROCESSING_STALE_MS` (10 min) sem card e sem pendência também é pendência recuperável (`legacyBurned`).
 - **Falha no meio da XP oficial (revisão 3)**: com parte das fichas somada (`onSheetUpdated`) e parte não, a pendência leva todos os
   derrotados, `characterIds` = só quem ficou sem e `credited` = quem já recebeu; `pendingCombatExperience`/`draftGrant` concedem só
-  aos que faltam e a tarefa avisa o mestre para não conceder de novo aos creditados.
+  aos que faltam e a tarefa avisa o mestre para não conceder de novo aos creditados. Combate misto (há derrotado sem ND, revisão 4): a pendência
+  é dos sem ND para todos os participantes, e a parte oficial que faltou fica em `owed { characterIds, characterNames, amount }`
+  (valor da tabela); `resolveCombatExperience` a concede primeiro (card `source: "combat"`) e depois a estimativa do mestre, e a
+  tarefa diz que a oficial sai junto, automaticamente.
 - Testes: bloco DND-70 de `tests/backend/maddox/level-progression.test.ts` e o de `tests/frontend/maddox/level-up-cards.test.tsx`.
 
 ## Bônus de CA nomeados e CA no card "Na mesa" (DND-66)

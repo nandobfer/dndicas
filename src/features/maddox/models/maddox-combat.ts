@@ -102,6 +102,11 @@ export interface IMaddoxCombatExperiencePending {
     characterIds?: string[]
     /** Nomes de quem já recebeu a parte oficial antes da falha (a tarefa avisa o mestre). */
     credited?: string[]
+    /**
+     * Combate misto com falha no meio da XP oficial: a parte oficial que faltou (valor já calculado pela tabela) sai junto da
+     * resolução do mestre, só para estes personagens; o mestre estima só a dos adversários sem ND, para todos.
+     */
+    owed?: { characterIds: string[]; characterNames: string[]; amount: number } | null
 }
 
 export interface IMaddoxCombatExperienceResolved {

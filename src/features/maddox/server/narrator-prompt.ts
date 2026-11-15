@@ -404,7 +404,7 @@ export function progressionTaskLines(input: {
     milestone: { trigger: MaddoxMilestoneTrigger; reason: string } | null
     levelUps: readonly { characterName: string; toLevel: number }[]
     /** DND-70: combates com XP pendente (adversários fora do catálogo). */
-    pendingCombatXp?: readonly { combatId: string; title: string; adversaries: readonly { name: string; quantity: number }[]; characterNames: readonly string[]; credited?: readonly string[] }[]
+    pendingCombatXp?: readonly { combatId: string; title: string; adversaries: readonly { name: string; quantity: number }[]; characterNames: readonly string[]; credited?: readonly string[]; owed?: { characterNames: readonly string[]; amount: number } | null }[]
     /** Tarefa do "Pergunte ao mestre". */
     answer?: boolean
 }): string | null {
@@ -412,7 +412,7 @@ export function progressionTaskLines(input: {
     for (const combat of input.pendingCombatXp ?? []) {
         const adversaries = combat.adversaries.map((item) => `${item.name}${item.quantity > 1 ? ` (${item.quantity})` : ""}`).join(", ") || "os adversários derrotados"
         lines.push(
-            `- XP PENDENTE do combate "${combat.title}" (combate: \`${combat.combatId}\`): ${adversaries} não têm ND do catálogo. Estime a XP adequada pelo poder deles (tabela de XP por ND) e conceda com \`${MADDOX_PROGRESSION_TOOL_NAMES.grant}\` (personagens ["grupo"], o valor para cada personagem, a estimativa no motivo e \`combate\` com esse id). Participantes: ${combat.characterNames.join(", ") || "nenhum"}.${combat.credited?.length ? ` ${combat.credited.join(", ")} já recebeu a XP oficial deste combate: não conceda de novo (só os participantes acima).` : ""}${input.answer ? " Se a pergunta for sobre essa XP, conceda agora e explique a estimativa." : " Mencione a XP num trecho curto."}`,
+            `- XP PENDENTE do combate "${combat.title}" (combate: \`${combat.combatId}\`): ${adversaries} não têm ND do catálogo. Estime a XP adequada pelo poder deles (tabela de XP por ND) e conceda com \`${MADDOX_PROGRESSION_TOOL_NAMES.grant}\` (personagens ["grupo"], o valor para cada personagem, a estimativa no motivo e \`combate\` com esse id). Participantes: ${combat.characterNames.join(", ") || "nenhum"}.${combat.owed ? ` A XP oficial que faltou para ${combat.owed.characterNames.join(", ")} (${combat.owed.amount.toLocaleString("pt-BR")} XP cada) sai junto, automaticamente: estime só a dos adversários listados, para todos os participantes.` : combat.credited?.length ? ` ${combat.credited.join(", ")} já recebeu a XP oficial deste combate: não conceda de novo (só os participantes acima).` : ""}${input.answer ? " Se a pergunta for sobre essa XP, conceda agora e explique a estimativa." : " Mencione a XP num trecho curto."}`,
         )
     }
     if (input.milestone) lines.push(`- O marco de subida de nível foi atingido (${MADDOX_MILESTONE_TRIGGER_LABELS[input.milestone.trigger]}): ${input.milestone.reason} Declare a subida do grupo com \`${MADDOX_PROGRESSION_TOOL_NAMES.declare}\` nesta narração e narre o momento num trecho curto (fora de combate tático).`)

@@ -88,6 +88,7 @@ export async function grantCombatExperience(campaignId: Types.ObjectId, combat: 
     const allDefeated = () => combat.combatants.filter(defeated).map((combatant) => ({ name: combatant.name, quantity: quantityOf(combatant) }))
     const credited = new Set<string>()
     let breakdown: CombatExperienceBreakdown | null = null
+    let share = 0
     try {
         breakdown = await combatExperienceBreakdown(combat)
         const participants = participantsOf(combat)
@@ -99,7 +100,7 @@ export async function grantCombatExperience(campaignId: Types.ObjectId, combat: 
             log.info(context, "[maddox] combate encerrado sem personagem participante: sem XP")
             return none
         }
-        const share = Math.floor(breakdown.catalogXp / participants.length)
+        share = Math.floor(breakdown.catalogXp / participants.length)
         let granted = 0
         if (share > 0) {
             const result = await grantExperience(campaignId, participants.map((character) => ({ characterId: character.characterId, amount: share })), combatExperienceReason(combat), "combat", turnNumber, { combatId: combat._id, onSheetUpdated: (characterId) => credited.add(String(characterId)) })
@@ -116,11 +117,19 @@ export async function grantCombatExperience(campaignId: Types.ObjectId, combat: 
         const applied = credited.size
         const participants = participantsOf(combat)
         const remaining = participants.filter((character) => !credited.has(String(character.characterId)))
-        // Parte das fichas somada e parte não: quem ficou sem a parte oficial recebe pela pendência (todos os derrotados);
-        // quem já recebeu fica de fora. Todos somados: só os sem ND ficam pendentes.
+        // Parte das fichas somada e parte não. Só catálogo: quem ficou sem recebe pela pendência (todos os derrotados) e quem já
+        // recebeu fica de fora. Misto (há sem ND): a pendência é dos sem ND para TODOS, e a parte oficial que faltou fica
+        // devida (`owed`, valor da tabela) e sai junto da resolução do mestre. Todos somados: só os sem ND ficam pendentes.
         const partial = applied > 0 && remaining.length > 0
-        const pending = !applied || partial ? allDefeated() : (breakdown?.missing ?? [])
-        const extra = partial ? { characterIds: remaining.map((character) => String(character.characterId)), credited: participants.filter((character) => credited.has(String(character.characterId))).map((character) => character.name) } : {}
+        const missing = breakdown?.missing ?? []
+        const creditedNames = participants.filter((character) => credited.has(String(character.characterId))).map((character) => character.name)
+        const mixed = partial && missing.length > 0
+        const pending = !applied ? allDefeated() : partial && !mixed ? allDefeated() : missing
+        const extra = mixed
+            ? { credited: creditedNames, owed: { characterIds: remaining.map((character) => String(character.characterId)), characterNames: remaining.map((character) => character.name), amount: share } }
+            : partial
+              ? { characterIds: remaining.map((character) => String(character.characterId)), credited: creditedNames }
+              : {}
         log.error({ ...context, applied, pending: pending.map((item) => item.name), err: error instanceof Error ? error.message : String(error) }, "[maddox] XP do fim do combate falhou; o que faltou vira pendência para o mestre")
         if (pending.length) {
             try {
@@ -135,7 +144,7 @@ export async function grantCombatExperience(campaignId: Types.ObjectId, combat: 
     }
 }
 
-async function markExperiencePending(campaignId: Types.ObjectId, combat: IMaddoxCombat, adversaries: { name: string; quantity: number }[], turnNumber: number, extra: { characterIds?: string[]; credited?: string[] } = {}) {
+async function markExperiencePending(campaignId: Types.ObjectId, combat: IMaddoxCombat, adversaries: { name: string; quantity: number }[], turnNumber: number, extra: Partial<Pick<NonNullable<IMaddoxCombat["experiencePending"]>, "characterIds" | "credited" | "owed">> = {}) {
     await MaddoxCombatModel.updateOne({ _id: combat._id }, { $set: { experiencePending: { adversaries, turnNumber, at: new Date(), ...extra } } })
     await MaddoxCampaignMessageModel.create({
         campaignId,
@@ -162,6 +171,8 @@ export interface PendingCombatExperience {
     characterNames: string[]
     /** Já receberam a parte oficial antes de uma falha (não recebem de novo). */
     credited: string[]
+    /** Parte oficial devida (combate misto com falha no meio): sai automaticamente junto da resolução do mestre. */
+    owed: { characterIds: string[]; characterNames: string[]; amount: number } | null
     /** Combate encerrado antes da DND-70 sem XP gravada (a automação "queimou" o combate). */
     legacy: boolean
 }
@@ -172,6 +183,7 @@ const pendingOf = (combat: CombatRow, legacy: boolean): PendingCombatExperience 
     adversaries: legacy ? combat.combatants.filter(defeated).map((combatant) => ({ name: combatant.name, quantity: quantityOf(combatant) })) : (combat.experiencePending?.adversaries ?? []),
     ...receiversOf(combat, legacy),
     credited: legacy ? [] : (combat.experiencePending?.credited ?? []),
+    owed: legacy ? null : (combat.experiencePending?.owed ?? null),
     legacy,
 })
 
@@ -249,21 +261,29 @@ export async function resolveCombatExperience(campaignId: Types.ObjectId, grant:
     if (!grant.combatId || !Types.ObjectId.isValid(grant.combatId)) return 0
     const combatId = new Types.ObjectId(grant.combatId)
     const amount = grant.entries[0]?.amount ?? 0
-    const claimed = await MaddoxCombatModel.updateOne(
+    const claimed = await MaddoxCombatModel.findOneAndUpdate(
         { _id: combatId, campaignId, status: "ended", experienceResolved: null },
         { $set: { experienceGranted: true, experienceResolved: { by: "master", reason: grant.reason, amount, total: 0, messageId: null, at: new Date() } } },
-    )
-    if (!claimed.modifiedCount) {
+        { returnDocument: "before" },
+    ).lean<Pick<IMaddoxCombat, "title" | "experiencePending">>()
+    if (!claimed) {
         log.warn({ campaignId: String(campaignId), combatId: grant.combatId }, "[maddox] XP do combate já resolvida; concessão do mestre descartada")
         return 0
     }
     // Fichas já somadas antes de uma falha: a pendência NÃO volta (a próxima concessão duplicaria a XP de quem recebeu).
     const applied: { characterId: Types.ObjectId; amount: number }[] = []
+    const onSheetUpdated = (characterId: Types.ObjectId, value: number) => applied.push({ characterId, amount: value })
     try {
-        const result = await grantExperience(campaignId, grant.entries, grant.reason, "grant", turnNumber, { combatId, estimated: true, requestedBy: grant.requestedBy ?? null, onSheetUpdated: (characterId, value) => applied.push({ characterId, amount: value }) })
+        // A parte oficial que faltou (combate misto com falha no meio) sai primeiro, pelo valor da tabela, como XP de combate.
+        const owed = claimed.experiencePending?.owed
+        let owedTotal = 0
+        if (owed?.characterIds.length && owed.amount > 0) {
+            owedTotal = (await grantExperience(campaignId, owed.characterIds.map((characterId) => ({ characterId, amount: owed.amount })), combatExperienceReason(claimed), "combat", turnNumber, { combatId, onSheetUpdated })).total
+        }
+        const result = await grantExperience(campaignId, grant.entries, grant.reason, "grant", turnNumber, { combatId, estimated: true, requestedBy: grant.requestedBy ?? null, onSheetUpdated })
         if (!result.total) throw new Error("nenhum personagem recebeu XP")
-        await MaddoxCombatModel.updateOne({ _id: combatId }, { $set: { "experienceResolved.total": result.total, "experienceResolved.messageId": result.messageId } })
-        return result.total
+        await MaddoxCombatModel.updateOne({ _id: combatId }, { $set: { "experienceResolved.total": result.total + owedTotal, "experienceResolved.messageId": result.messageId } })
+        return result.total + owedTotal
     } catch (error) {
         if (!applied.length) {
             await MaddoxCombatModel.updateOne({ _id: combatId }, { $set: { experienceResolved: null } })
