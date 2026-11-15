@@ -57,7 +57,7 @@ export function GlobalSearchFAB({ embedded = false, onOpenChange }: GlobalSearch
   if (!embedded && pathname === "/") return null
 
   return (
-      <div className={embedded ? "relative" : "fixed bottom-6 right-6 z-[99]"} ref={containerRef}>
+      <div className={embedded ? "relative" : "fixed bottom-6 right-6 z-[45]"} ref={containerRef}>
           <AnimatePresence mode="popLayout" initial={false}>
               {!isOpen ? (
                   <motion.button

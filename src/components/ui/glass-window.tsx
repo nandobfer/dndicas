@@ -7,26 +7,19 @@ import { GlassCard } from "./glass-card"
 import { cn } from "@/core/utils"
 import { renderEntity } from "@/features/rules/components/entity-renderers"
 import type { EntityRenderOptions } from "@/features/rules/components/entity-renderers"
+import {
+    HEADER_FALLBACK_HEIGHT,
+    clampWindowPosition,
+    getHeaderBottom,
+    getMaxWindowHeight,
+    getWindowDragBounds,
+    type WindowDragBounds,
+} from "./glass-window-bounds"
 
 const MOBILE_BREAKPOINT = 768
 const MOBILE_MARGIN = 12
 const MOBILE_HEADER_HEIGHT = 64
 const MOBILE_TOP_MARGIN = MOBILE_HEADER_HEIGHT + MOBILE_MARGIN
-const DESKTOP_LEFT_BOUNDARY = 112
-
-const getDragConstraints = () => {
-    if (typeof window === "undefined") {
-        return { left: 0, right: 0, top: 0, bottom: 0 }
-    }
-
-    const edgeThreshold = 100
-    return {
-        left: DESKTOP_LEFT_BOUNDARY,
-        right: window.innerWidth - edgeThreshold,
-        top: 0,
-        bottom: window.innerHeight - 40,
-    }
-}
 
 interface GlassWindowProps {
     id: string
@@ -63,18 +56,30 @@ export function GlassWindow({
     minSize
 }: GlassWindowProps) {
     const dragControls = useDragControls()
-    const containerRef = React.useRef<HTMLDivElement>(null)
+    const windowRef = React.useRef<HTMLDivElement>(null)
     const [isMobile, setIsMobile] = React.useState(() => (
         typeof window !== "undefined" && window.innerWidth < MOBILE_BREAKPOINT
     ))
-    const normalizeDesktopPosition = React.useCallback((position: { x: number, y: number }) => ({
-        x: Math.max(DESKTOP_LEFT_BOUNDARY, position.x),
-        y: Math.max(0, position.y),
-    }), [])
-    const [pos, setPos] = React.useState({ 
-        x: Math.max(DESKTOP_LEFT_BOUNDARY, initialPosition?.x ?? DESKTOP_LEFT_BOUNDARY),
-        y: Math.max(0, initialPosition?.y ?? 50),
-    })
+    // Limites medidos: X de 0 até (tela − largura real da janela); Y travado no fim do header.
+    const [bounds, setBounds] = React.useState<WindowDragBounds>(() => getWindowDragBounds({
+        viewportWidth: typeof window === "undefined" ? 0 : window.innerWidth,
+        windowWidth: 0,
+        headerBottom: HEADER_FALLBACK_HEIGHT,
+    }))
+    const boundsRef = React.useRef(bounds)
+    boundsRef.current = bounds
+    const normalizeDesktopPosition = React.useCallback(
+        (position: { x: number, y: number }) => clampWindowPosition(position, boundsRef.current),
+        []
+    )
+    const [pos, setPos] = React.useState(() => clampWindowPosition(
+        { x: initialPosition?.x ?? 0, y: 0 },
+        bounds
+    ))
+    const posRef = React.useRef(pos)
+    posRef.current = pos
+    const onPositionChangeRef = React.useRef(onPositionChange)
+    onPositionChangeRef.current = onPositionChange
 
     React.useEffect(() => {
         if (typeof window === "undefined") return
@@ -104,17 +109,47 @@ export function GlassWindow({
     }))
     const [isResizing, setIsResizing] = React.useState(false)
     const isMobileMinimized = isMinimized && isMobile
-    // Constraints logic
-    const [constraints, setConstraints] = React.useState(getDragConstraints)
+    const isDesktopWindow = !isMinimized && !isMobile
 
-    const updateConstraints = React.useCallback(() => {
-        setConstraints(getDragConstraints())
+    const measureBounds = React.useCallback(() => {
+        if (typeof window === "undefined") return
+        // offsetWidth ignora o scale da animação de entrada; getBoundingClientRect mediria a janela encolhida.
+        const next = getWindowDragBounds({
+            viewportWidth: window.innerWidth,
+            windowWidth: windowRef.current?.offsetWidth ?? 0,
+            headerBottom: getHeaderBottom(),
+        })
+        setBounds((prev) => (
+            prev.left === next.left && prev.right === next.right && prev.top === next.top && prev.bottom === next.bottom
+                ? prev
+                : next
+        ))
     }, [])
 
+    React.useLayoutEffect(() => {
+        measureBounds()
+    }, [measureBounds, isMobile, isMinimized])
+
     React.useEffect(() => {
-        window.addEventListener("resize", updateConstraints)
-        return () => window.removeEventListener("resize", updateConstraints)
-    }, [updateConstraints])
+        window.addEventListener("resize", measureBounds)
+        const element = windowRef.current
+        const observer = element && typeof ResizeObserver !== "undefined" ? new ResizeObserver(() => measureBounds()) : null
+        if (element) observer?.observe(element)
+        return () => {
+            window.removeEventListener("resize", measureBounds)
+            observer?.disconnect()
+        }
+    }, [measureBounds])
+
+    // A tela ou a janela mudou de tamanho: traz a janela de volta para dentro dos limites e grava a posição corrigida.
+    React.useEffect(() => {
+        if (!isDesktopWindow) return
+        const current = posRef.current
+        const next = clampWindowPosition(current, bounds)
+        if (next.x === current.x && next.y === current.y) return
+        setPos(next)
+        onPositionChangeRef.current?.(next)
+    }, [bounds, isDesktopWindow])
     const handleResize = (e: React.PointerEvent, corner: "br" | "bl" = "br") => {
         e.stopPropagation()
         e.preventDefault() // Prevent text selection
@@ -128,11 +163,13 @@ export function GlassWindow({
         const startX = e.clientX
         const startY = e.clientY
         const startPosX = pos.x
+        let lastPosX = startPosX
         
-        // Get current pixel size if auto
-        const rect = containerRef.current?.parentElement?.parentElement?.getBoundingClientRect()
-        const startWidth = rect?.width || 450
-        const startHeight = rect?.height || 300
+        // offsetWidth/offsetHeight dão o tamanho real em px mesmo quando o tamanho é "auto" ou em vw/vh.
+        const startWidth = windowRef.current?.offsetWidth || 450
+        const startHeight = windowRef.current?.offsetHeight || 300
+        const viewportWidth = window.innerWidth
+        const maxHeight = Math.max(0, window.innerHeight - bounds.top)
 
         const onPointerMove = (moveEvent: PointerEvent) => {
             const minW = minSize?.width ?? 150
@@ -142,19 +179,21 @@ export function GlassWindow({
             let newPosX = startPosX
             
             if (corner === "br") {
-                newWidth = Math.max(minW, startWidth + (moveEvent.clientX - startX))
+                // A borda direita não passa da tela.
+                const maxWidth = Math.max(minW, viewportWidth - startPosX)
+                newWidth = Math.max(minW, Math.min(startWidth + (moveEvent.clientX - startX), maxWidth))
             } else if (corner === "bl") {
-                const deltaX = moveEvent.clientX - startX
-                newWidth = Math.max(minW, startWidth - deltaX)
-                if (startWidth - deltaX >= minW) {
-                    newPosX = startPosX + deltaX
-                }
+                // A borda direita fica parada; a esquerda vai no máximo até x = 0 e a largura não fica abaixo do mínimo.
+                const deltaX = Math.min(Math.max(moveEvent.clientX - startX, -startPosX), Math.max(0, startWidth - minW))
+                newWidth = startWidth - deltaX
+                newPosX = startPosX + deltaX
             }
             
-            const newHeight = Math.max(minH, startHeight + (moveEvent.clientY - startY))
+            const newHeight = Math.max(minH, Math.min(startHeight + (moveEvent.clientY - startY), maxHeight))
             
             setSize({ width: newWidth, height: newHeight })
             if (corner === "bl") {
+                lastPosX = newPosX
                 setPos(prev => ({ ...prev, x: newPosX }))
             }
         }
@@ -165,6 +204,10 @@ export function GlassWindow({
             document.body.style.cursor = ''
             document.removeEventListener("pointermove", onPointerMove)
             document.removeEventListener("pointerup", onPointerUp)
+            if (corner === "bl" && lastPosX !== startPosX) {
+                onPositionChangeRef.current?.(clampWindowPosition({ x: lastPosX, y: 0 }, boundsRef.current))
+            }
+            measureBounds()
         }
 
         document.addEventListener("pointermove", onPointerMove)
@@ -173,11 +216,13 @@ export function GlassWindow({
 
     return (
         <motion.div
-            drag={!isMinimized && !isMobile}
+            ref={windowRef}
+            data-glass-window
+            drag={isDesktopWindow ? "x" : false}
             dragControls={dragControls}
             dragListener={false}
             dragMomentum={false}
-            dragConstraints={constraints}
+            dragConstraints={bounds}
             dragElastic={0}
             onDragStart={() => {
                 onFocus()
@@ -187,14 +232,8 @@ export function GlassWindow({
                 document.body.style.userSelect = ""
                 if (isMobile) return
                 
-                // Calculate final position relative to total offset since drag start
-                const rawX = pos.x + info.offset.x
-                const rawY = pos.y + info.offset.y
-                
-                // Clamp against constraints
-                const clampedX = Math.max(constraints.left, Math.min(rawX, constraints.right))
-                const clampedY = Math.max(constraints.top, Math.min(rawY, constraints.bottom))
-                const finalPos = { x: clampedX, y: clampedY }
+                // Só o X se move; o Y fica travado no fim do header.
+                const finalPos = clampWindowPosition({ x: pos.x + info.offset.x, y: 0 }, bounds)
 
                 setPos(finalPos) // Update local UI
                 if (!isMinimized && onPositionChange) {
@@ -205,7 +244,7 @@ export function GlassWindow({
                 scale: 0, 
                 opacity: 0, 
                 x: isMobile ? MOBILE_MARGIN : pos.x,
-                y: isMobile ? MOBILE_TOP_MARGIN : pos.y,
+                y: isMobile ? MOBILE_TOP_MARGIN : bounds.top,
             }}
             animate={isMinimized ? { 
                 scale: 1, 
@@ -220,7 +259,7 @@ export function GlassWindow({
                 width: isMobile ? `calc(100vw - ${MOBILE_MARGIN * 2}px)` : size.width,
                 height: isMobile ? `calc(100dvh - ${MOBILE_TOP_MARGIN + MOBILE_MARGIN}px)` : size.height,
                 x: isMobile ? MOBILE_MARGIN : pos.x,
-                y: isMobile ? MOBILE_TOP_MARGIN : pos.y,
+                y: isMobile ? MOBILE_TOP_MARGIN : bounds.top,
             }}
             exit={{ scale: 0, opacity: 0 }}
             transition={{ 
@@ -232,7 +271,7 @@ export function GlassWindow({
                 zIndex, 
                 position: isMinimized ? "static" : "absolute",
                 maxWidth: isMobileMinimized ? "150px" : isMinimized ? "fit-content" : isMobile ? `calc(100vw - ${MOBILE_MARGIN * 2}px)` : "90vw",
-                maxHeight: isMobileMinimized ? "32px" : isMinimized ? "40px" : isMobile ? `calc(100dvh - ${MOBILE_TOP_MARGIN + MOBILE_MARGIN}px)` : "90vh",
+                maxHeight: isMobileMinimized ? "32px" : isMinimized ? "40px" : isMobile ? `calc(100dvh - ${MOBILE_TOP_MARGIN + MOBILE_MARGIN}px)` : getMaxWindowHeight(bounds.top),
                 pointerEvents: "auto",
                 userSelect: isResizing ? 'none' : 'auto'
             }}
@@ -294,7 +333,6 @@ export function GlassWindow({
                 {/* Content */}
                 {!isMinimized && (
                     <div 
-                        ref={containerRef}
                         className="p-4 flex-1 overflow-y-auto glass-scrollbar pointer-events-auto"
                     >
                         <div className="h-full" onPointerDown={(e) => e.stopPropagation()}>

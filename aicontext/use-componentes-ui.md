@@ -647,7 +647,7 @@ breadcrumb no header.
 
 ### Botões flutuantes (`src/features/dice-roller/components/global-fab-group.tsx`)
 
-- Grupo fixo no canto inferior direito (`fixed bottom-6 right-6 z-[99]`), em linha a partir de `sm` e em
+- Grupo fixo no canto inferior direito (`fixed bottom-6 right-6 z-[45]`, abaixo das janelas glass desde DND-68), em linha a partir de `sm` e em
   coluna abaixo. Ordem padrão: **Dados → Agente Opex (`OpexFab`) → Busca**.
 - Reordenável por arraste (`@dnd-kit`): `MouseSensor` só ativa após 6px e `TouchSensor` após segurar 250ms
   (tolerância 8px), então clique e rolagem não viram arraste; o clique que encerra um arraste é engolido.
@@ -660,6 +660,31 @@ breadcrumb no header.
 - Botões ocultos não ocupam espaço e os demais mantêm a ordem salva entre si (`moveFab`): a **Busca** não
   aparece no Início, **Dados** não aparece no Owlbear (SDK disponível ou catálogo embutido) e o **Agente Opex**
   some quando não está liberado (`useOpexFabEnabled`). Um botão que reaparece volta à posição salva.
+
+### Janelas glass (`GlassWindow` + `WindowProvider`, DND-68)
+
+- **Camadas:** header `z-40` < FABs (`global-fab-group`, `global-search-fab`) `z-[45]` < janelas e barra de
+  minimizadas `z-[48]` (`WINDOWS_LAYER_Z` em `src/components/ui/glass-window-bounds.ts`) < popovers, selects,
+  dropdowns, tooltips e modais (`z-50` ou mais, via portal). Assim a janela fica por cima do header e dos FABs (o X
+  e o minimizar sempre clicáveis) e o que abre de dentro dela continua por cima. Não suba a camada das janelas
+  para `z-50` ou mais: os overlays abertos de dentro da janela passariam a ficar atrás dela. Também não suba os
+  FABs acima de `z-[48]`.
+- O container (`data-testid="glass-windows-layer"`) é `pointer-events-none` e não tem `overflow-hidden` (a sombra
+  não é cortada nas bordas); a janela tem `pointer-events: auto`. A barra de minimizadas
+  (`data-testid="glass-windows-taskbar"`) começa na borda esquerda também no desktop (o recuo da antiga sidebar
+  saiu).
+- **Limites no desktop** (`glass-window-bounds.ts`, funções puras): X de `0` até `largura da tela − largura real da
+  janela` (`offsetWidth`, que ignora o scale da animação de entrada); **Y travado** no fim do header
+  (`[data-app-header]`, 64 px sem header). O arraste é só horizontal (`drag="x"`). Os limites são medidos de
+  novo no `resize` da tela, quando a janela muda de tamanho (`ResizeObserver`) e ao fim do redimensionamento
+  manual; se a janela ficar fora, o X é corrigido e gravado (`updatePosition`/`lastPosition`). Reabrir ou restaurar
+  a janela passa pela mesma correção. A altura máxima é `calc(100dvh − fim do header)`.
+- **Redimensionamento:** o canto inferior-direito não passa da borda direita; o inferior-esquerdo mantém a borda
+  direita parada e leva o X no máximo até 0; a altura não passa da parte de baixo da tela.
+- **Mobile** (< 768 px) não mudou: a janela ocupa a largura abaixo do header, sem arraste.
+- Testes: `tests/frontend/components/glass-window-bounds.test.ts` e `glass-window.test.tsx`. Eles verificam as
+  regras e as classes, mas não o leiaute real; a conferência no navegador (bordas, sombra, sobreposição com header e
+  FABs) é manual.
 
 ## Abas e seletores (regra obrigatória)
 
