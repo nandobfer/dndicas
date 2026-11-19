@@ -21,7 +21,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     // Catálogo aberto dentro da extensão do Owlbear: só o conteúdo, sem header nem rodapé.
     const isOwlbearCatalogEmbed = useIsOwlbearCatalogEmbed()
     // A mesa da campanha Maddox ocupa a área útil inteira: sem rodapé (o header continua).
-    const hideFooter = isOwlbearCatalogEmbed || isMaddoxGamePath(usePathname())
+    const pathname = usePathname()
+    const hideFooter = isOwlbearCatalogEmbed || isMaddoxGamePath(pathname)
 
     return (
         <OpexScopeProvider>
