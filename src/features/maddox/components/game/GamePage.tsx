@@ -22,6 +22,8 @@ import type { MaddoxCombatActionInput } from "../../combat-schemas"
 import { useCancelCombatAction, useChooseSneakAttack, useDecideReaction, useEndCombatTurn, useRequestCombatAdjustment, useAnswerCombatPrep, useRestartCombatPrep, useRetryCombatPrep, useRollCombatStep, useSkipCombatPrep, useSubmitCombatAction } from "../../hooks/useMaddoxCombat"
 import { CombatActionBar, CombatWaitBar } from "./combat/CombatActionBar"
 import { CombatPrepBlockedNotice, CombatPrepStalledNotice } from "./combat/CombatCards"
+import { useNow } from "./combat/CombatantStatus"
+import { stalledCombatPreps } from "../../combat-prep-stall"
 import {
     fetchOlderGameMessages,
     useMaddoxGame,
@@ -136,6 +138,9 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
     const levelUps = useGameLevelUps(state.campaignId, state.me.levelUps)
     const [combatInvalid, setCombatInvalid] = useState<string | null>(null)
     const tactical = state.combat?.tactical ?? null
+    // DND-75: o aviso de preparação parada sai do relógio da tela (a mesa não é relida quando o limite passa).
+    const prepClock = useNow(15_000, Boolean(tactical?.order.some((slot) => slot.prep?.status === "preparing")))
+    const stalledPreps = tactical ? stalledCombatPreps(tactical.order, prepClock) : []
     const skip = useSkipMaddoxPlayer(state.campaignId)
     const opexActions = useMaddoxOpexTableActions(state.campaignId)
     const rollCheck = useRollMaddoxCheck(state.campaignId)
@@ -355,10 +360,10 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
                                 />
                             ) : (
                                 <>
-                                    {tactical.preparation && (tactical.preparation.blocked || Boolean(tactical.preparation.stalled?.length)) && (
+                                    {tactical.preparation && (tactical.preparation.blocked || stalledPreps.length > 0) && (
                                         <div className="space-y-1.5 border-t px-4 pt-3">
                                             <CombatPrepBlockedNotice preparation={tactical.preparation} isOwner={state.me.isOwner} retrying={prepRetry.isPending} skipping={prepSkip.isPending} onRetry={(prepId) => prepRetry.mutate(prepId)} onSkip={(prepId) => prepSkip.mutate(prepId)} />
-                                            <CombatPrepStalledNotice preparation={tactical.preparation} isOwner={state.me.isOwner} restarting={prepRestart.isPending} skipping={prepSkip.isPending} onRestart={(prepId) => prepRestart.mutate(prepId)} onSkip={(prepId) => prepSkip.mutate(prepId)} />
+                                            <CombatPrepStalledNotice stalled={stalledPreps} now={prepClock} isOwner={state.me.isOwner} restarting={prepRestart.isPending} skipping={prepSkip.isPending} onRestart={(prepId) => prepRestart.mutate(prepId)} onSkip={(prepId) => prepSkip.mutate(prepId)} />
                                         </div>
                                     )}
                                     <CombatWaitBar combat={tactical} isOwner={state.me.isOwner} recovering={recoveringCombatTurn} canAsk={questionBlock === null} onAsk={() => setAsking((value) => !value)} />

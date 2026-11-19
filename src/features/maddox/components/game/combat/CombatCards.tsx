@@ -18,8 +18,7 @@ import { MADDOX_CHECK_DIE_HIDE_MS, MADDOX_COMBAT_ADJUST_TEXT_MAX, MADDOX_MASTER_
 import type { MaddoxCombatPreparationDto, MaddoxGameCombatEventDto, MaddoxGameMessageDto } from "../../../game-types"
 import { MemberAvatar, OpexChip, RarityChip } from "../../campaigns/campaign-visuals"
 import { COMBAT_COLOR } from "../GameCombatCard"
-import { prepElapsedLabel } from "../../../combat-prep-stall"
-import { useNow } from "./CombatantStatus"
+import { prepElapsedLabel, type StalledCombatPrep } from "../../../combat-prep-stall"
 import { ReplayDie } from "./ReplayDie"
 import { ECONOMY_COLORS, ECONOMY_LABELS, HP_BAND_COLORS, attackFumbled } from "./combat-visuals"
 import { useHeldRoll, type HeldRoll } from "./use-held-roll"
@@ -615,13 +614,11 @@ function CombatPrepQuestionCard({ characterName, question, busy, onAnswer }: { c
 }
 
 /**
- * DND-75: preparação parada ("Preparando…"/"Aguardando" além de `MADDOX_COMBAT_PREP_STALL_NOTICE_MS`, decidido no
- * servidor). O dono reinicia ou segue sem ela (com confirmação); os demais só veem que está demorando.
+ * DND-75: preparação parada ("Preparando…" além de `MADDOX_COMBAT_PREP_STALL_NOTICE_MS`, `stalledCombatPreps` com o relógio da
+ * tela). O dono reinicia ou segue sem ela (com confirmação); os demais só veem que está demorando.
  */
-export function CombatPrepStalledNotice({ preparation, isOwner, restarting, skipping, onRestart, onSkip }: { preparation: MaddoxCombatPreparationDto; isOwner: boolean; restarting: boolean; skipping: boolean; onRestart: (prepId: string) => void; onSkip: (prepId: string) => void }) {
+export function CombatPrepStalledNotice({ stalled, now, isOwner, restarting, skipping, onRestart, onSkip }: { stalled: readonly StalledCombatPrep[]; now: number; isOwner: boolean; restarting: boolean; skipping: boolean; onRestart: (prepId: string) => void; onSkip: (prepId: string) => void }) {
     const [confirming, setConfirming] = useState<{ prepId: string; characterName: string } | null>(null)
-    const stalled = preparation.stalled ?? []
-    const now = useNow(30_000, stalled.length > 0)
     if (!stalled.length) return null
     if (!isOwner) {
         return (

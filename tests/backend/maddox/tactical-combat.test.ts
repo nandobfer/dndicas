@@ -1067,7 +1067,7 @@ describe("DND-41 — a ordem de iniciativa espera a preparação da mesa", () =>
         const player = await game.getGameState(id, lyra.userId)
         expect(player.combat!.tactical!.preparation).toMatchObject({ blocked: true, failures: [] })
         expect(JSON.stringify(player)).not.toContain("PROVEDOR-SECRETO-123")
-        expect(player.combat!.tactical!.order.find((slot) => slot.name === "Lyra")!.prep).toEqual({ status: "failed" })
+        expect(player.combat!.tactical!.order.find((slot) => slot.name === "Lyra")!.prep).toEqual({ status: "failed", prepId: String(failed._id) })
         // Só o dono decide.
         await expect(combatPrep.retryCombatPrep(id, String(failed._id), lyra.userId)).rejects.toMatchObject({ code: "OWNER_ONLY" })
         await expect(combatPrep.skipCombatPrep(id, String(failed._id), lyra.userId)).rejects.toMatchObject({ code: "OWNER_ONLY" })
@@ -1200,7 +1200,7 @@ describe("DND-51 — a preparação pergunta ao jogador quando falta uma escolha
         expect((await CharacterSheet.findById(lyra.sheetId).lean<{ spellcastingAttribute?: string | null }>())!.spellcastingAttribute ?? null).toBeNull()
         expect((await MaddoxCombatModel.findOne({ campaignId: id }).lean())!.tactical!.phase).toBe("initiative")
         const state = await game.getGameState(id, lyra.userId)
-        expect(state.combat!.tactical!.order.find((slot) => slot.name === "Lyra")!.prep).toEqual({ status: "asking" })
+        expect(state.combat!.tactical!.order.find((slot) => slot.name === "Lyra")!.prep).toEqual({ status: "asking", prepId: String(prep._id) })
         const card = state.messages.find((message) => message.kind === "combat-prep")!
         expect(card.combatPrep!.question).toMatchObject({ prepId: String(prep._id), status: "awaiting", answer: null })
         // Só o jogador do personagem responde.
@@ -2340,30 +2340,78 @@ describe("DND-75 — preparação presa: retomada automática, vigia e ações d
         expect((await MaddoxCombatPrepModel.findById(running._id).lean())!.status).toBe("failed")
     })
 
-    it("parada: todos veem o aviso com o tempo; só o dono reinicia ou segue sem ela (com auditoria)", async () => {
-        const { id, kael, lyra, hold } = await heldScene()
-        const [running, pending] = await prepsOf(id)
+    /** A primeira passada de Kael fica presa e, quando solta, traz uma mudança na ficha (Destreza 12 → 16); as demais, nada. */
+    const staleSheetReview = () => {
+        const hold = deferred()
+        let kaelCalls = 0
+        combatPrepAi.review.mockImplementation(async (input) => {
+            if (input.characterName !== "Kael" || ++kaelCalls > 1) return { sheetChanges: [], modify: [], remove: [], add: [] }
+            readRule(input)
+            await hold.gate
+            return { sheetChanges: [{ type: "ability", attribute: "dexterity", value: 16, reason: "Passada antiga.", source: RULE }], modify: [], remove: [], add: [] }
+        })
+        return hold
+    }
+    const staleScene = async () => {
+        const hold = staleSheetReview()
+        const scene = await initiativeScene(null, { waitPreps: false })
+        await rollInitiatives(scene.id, { kael: scene.kael, lyra: scene.lyra }, scene.cardOf)
+        await new Promise((resolve) => setTimeout(resolve, 60))
+        const [running, pending] = await prepsOf(scene.id)
+        expect([running.characterName, running.status, pending.status]).toEqual(["Kael", "running", "pending"])
+        return { ...scene, hold, running, pending }
+    }
+    const dexterityOf = async (sheetId: string) => (await CharacterSheet.findById(sheetId).lean<{ dexterity: number }>())!.dexterity
+
+    it("parada: o slot traz o id e o início; a que só espera na fila não conta; só o dono reinicia, sem a execução antiga tocar a ficha", async () => {
+        const { id, kael, lyra, hold, running, pending } = await staleScene()
         const old = new Date(Date.now() - 4 * 60_000)
         await MaddoxCombatPrepModel.collection.updateOne({ _id: running._id }, { $set: { startedAt: old } })
         await MaddoxCombatPrepModel.collection.updateOne({ _id: pending._id }, { $set: { updatedAt: old } })
-        const player = await game.getGameState(id, lyra.userId)
-        expect(player.combat!.tactical!.preparation!.stalled).toEqual([
-            { prepId: String(running._id), characterName: running.characterName, status: "preparing", since: old.toISOString() },
-            { prepId: String(pending._id), characterName: pending.characterName, status: "waiting", since: old.toISOString() },
-        ])
-        expect(player.combat!.tactical!.order.find((slot) => slot.name === running.characterName)!.prep).toEqual({ status: "preparing", since: old.toISOString() })
+        const order = (await game.getGameState(id, lyra.userId)).combat!.tactical!.order
+        expect(order.find((slot) => slot.name === "Kael")!.prep).toEqual({ status: "preparing", prepId: String(running._id), since: old.toISOString() })
+        expect(order.find((slot) => slot.name === "Lyra")!.prep).toEqual({ status: "waiting", prepId: String(pending._id) })
+        // Fila longa não é alarme: a que espera não é "parada" (nem reinicia nem é pulada).
+        await expect(combatPrep.restartCombatPrep(id, String(pending._id), kael.userId)).rejects.toMatchObject({ code: "PREP_NOT_STALLED" })
+        await expect(combatPrep.skipCombatPrep(id, String(pending._id), kael.userId)).rejects.toMatchObject({ code: "PREP_NOT_FAILED" })
         await expect(combatPrep.restartCombatPrep(id, String(running._id), lyra.userId)).rejects.toMatchObject({ code: "OWNER_ONLY" })
         await combatPrep.restartCombatPrep(id, String(running._id), kael.userId)
-        const restarted = await MaddoxCombatPrepModel.findById(running._id).lean()
-        expect([restarted!.status, restarted!.startedAt]).toEqual(["pending", null])
-        // Recém-reiniciada, não está mais parada.
         await expect(combatPrep.restartCombatPrep(id, String(running._id), kael.userId)).rejects.toMatchObject({ code: "PREP_NOT_STALLED" })
-        await combatPrep.skipCombatPrep(id, String(pending._id), kael.userId)
-        expect((await MaddoxCombatPrepModel.findById(pending._id).lean())!.status).toBe("skipped")
-        const decisions = vi.mocked(recordAudit).mock.calls.map(([input]) => (input.depois as { decision?: string } | undefined)?.decision)
-        expect(decisions).toEqual(expect.arrayContaining(["restart", "skip"]))
-        await finish(id, hold)
-        expect((await MaddoxCombatPrepModel.findById(running._id).lean())!.status).toBe("ready")
+        // A execução antiga foi interrompida: a fila andou sem soltar a IA presa, e a nova passada concluiu.
+        await combatPrep.waitForCombatPreps()
+        await settleCampaign(id)
+        expect((await prepsOf(id)).map((prep) => prep.status)).toEqual(["ready", "ready"])
         expect((await MaddoxCombatModel.findOne({ campaignId: id }).lean())!.tactical!.phase).toBe("running")
+        // A IA antiga responde depois, com mudança na ficha: nada é gravado.
+        hold.release()
+        await new Promise((resolve) => setTimeout(resolve, 60))
+        await combatPrep.waitForCombatPreps()
+        expect(await dexterityOf(kael.sheetId)).toBe(12)
+        expect((await MaddoxCombatPrepModel.findById(running._id).lean())!.changes).toEqual([])
+        expect(vi.mocked(recordAudit).mock.calls.some(([input]) => (input.depois as { decision?: string } | undefined)?.decision === "restart")).toBe(true)
     })
+
+    it('"Seguir sem preparação" na parada interrompe a execução antiga, que não grava na ficha', async () => {
+        const skipped = await staleScene()
+        await MaddoxCombatPrepModel.collection.updateOne({ _id: skipped.running._id }, { $set: { startedAt: new Date(Date.now() - 4 * 60_000) } })
+        await combatPrep.skipCombatPrep(skipped.id, String(skipped.running._id), skipped.kael.userId)
+        await combatPrep.waitForCombatPreps()
+        await settleCampaign(skipped.id)
+        skipped.hold.release()
+        await new Promise((resolve) => setTimeout(resolve, 60))
+        expect((await MaddoxCombatPrepModel.findById(skipped.running._id).lean())!.status).toBe("skipped")
+        expect(await dexterityOf(skipped.kael.sheetId)).toBe(12)
+    })
+
+    it("o vigia interrompe a execução antiga além do teto: falha para o dono e nada gravado na ficha", async () => {
+        const expired = await staleScene()
+        await MaddoxCombatPrepModel.updateOne({ _id: expired.running._id }, { $set: { startedAt: new Date(Date.now() - MADDOX_COMBAT_PREP_HARD_LIMIT_MS - 1_000) } })
+        expect(await combatPrep.expireOverdueCombatPreps()).toBe(1)
+        expired.hold.release()
+        await new Promise((resolve) => setTimeout(resolve, 60))
+        await combatPrep.waitForCombatPreps()
+        await settleCampaign(expired.id)
+        expect((await MaddoxCombatPrepModel.findById(expired.running._id).lean())!.status).toBe("failed")
+        expect(await dexterityOf(expired.kael.sheetId)).toBe(12)
+    }, 20_000)
 })

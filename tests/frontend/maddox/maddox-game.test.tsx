@@ -1338,6 +1338,31 @@ describe("mesa Maddox — preparação do combate (DND-41)", () => {
         await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns/c1/game/combat/preps/p2/retry", {}))
     })
 
+    it("DND-75: preparação parada (pelo relógio da tela, sem falha) — o dono vê o aviso e \"Reiniciar preparação\" chama a rota", async () => {
+        const since = new Date(Date.now() - 4 * 60_000).toISOString()
+        const stuck = { ...blocked, order: [slot("pc:kael", "Kael", "m1", { prep: { status: "preparing" as const, prepId: "p1", since } }), slot("pc:lyra", "Lyra", "m2", { prep: { status: "waiting" as const, prepId: "p2" } }), slot("npc:g", "Goblin", null)], preparation: { active: true, blocked: false, failures: [] } }
+        post.mockResolvedValue(ok(combatState(stuck)))
+        await renderGame(combatState(stuck))
+        expect(screen.queryByTestId("combat-prep-failures")).not.toBeInTheDocument()
+        const notice = screen.getByTestId("combat-prep-stalled")
+        expect(within(notice).getAllByTestId("combat-prep-stalled-item")).toHaveLength(1)
+        expect(notice).toHaveTextContent("A preparação da mesa de Kael está parada há 4 min.")
+        await act(async () => fireEvent.click(within(notice).getByRole("button", { name: "Reiniciar preparação" })))
+        await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns/c1/game/combat/preps/p1/restart", {}))
+        expect(post).not.toHaveBeenCalledWith("/maddox/campaigns/c1/game/combat/preps/p1/retry", {})
+    })
+
+    it("DND-75: preparação recente não mostra aviso; quem não é dono vê só que está demorando", async () => {
+        const recent = { ...blocked, order: [slot("pc:kael", "Kael", "m1", { prep: { status: "preparing" as const, prepId: "p1", since: new Date(Date.now() - 30_000).toISOString() } })], preparation: { active: true, blocked: false, failures: [] } }
+        const view = await renderGame(combatState(recent))
+        expect(screen.queryByTestId("combat-prep-stalled")).not.toBeInTheDocument()
+        view.unmount()
+        const old = { ...recent, order: [slot("pc:kael", "Kael", "m1", { prep: { status: "preparing" as const, prepId: "p1", since: new Date(Date.now() - 5 * 60_000).toISOString() } })] }
+        await renderGame(combatState(old, { isOwner: false, memberId: "m2" }))
+        expect(screen.getByTestId("combat-prep-stalled-waiting")).toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: "Reiniciar preparação" })).not.toBeInTheDocument()
+    })
+
     it("quem não é dono vê só o aviso de espera, sem os botões", async () => {
         await renderGame(combatState({ ...blocked, preparation: { active: true, blocked: true, failures: [] } }, { isOwner: false, memberId: "m2" }))
         expect(screen.getByTestId("combat-prep-waiting-owner")).toHaveTextContent("Aguardando o dono da campanha")

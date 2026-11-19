@@ -28,9 +28,9 @@ export function useNow(intervalMs: number, enabled = true): number {
 
 const sinceTime = (since: string) => new Date(since).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
 
-/** DND-41: selo da preparação da mesa de um personagem. DND-75: "Preparando…"/"Aguardando" mostra há quanto tempo. */
+/** DND-41: selo da preparação da mesa de um personagem. DND-75: "Preparando…" mostra há quanto tempo. */
 export function PrepSeal({ prep }: { prep: MaddoxCombatPrepSlotDto }) {
-    const timed = (prep.status === "preparing" || prep.status === "waiting") && Boolean(prep.since)
+    const timed = prep.status === "preparing" && Boolean(prep.since)
     const now = useNow(30_000, timed)
     const Icon = prep.status === "ready" ? Check : prep.status === "failed" ? AlertTriangle : prep.status === "preparing" ? Loader2 : Clock
     const elapsed = timed ? prepElapsedLabel(prep.since, now) : null
@@ -45,7 +45,7 @@ export function PrepSeal({ prep }: { prep: MaddoxCombatPrepSlotDto }) {
     if (!timed || !prep.since) return seal
     return (
         <GlassTooltipProvider>
-            <SimpleGlassTooltip content={`${prep.status === "preparing" ? "Preparando" : "Aguardando"} desde ${sinceTime(prep.since)}`}>{seal}</SimpleGlassTooltip>
+            <SimpleGlassTooltip content={`Preparando desde ${sinceTime(prep.since)}`}>{seal}</SimpleGlassTooltip>
         </GlassTooltipProvider>
     )
 }

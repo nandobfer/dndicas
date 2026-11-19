@@ -245,10 +245,10 @@ describe("DND-51 — a preparação pergunta ao jogador e a correção aparece n
 describe("DND-75 — preparação parada: tempo no selo e ações do dono", () => {
     const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString()
 
-    it('o selo "Preparando…"/"Aguardando" mostra há quanto tempo (a partir de 1 min) e o horário no tooltip', () => {
+    it('o selo "Preparando…" mostra há quanto tempo (a partir de 1 min); "Aguardando" na fila não', () => {
         const combat: MaddoxTacticalCombatDto = {
             ...preparing,
-            order: [slot({ actorKey: "pc:vaelyra", name: "Vaelyra", prep: { status: "preparing", since: minutesAgo(12) } }), slot({ actorKey: "pc:kael", name: "Kael", prep: { status: "waiting", since: minutesAgo(0.2) } }), slot({ actorKey: "pc:nala", name: "Nala", prep: { status: "ready" } })],
+            order: [slot({ actorKey: "pc:vaelyra", name: "Vaelyra", prep: { status: "preparing", since: minutesAgo(12) } }), slot({ actorKey: "pc:kael", name: "Kael", prep: { status: "waiting", since: minutesAgo(30) } }), slot({ actorKey: "pc:nala", name: "Nala", prep: { status: "ready" } })],
         }
         renderCombatTable(combat, { title: "Cripta" })
         const seals = screen.getAllByTestId("initiative-prep")
@@ -259,8 +259,8 @@ describe("DND-75 — preparação parada: tempo no selo e ações do dono", () =
     it("o dono vê o aviso com o tempo, reinicia e segue sem a preparação (com confirmação)", async () => {
         const onRestart = vi.fn()
         const onSkip = vi.fn()
-        const preparation = { active: true, blocked: false, failures: [], stalled: [{ prepId: "p1", characterName: "Lizwan", status: "preparing" as const, since: minutesAgo(23) }] }
-        render(<CombatPrepStalledNotice preparation={preparation} isOwner restarting={false} skipping={false} onRestart={onRestart} onSkip={onSkip} />)
+        const stalled = [{ prepId: "p1", characterName: "Lizwan", since: minutesAgo(23) }]
+        render(<CombatPrepStalledNotice stalled={stalled} now={Date.now()} isOwner restarting={false} skipping={false} onRestart={onRestart} onSkip={onSkip} />)
         expect(screen.getByTestId("combat-prep-stalled-item")).toHaveTextContent("A preparação da mesa de Lizwan está parada há 23 min.")
         fireEvent.click(screen.getByRole("button", { name: "Reiniciar preparação" }))
         expect(onRestart).toHaveBeenCalledWith("p1")
@@ -272,12 +272,12 @@ describe("DND-75 — preparação parada: tempo no selo e ações do dono", () =
     })
 
     it("quem não é dono só vê que está demorando, sem botões; sem preparação parada, nada aparece", () => {
-        const preparation = { active: true, blocked: false, failures: [], stalled: [{ prepId: "p1", characterName: "Lizwan", status: "waiting" as const, since: minutesAgo(5) }] }
-        const { unmount } = render(<CombatPrepStalledNotice preparation={preparation} isOwner={false} restarting={false} skipping={false} onRestart={vi.fn()} onSkip={vi.fn()} />)
+        const stalled = [{ prepId: "p1", characterName: "Lizwan", since: minutesAgo(5) }]
+        const { unmount } = render(<CombatPrepStalledNotice stalled={stalled} now={Date.now()} isOwner={false} restarting={false} skipping={false} onRestart={vi.fn()} onSkip={vi.fn()} />)
         expect(screen.getByTestId("combat-prep-stalled-waiting")).toHaveTextContent("A preparação está demorando. O dono da campanha pode reiniciá-la.")
         expect(screen.queryByRole("button")).toBeNull()
         unmount()
-        render(<CombatPrepStalledNotice preparation={{ ...preparation, stalled: [] }} isOwner restarting={false} skipping={false} onRestart={vi.fn()} onSkip={vi.fn()} />)
+        render(<CombatPrepStalledNotice stalled={[]} now={Date.now()} isOwner restarting={false} skipping={false} onRestart={vi.fn()} onSkip={vi.fn()} />)
         expect(screen.queryByTestId("combat-prep-stalled")).toBeNull()
     })
 })

@@ -34,6 +34,30 @@ type PrepDoc = IMaddoxCombatPrep
 
 /** Preparações com execução viva neste processo (enfileiradas ou rodando): a retomada não as duplica. */
 const liveJobs = ((globalThis as unknown as { __maddoxCombatPrepJobs?: Set<string> }).__maddoxCombatPrepJobs ??= new Set<string>())
+/**
+ * DND-75: execução viva de cada preparação (por id), com o `jobId` dela. Reiniciar, seguir sem preparação ou o vigia
+ * interrompem a execução antiga: ela para de esperar a IA na hora (a vaga da fila serial da campanha é liberada) e nunca
+ * chega a gravar na ficha.
+ */
+const prepRuns = ((globalThis as unknown as { __maddoxCombatPrepAborts?: Map<string, { jobId: string; controller: AbortController }> }).__maddoxCombatPrepAborts ??= new Map())
+
+const SUPERSEDED_MESSAGE = "A preparação foi reiniciada ou encerrada: esta execução não grava nada."
+
+/** Interrompe a execução viva da preparação (se houver). */
+function abortPrepRun(prepId: Types.ObjectId | string, jobId?: string | null): void {
+    const key = String(prepId)
+    const run = prepRuns.get(key)
+    if (!run || (jobId && run.jobId !== jobId)) return
+    run.controller.abort()
+    prepRuns.delete(key)
+}
+
+/** Espera a promessa ou rejeita assim que a execução é interrompida (mesmo que o provedor ignore o sinal). */
+function untilAborted<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+    if (signal.aborted) return Promise.reject(new Error(SUPERSEDED_MESSAGE))
+    return Promise.race([promise, new Promise<never>((_, reject) => signal.addEventListener("abort", () => reject(new Error(SUPERSEDED_MESSAGE)), { once: true }))])
+}
+
 /** Promessas das preparações em andamento (testes esperam por elas). */
 const running = ((globalThis as unknown as { __maddoxCombatPrepRuns?: Set<Promise<void>> }).__maddoxCombatPrepRuns ??= new Set<Promise<void>>())
 
@@ -617,6 +641,9 @@ async function runCombatPrep(campaignId: Types.ObjectId, prepId: Types.ObjectId,
         if (settled?.status === "discarded") await afterPrepSettled(campaignId, settled)
         return
     }
+    const controller = new AbortController()
+    const runKey = String(prepId)
+    prepRuns.set(runKey, { jobId, controller })
     const { publishGameChanged } = await import("./game")
     await publishGameChanged(campaignId)
     try {
@@ -637,7 +664,7 @@ async function runCombatPrep(campaignId: Types.ObjectId, prepId: Types.ObjectId,
             if (!context) throw new Error("A ficha do personagem não foi encontrada.")
             const reads = createCatalogReadLog()
             const question = claimed.question
-            const raw = await ai.reviewCombatSheet({ campaign, characterName: claimed.characterName, sheetText: context.sheetText, optionsText: context.optionsText, sneakAttack: context.sneakAttack, reads, jobId, ...(question ? { question: { text: question.text, answer: question.answer } } : {}) })
+            const raw = await untilAborted(ai.reviewCombatSheet({ campaign, characterName: claimed.characterName, sheetText: context.sheetText, optionsText: context.optionsText, sneakAttack: context.sneakAttack, reads, jobId, ...(question ? { question: { text: question.text, answer: question.answer } } : {}) }), controller.signal)
             const interpretation = interpretPrep(raw, context, reads)
             // DND-51: a escolha do jogador (atributo de conjuração de uma lista, magia escolhida) nunca é do Maddox.
             const { screenPlayerChoices, refusalsOf, choiceSheetOf } = await import("./sheet-choice-rules")
@@ -664,6 +691,8 @@ async function runCombatPrep(campaignId: Types.ObjectId, prepId: Types.ObjectId,
                 log.info({ campaignId: String(campaignId), prepId: String(prepId), attempt }, "[maddox] a ficha mudou durante a preparação; o Maddox revisa de novo")
                 continue
             }
+            // DND-75: só a execução dona do registro grava na ficha (reiniciada, pulada ou vencida pelo vigia, não grava nada).
+            if (controller.signal.aborted || !(await MaddoxCombatPrepModel.exists({ _id: prepId, status: "running", jobId }))) throw new Error(SUPERSEDED_MESSAGE)
             const written = await applyInterpretation(interpretation, { sheetId: active.state.sheetId!, campaign, characterName: claimed.characterName, origin: "combat-prep" })
             const rider = riderOf(context.sneakAttack, interpretation.rider)
             const changes = orderedChanges(interpretation, [...written.changes, ...interpretation.optionChanges, ...(rider.change ? [rider.change] : [])])
@@ -686,6 +715,8 @@ async function runCombatPrep(campaignId: Types.ObjectId, prepId: Types.ObjectId,
         // Só a execução dona do registro grava a falha: reiniciada pelo dono (DND-75), a antiga não derruba a nova.
         const failed = await MaddoxCombatPrepModel.updateOne({ _id: prepId, status: "running", jobId }, { $set: { status: "failed", error: errorText(error), finishedAt: new Date(), jobId: null } })
         if (failed.modifiedCount > 0) await haltQuestionCards(await questionCardsOf({ _id: prepId }), "failed")
+    } finally {
+        if (prepRuns.get(runKey)?.jobId === jobId) prepRuns.delete(runKey)
     }
     await afterPrepSettled(campaignId, claimed)
 }
@@ -871,7 +902,7 @@ export async function answerCombatPrep(campaignId: string, prepId: string, text:
 /** O que a decisão do dono aceita: só a falha ("Tentar de novo"), só a parada ("Reiniciar") ou as duas ("Seguir sem preparação"). */
 type OwnerPrepAccepts = "failed" | "stalled" | "failed-or-stalled"
 
-const stalledNow = (prep: PrepDoc) => (prep.status === "running" || prep.status === "pending") && isCombatPrepStalled(prep)
+const stalledNow = (prep: PrepDoc) => isCombatPrepStalled(prep)
 
 async function loadOwnerPrep(campaignId: string, prepId: string, userId: string, accepts: OwnerPrepAccepts = "failed"): Promise<{ campaign: IMaddoxCampaign; prep: PrepDoc }> {
     const { loadAsMember, assertActive } = await import("./game")
@@ -901,13 +932,15 @@ export async function retryCombatPrep(campaignId: string, prepId: string, userId
 }
 
 /**
- * DND-75 "Reiniciar preparação": a preparação parada ("Preparando…"/"Aguardando" além do aviso) volta para a fila do zero.
- * A execução antiga, se ainda viva, não grava mais nada (as gravações dela exigem o `jobId` que ela tinha).
+ * DND-75 "Reiniciar preparação": a preparação parada ("Preparando…" além do aviso) volta para a fila do zero. A execução
+ * antiga é interrompida (`abortPrepRun`: libera a fila e não chega à ficha) e, se ainda escapar, não grava nada — a ficha e o
+ * registro exigem o `jobId` que ela tinha.
  */
 export async function restartCombatPrep(campaignId: string, prepId: string, userId: string) {
     const { campaign, prep } = await loadOwnerPrep(campaignId, prepId, userId, "stalled")
     const updated = await MaddoxCombatPrepModel.updateOne({ _id: prep._id, status: prep.status, jobId: prep.jobId ?? null }, { $set: { status: "pending", jobId: null, startedAt: null, error: null } })
     if (updated.modifiedCount === 0) throw new DomainError(409, "A preparação mudou. Atualize a mesa.", "PREP_CHANGED")
+    abortPrepRun(prep._id, prep.jobId)
     liveJobs.delete(String(prep._id))
     await recordAudit({ userId, entidade: MADDOX_CAMPAIGN_AUDIT_ENTITY, entidadeId: String(campaign._id), acao: AcaoAuditoria.ATUALIZAR, depois: { combatPrep: String(prep._id), character: prep.characterName, decision: "restart", from: prep.status } })
     log.warn({ campaignId, prepId, character: prep.characterName, from: prep.status }, "[maddox] dono reiniciou a preparação parada")
@@ -925,6 +958,7 @@ export async function skipCombatPrep(campaignId: string, prepId: string, userId:
     const riders: CombatPrepRider[] = context?.sneakAttack ? [{ key: "sneak-attack", dice: context.sneakAttack, source: "server", reason: null }] : []
     const updated = await MaddoxCombatPrepModel.updateOne({ _id: prep._id, status: prep.status, ...(prep.status === "failed" ? {} : { jobId: prep.jobId ?? null }) }, { $set: { status: "skipped", overlay: emptyOverlay(), riders, changes: [], finishedAt: new Date(), jobId: null } })
     if (updated.modifiedCount === 0) throw new DomainError(409, "A preparação mudou. Atualize a mesa.", "PREP_CHANGED")
+    abortPrepRun(prep._id, prep.jobId)
     liveJobs.delete(String(prep._id))
     // Revisão DND-51 (F11): a falha deixa de valer no card (a mesa segue com a lista base).
     if (prep.messageId && prep.question) await MaddoxCampaignMessageModel.updateOne({ _id: prep.messageId }, { $set: { "combatPrep.question.settled": true, "combatPrep.question.halted": null } })
@@ -948,6 +982,7 @@ export async function expireOverdueCombatPreps(now: number = Date.now()): Promis
         const updated = await MaddoxCombatPrepModel.updateOne({ _id: prep._id, status: "running", jobId: prep.jobId ?? null }, { $set: { status: "failed", error: MADDOX_COMBAT_PREP_HARD_LIMIT_ERROR, finishedAt: new Date(now), jobId: null } })
         if (updated.modifiedCount === 0) continue
         expired += 1
+        abortPrepRun(prep._id, prep.jobId)
         liveJobs.delete(String(prep._id))
         log.warn({ campaignId: String(prep.campaignId), prepId: String(prep._id), character: prep.characterName, startedAt: prep.startedAt }, "[maddox] preparação passou do tempo limite: marcada como falha")
         await haltQuestionCards(await questionCardsOf({ _id: prep._id }), "failed")

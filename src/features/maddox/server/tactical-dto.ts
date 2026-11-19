@@ -1,6 +1,6 @@
 import { Types } from "mongoose"
 import { MADDOX_COMBAT_ADJUST_FAILED_MESSAGE } from "../constants"
-import { combatPrepSince, isCombatPrepStalled } from "../combat-prep-stall"
+import { combatPrepSince } from "../combat-prep-stall"
 import { conditionDisplayLabel, hpBand } from "../combat-rules"
 import type { IMaddoxCombatAction, IMaddoxCombatReaction, IMaddoxCombatRoll } from "../combat-types"
 import type { MaddoxCombatActionDto, MaddoxCombatReactionDto, MaddoxCombatRollDto, MaddoxMyCombatDto, MaddoxTacticalCombatDto, MaddoxTacticalSlotDto } from "../game-types"
@@ -92,7 +92,7 @@ const PREP_SLOT: Record<IMaddoxCombatPrep["status"], NonNullable<MaddoxTacticalS
  * DND-41: selos da preparação na ordem e o estado geral. O motivo da falha (texto do provedor) só vai ao dono da
  * campanha; os demais veem só o selo "Falhou" e "Aguardando o dono da campanha".
  */
-export function withPreparation(dto: MaddoxTacticalCombatDto, preps: readonly IMaddoxCombatPrep[], viewerIsOwner: boolean, now: number = Date.now()): MaddoxTacticalCombatDto {
+export function withPreparation(dto: MaddoxTacticalCombatDto, preps: readonly IMaddoxCombatPrep[], viewerIsOwner: boolean): MaddoxTacticalCombatDto {
     const relevant = preps.filter((prep) => prep.status !== "discarded")
     const active = relevant.some((prep) => prep.status === "pending" || prep.status === "running" || prep.status === "awaiting-player" || prep.status === "failed")
     if (!active) return { ...dto, preparation: null }
@@ -105,16 +105,12 @@ export function withPreparation(dto: MaddoxTacticalCombatDto, preps: readonly IM
             const status = prep ? PREP_SLOT[prep.status] : null
             if (!prep || !status) return slot
             const since = combatPrepSince(prep)
-            return { ...slot, prep: { status, ...(since ? { since: since.toISOString() } : {}) } }
+            return { ...slot, prep: { status, prepId: String(prep._id), ...(since ? { since: since.toISOString() } : {}) } }
         }),
         preparation: {
             active,
             blocked: failed.length > 0,
             failures: viewerIsOwner ? failed.map((prep) => ({ prepId: String(prep._id), characterName: prep.characterName, error: prep.error ?? "Falha sem detalhe." })) : [],
-            // DND-75: sem motivo de erro (não há), então vai a todos; as ações só aparecem para o dono.
-            stalled: relevant
-                .filter((prep) => isCombatPrepStalled(prep, now))
-                .map((prep) => ({ prepId: String(prep._id), characterName: prep.characterName, status: prep.status === "running" ? ("preparing" as const) : ("waiting" as const), since: combatPrepSince(prep)!.toISOString() })),
         },
     }
 }

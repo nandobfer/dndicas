@@ -1098,18 +1098,24 @@ porque a retomada só rodava no `check` (alguém sair da mesa). Agora `server/co
 - na leitura da mesa (`getGameState` → `recoverCampaignCombatPreps`, sem `await` porque a leitura também roda dentro de jobs da fila
   serial; no máximo a cada `MADDOX_COMBAT_PREP_RECOVERY_THROTTLE_MS` = 15 s por campanha);
 - na rotina interna `maddox-combat-prep-recovery` (Integrações › Crons, 1 min, `runCombatPrepRecovery`), que também roda o **vigia**
-  `expireOverdueCombatPreps`: `running` há mais que `MADDOX_COMBAT_PREP_HARD_LIMIT_MS` (teto da geração + conferência de 0 PV + 1 min)
-  vira `failed` com `MADDOX_COMBAT_PREP_HARD_LIMIT_ERROR`, e o dono decide pelo fluxo de falha.
-Toda gravação final do job (pronta, pergunta, falha) é condicional ao `jobId` dele: a execução antiga, reiniciada ou vencida, não
-sobrescreve a nova.
+  `expireOverdueCombatPreps`: `running` há mais que `MADDOX_COMBAT_PREP_HARD_LIMIT_MS` (conferência de 0 PV + uma geração por passada
+  do laço, `TIMEOUT × (1 + CONFLICT_RETRIES)`, + 1 min ≈ 20 min) vira `failed` com `MADDOX_COMBAT_PREP_HARD_LIMIT_ERROR`, e o dono
+  decide pelo fluxo de falha.
+**Execução antiga não grava.** Cada job registra um `AbortController` (`prepRuns`, por preparação e `jobId`). Reiniciar, seguir sem
+preparação e o vigia chamam `abortPrepRun`: a espera pela IA rejeita na hora (`untilAborted`, mesmo que o provedor ignore o sinal),
+o que libera a fila serial da campanha para a nova passada. Antes de `applyInterpretation` o job confere de novo que o registro é dele
+(`status: "running"` + `jobId`), e toda gravação final (pronta, pergunta, falha) é condicional ao `jobId`: a ficha e o registro nunca
+recebem a passada antiga.
 
-**Ver e agir.** A regra única de "parada" fica em `combat-prep-stall.ts` (`combatPrepSince`: `startedAt` da `running`, `updatedAt` da
-`pending`; `isCombatPrepStalled`: há mais que `MADDOX_COMBAT_PREP_STALL_NOTICE_MS` = 3 min). O slot leva `prep.since` e o selo mostra
-"Preparando… · 12 min" (a partir de 1 min, `prepElapsedLabel`; tooltip "Preparando desde 23:28"). `preparation.stalled` (sem motivo
-de erro, vai a todos) alimenta o `CombatPrepStalledNotice`: o dono vê "A preparação da mesa de X está parada há N min." com
+**Ver e agir.** A regra única de "parada" fica em `combat-prep-stall.ts`: só a `running` conta, desde o `startedAt`
+(`combatPrepSince`/`isCombatPrepStalled`, mais que `MADDOX_COMBAT_PREP_STALL_NOTICE_MS` = 3 min). A `pending` espera na fila serial
+atrás das outras e nunca é alarme (a órfã de reinício volta sozinha pela retomada). O slot leva `prep.prepId` e, em "Preparando…",
+`prep.since`; o selo mostra "Preparando… · 12 min" (a partir de 1 min, `prepElapsedLabel`; tooltip "Preparando desde 23:28"). O aviso
+é calculado **na tela**, com o relógio do cliente (`useNow` na `GamePage` + `stalledCombatPreps(order, now)`), porque nada relê a mesa
+quando o limite passa; o servidor usa a mesma regra para autorizar as ações. `CombatPrepStalledNotice`: o dono vê "A preparação da mesa de X está parada há N min." com
 **"Reiniciar preparação"** (`POST …/game/combat/preps/[prepId]/restart`, `restartCombatPrep`: só parada, senão 409
-`PREP_NOT_STALLED`; volta a `pending` do zero, auditoria `decision: "restart"`) e **"Seguir sem preparação"** (o `skip`, que aceita
-falha ou parada, com confirmação); os demais veem "A preparação está demorando. O dono da campanha pode reiniciá-la."
+`PREP_NOT_STALLED`; volta a `pending` do zero, interrompe a execução antiga, auditoria `decision: "restart"`) e **"Seguir sem
+preparação"** (o `skip`, que aceita falha ou parada, com confirmação); os demais veem "A preparação está demorando. O dono da campanha pode reiniciá-la."
 
 **Falha.** Só o dono da campanha recebe o motivo (`combat.tactical.preparation.failures`) e decide, com auditoria: `POST
 …/game/combat/preps/[prepId]/retry` ("Tentar de novo": volta para a fila) e `POST …/game/combat/preps/[prepId]/skip` ("Seguir sem

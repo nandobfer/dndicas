@@ -1,26 +1,41 @@
 import { describe, expect, it } from "vitest"
-import { combatPrepSince, isCombatPrepStalled, prepElapsedLabel } from "@/features/maddox/combat-prep-stall"
-import { MADDOX_COMBAT_PREP_STALL_NOTICE_MS } from "@/features/maddox/constants"
+import { combatPrepSince, isCombatPrepStalled, prepElapsedLabel, stalledCombatPreps } from "@/features/maddox/combat-prep-stall"
+import { MADDOX_COMBAT_DOWNED_CHECK_TIMEOUT_MS, MADDOX_COMBAT_PREP_CONFLICT_RETRIES, MADDOX_COMBAT_PREP_HARD_LIMIT_MS, MADDOX_COMBAT_PREP_STALL_NOTICE_MS, MADDOX_COMBAT_PREP_TIMEOUT_MS } from "@/features/maddox/constants"
 
-/** DND-75: regra única de "preparação parada" e o tempo decorrido do selo. */
+/** DND-75: regra única de "preparação parada", o aviso calculado na tela e o tempo decorrido do selo. */
 
 const now = Date.parse("2026-11-19T03:00:00.000Z")
 const ago = (ms: number) => new Date(now - ms)
 
 describe("DND-75 — preparação parada", () => {
-    it("conta do início do job em andamento e da última mudança da que está na fila; as demais não contam", () => {
-        expect(combatPrepSince({ status: "running", startedAt: ago(1000), updatedAt: ago(5) })).toEqual(ago(1000))
-        expect(combatPrepSince({ status: "pending", startedAt: null, updatedAt: ago(2000) })).toEqual(ago(2000))
-        expect(combatPrepSince({ status: "failed", startedAt: ago(1), updatedAt: ago(1) })).toBeNull()
-        expect(combatPrepSince({ status: "awaiting-player", startedAt: ago(1), updatedAt: ago(1) })).toBeNull()
+    it("só a preparação em andamento conta, desde o início do job; a que espera na fila nunca", () => {
+        expect(combatPrepSince({ status: "running", startedAt: ago(1000) })).toEqual(ago(1000))
+        expect(combatPrepSince({ status: "pending", startedAt: null })).toBeNull()
+        expect(combatPrepSince({ status: "failed", startedAt: ago(1) })).toBeNull()
+        expect(combatPrepSince({ status: "awaiting-player", startedAt: ago(1) })).toBeNull()
         expect(combatPrepSince({ status: "running", startedAt: null })).toBeNull()
     })
 
-    it("parada a partir do limite do aviso", () => {
+    it("parada a partir do limite do aviso; fila longa (pending) não é alarme", () => {
         expect(isCombatPrepStalled({ status: "running", startedAt: ago(MADDOX_COMBAT_PREP_STALL_NOTICE_MS - 1) }, now)).toBe(false)
         expect(isCombatPrepStalled({ status: "running", startedAt: ago(MADDOX_COMBAT_PREP_STALL_NOTICE_MS) }, now)).toBe(true)
-        expect(isCombatPrepStalled({ status: "pending", updatedAt: ago(MADDOX_COMBAT_PREP_STALL_NOTICE_MS + 1) }, now)).toBe(true)
-        expect(isCombatPrepStalled({ status: "ready", updatedAt: ago(MADDOX_COMBAT_PREP_STALL_NOTICE_MS * 10) }, now)).toBe(false)
+        expect(isCombatPrepStalled({ status: "pending", startedAt: ago(MADDOX_COMBAT_PREP_STALL_NOTICE_MS * 10) }, now)).toBe(false)
+    })
+
+    it("a tela tira o aviso da ordem com o próprio relógio: só 'Preparando…' além do limite e com id", () => {
+        const order = [
+            { name: "Lizwan", prep: { status: "preparing" as const, prepId: "p1", since: ago(MADDOX_COMBAT_PREP_STALL_NOTICE_MS + 1).toISOString() } },
+            { name: "Ravel", prep: { status: "waiting" as const, prepId: "p2" } },
+            { name: "Nala", prep: { status: "preparing" as const, prepId: "p3", since: ago(60_000).toISOString() } },
+            { name: "Goblin" },
+        ]
+        expect(stalledCombatPreps(order, now)).toEqual([{ prepId: "p1", characterName: "Lizwan", since: ago(MADDOX_COMBAT_PREP_STALL_NOTICE_MS + 1).toISOString() }])
+        // O mesmo instantâneo, minutos depois, já mostra a outra (sem nova leitura da mesa).
+        expect(stalledCombatPreps(order, now + MADDOX_COMBAT_PREP_STALL_NOTICE_MS).map((item) => item.prepId)).toEqual(["p1", "p3"])
+    })
+
+    it("o teto do vigia cabe todas as gerações do laço (uma por conflito de ficha) e a conferência de 0 PV", () => {
+        expect(MADDOX_COMBAT_PREP_HARD_LIMIT_MS).toBeGreaterThan(MADDOX_COMBAT_DOWNED_CHECK_TIMEOUT_MS + MADDOX_COMBAT_PREP_TIMEOUT_MS * (1 + MADDOX_COMBAT_PREP_CONFLICT_RETRIES))
     })
 
     it("tempo decorrido: nada abaixo de 1 min; minutos; horas com minutos", () => {
