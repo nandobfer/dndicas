@@ -21,7 +21,6 @@ import { OpexFailureBanner } from "./OpexFailureBanner"
 import type { MaddoxCombatActionInput } from "../../combat-schemas"
 import { useCancelCombatAction, useChooseSneakAttack, useDecideReaction, useEndCombatTurn, useRequestCombatAdjustment, useAnswerCombatPrep, useRetryCombatPrep, useRollCombatStep, useSkipCombatPrep, useSubmitCombatAction } from "../../hooks/useMaddoxCombat"
 import { CombatActionBar, CombatWaitBar } from "./combat/CombatActionBar"
-import { InitiativeTracker } from "./combat/InitiativeTracker"
 import { CombatPrepBlockedNotice } from "./combat/CombatCards"
 import {
     fetchOlderGameMessages,
@@ -272,7 +271,6 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
                             {rewindBannerText(state.turn.rewind)}
                         </p>
                     )}
-                    {tactical && state.combat && <InitiativeTracker combat={tactical} title={state.combat.title} color={color} compact />}
                     {levelUps.banner}
                     {state.me.isOwner && state.turn.opexActor?.failed && <OpexFailureBanner actor={state.turn.opexActor} retrying={opexActions.retry.isPending} skipping={opexActions.skip.isPending} onRetry={() => opexActions.retry.mutate(state.turn.opexActor!.memberId)} onSkip={() => opexActions.skip.mutate(state.turn.opexActor!.memberId)} />}
                     </>
@@ -380,7 +378,6 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
                     )}
                 </section>
                 <div className="space-y-6 lg:min-h-0 lg:overflow-y-auto" data-testid="game-tools">
-                    {tactical && state.combat && <InitiativeTracker combat={tactical} title={state.combat.title} color={color} />}
                     <TurnPanel
                         state={state}
                         presence={presence}

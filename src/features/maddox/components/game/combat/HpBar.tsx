@@ -19,8 +19,8 @@ interface Props {
     className?: string
 }
 
-/** Barra e números de PV: rastreador de iniciativa e card "Na mesa" (DND-63). */
-export function HpBar({ hp, name, testId = "initiative-hp", className }: Props) {
+/** Barra e números de PV do card da mesa (DND-63), dentro e fora do combate (DND-75). */
+export function HpBar({ hp, name, testId = "seat-hp", className }: Props) {
     const label = `PV${name ? ` de ${name}` : ""}: ${hp.current} de ${hp.max}${hp.temp ? ` (+${hp.temp} temporários)` : ""}`
     return (
         <div className={cn("flex items-center gap-2", className)} data-testid={testId}>

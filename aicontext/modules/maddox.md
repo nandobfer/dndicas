@@ -1038,8 +1038,8 @@ opções da reação só para quem reage). Stream: `combat-rolled` (todos repete
 de `monster_action`/`apply_effect` vai para a geração ao vivo do job — `MaddoxLiveGenerationDto.rolls`, também no `snapshot`; a bolha
 `LiveNpcRolls` anima um de cada vez, ataque com Acertou/Errou/Crítico/Falha crítica e depois o dano, e só então mostra o texto da narração) e
 **`combat-step-rolled { messageId, stepIndex, roll }`** (salvaguarda de um adversário rolada pelo servidor num card de ação de jogador:
-o passo anima antes do resultado). Dados do servidor repetidos com `ReplayDie` (`DiceRollerPanel` só com `externalResult`). Tela: `InitiativeTracker` (coluna da direita e
-faixa compacta no cabeçalho em telas pequenas), `CombatActionBar` (na minha vez substitui o campo: Ação, Ação bônus, economia,
+o passo anima antes do resultado). Dados do servidor repetidos com `ReplayDie` (`DiceRollerPanel` só com `externalResult`). Tela: a ordem de iniciativa no card único da mesa
+(`TurnPanel`, ver "Card único da mesa no combate tático (DND-75)"), `CombatActionBar` (na minha vez substitui o campo: Ação, Ação bônus, economia,
 "Movimento e posição", Encerrar turno, "Perguntar ao mestre"; um único painel ancorado ao botão que o abriu, `anchorLeft` limita ao
 contêiner e à janela; categorias em `OptionTabs`, alvos/círculo/perícia em `GlassSelector`), `CombatWaitBar` ("Vez de Kael
 (iniciativa 17) · Rodada 2"), cards `CombatActionCard` (dado inline, Acertou/Errou/Crítico, dano; ciclo do dado abaixo), `CombatRollCard`,
@@ -1131,8 +1131,8 @@ Acuidade ou à distância (a arremessada só com Acuidade; reações ficam fora)
 "Combate tático", com "Restaurar padrão"); o formato da resposta é fixo no código. Origens de consumo `maddox-combat-prep`,
 `maddox-combat-adjust` e `maddox-sneak-attack`.
 
-**Tela.** `CombatWaitBar` ("O mestre está preparando o combate"; travada: "Aguardando o dono da campanha"), `InitiativeTracker` (selos
-"Aguardando", "Preparando…", "Pronto", "Falhou", também na faixa compacta), `CombatPrepBlockedNotice` (dono: motivo, "Tentar de novo" e
+**Tela.** `CombatWaitBar` ("O mestre está preparando o combate"; travada: "Aguardando o dono da campanha"), card da mesa (selos
+"Aguardando", "Preparando…", "Pronto", "Falhou", "Pergunta ao jogador" na linha do personagem), `CombatPrepBlockedNotice` (dono: motivo, "Tentar de novo" e
 "Seguir sem preparação" com confirmação), `CombatPrepCard`, e no `CombatActionMenu` o "Ajustado pelo Maddox", o aviso "Ataque furtivo
 (+Xd6): se o ataque acertar e a regra permitir, você escolhe somar antes do dano" (ou "já usado neste turno"), o pedido de ajuste com o resultado e os avisos de falta (`combatMenuNotices`: sem armas, sem
 habilidades, só "Outra ação" na Ação bônus). Hooks `useRetryCombatPrep`, `useSkipCombatPrep`, `useRequestCombatAdjustment`.
@@ -1707,9 +1707,8 @@ nunca entra no DTO. 0 PV continua `defeated`/"Caído". Vale na próxima leitura 
 `PV atual/máximo` em vez de `estado: <faixa>` (`situationOf` em `server/opex-table.ts`). O mestre continua recebendo os números pelo
 `get_combat`, como sempre.
 
-**Tela.** `InitiativeTracker`: com `hp`, a mesma barra dos personagens (`HpBar`, cor `hpColor`) no lugar da faixa, e o chip "Caído"
-(`initiative-fallen`) quando o combatente está derrotado; na faixa compacta, `atual/máx` na cor da barra (`initiative-strip-hp`), só
-dos combatentes do mestre.
+**Tela.** Card da mesa em combate (DND-75): com `hp`, a mesma barra dos personagens (`HpBar`, `seat-hp`, cor `hpColor`) no lugar
+da faixa, e o chip "Caído" (`initiative-fallen`) quando o combatente está derrotado.
 
 **1 natural.** Sem mudança de regra (`attackOutcome().fumble` erra). No `CombatActionCard`, `attackFumbled(step)` (`combat-visuals.ts`:
 passo `attack` feito com o d20 mantido em 1, lido do próprio dado, vale para cards antigos) liga o `CriticalHighlight` em
@@ -2615,3 +2614,28 @@ DND-22: `campaigns.test.ts` (densidade padrão, na criação, editada em andamen
 editada vale na narração seguinte e não na resposta), `journal.test.ts` (aba Imagens: só prontas, sem retrato de NPC secreto nem dados
 do gerador, filtro, paginação, contagem e busca pela legenda), `journal-routes.test.ts`; na tela, `maddox-campaigns.test.tsx` (slider
 na criação e na edição, chip) e `maddox-journal.test.tsx` (galeria, links, filtro, vazio, destaque e busca).
+
+## Card único da mesa no combate tático (DND-75)
+
+A mesa tem **uma só lista de personagens**: o card do `TurnPanel` (`data-testid="table-card"`, `data-mode="table" | "combat"`). O
+antigo `InitiativeTracker` (coluna da direita e faixa compacta `initiative-strip` no cabeçalho) foi removido.
+
+- **Regra pura** em `game-view.ts`: `tableSeatsView(state)` devolve `{ mode: "table", seats }` sem `state.combat?.tactical` e, no
+  combate, `{ mode: "combat", title, label, order: [{ slot, participant | null }], outside }` — a ordem do servidor, cada personagem
+  ligado ao assento pelo `memberId` do slot, e em `outside` os participantes que não estão na ordem. `combatPhaseLabel` dá o título:
+  "Preparando o combate" (`preparation.active`), "Rolando iniciativa" (fase `initiative`) ou "Combate · Rodada N".
+- **Fora do combate**: "Na mesa (N)" e a `<ul aria-label="Participantes da mesa">` de sempre.
+- **No combate**: título com a fase (ícone de espadas, borda `COMBAT_COLOR`) e o nome do combate abaixo (`table-combat-title`);
+  `<ol aria-label="Ordem de iniciativa" data-testid="table-combat-order">` com jogadores e combatentes do mestre; quem não está na
+  ordem vai para o bloco "Fora do combate" (`<ul aria-label="Fora do combate">`, assento normal), que só aparece se houver alguém.
+- **Linha** (`components/game/SeatRow.tsx`): sem `slot`, o assento de sempre; com `slot`, `data-combat-slot`, `data-active` (destaque
+  na cor do rigor), `data-kind`, valor de iniciativa (`initiative-value`), selo `PrepSeal`, PV (`slot.hp ?? participant.hp`) ou a
+  faixa (`initiative-band`) e os chips de situação. Assento de participante: `seat-<memberId>` com bolinha de situação, jogador, CA,
+  XP, "Pular a vez" e "Rolar no lugar". Combatente do mestre: `combatant-<actorKey>`, ícone de espadas/caveira, sem jogador, CA,
+  ações nem XP. Personagem na ordem sem assento: avatar e dados de combate, sem os dados de mesa.
+- **Peças compartilhadas** em `combat/CombatantStatus.tsx`: `PrepSeal`, `CombatantVitals` (barra ou faixa) e `CombatantChips`
+  ("Caído" com 0 PV à mostra, Morto, Morrendo, Estável, condições e concentração).
+
+Testes: `maddox-table-card.test.tsx` (regras, modo mesa, ordem com inimigos, título por fase, linha do jogador × do inimigo, "Fora do
+combate"); `maddox-game.test.tsx` (a `GamePage` em combate tático tem um só card e uma só lista, sem `initiative-strip` nem
+`initiative-tracker`); `maddox-tactical-combat.test.tsx` e `maddox-combat-prep.test.tsx` usam `renderCombatTable` (`tests/helpers/maddox-table.tsx`).
