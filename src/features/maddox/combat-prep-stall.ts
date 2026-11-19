@@ -38,6 +38,13 @@ export function stalledCombatPreps(order: readonly Pick<MaddoxTacticalSlotDto, "
     })
 }
 
+/** Diferença (ms) entre o horário do servidor e o da tela; sem horário válido, zero. */
+export function serverClockOffset(serverTime: string | null | undefined, clientNow: number = Date.now()): number {
+    if (!serverTime) return 0
+    const server = Date.parse(serverTime)
+    return Number.isNaN(server) ? 0 : server - clientNow
+}
+
 /** Tempo decorrido para o selo ("12 min", "1 h 5 min"); abaixo de 1 min, nada. */
 export function prepElapsedLabel(since: string | null | undefined, now: number): string | null {
     if (!since) return null

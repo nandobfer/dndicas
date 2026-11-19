@@ -32,8 +32,12 @@ const log = loggerFor({ module: "maddox", feature: "combat-prep" })
 
 type PrepDoc = IMaddoxCombatPrep
 
-/** Preparações com execução viva neste processo (enfileiradas ou rodando): a retomada não as duplica. */
-const liveJobs = ((globalThis as unknown as { __maddoxCombatPrepJobs?: Set<string> }).__maddoxCombatPrepJobs ??= new Set<string>())
+/**
+ * Preparações com execução viva neste processo (enfileiradas ou rodando): a retomada não as duplica. DND-75: cada entrada tem
+ * o token do job que a pôs ali, e só esse job a apaga ao terminar — a execução antiga, interrompida por "Reiniciar", não pode
+ * apagar a entrada da nova (senão a retomada a tomaria por órfã e a devolveria à fila em ciclo).
+ */
+const liveJobs = ((globalThis as unknown as { __maddoxCombatPrepJobOwners?: Map<string, string> }).__maddoxCombatPrepJobOwners ??= new Map<string, string>())
 /**
  * DND-75: execução viva de cada preparação (por id), com o `jobId` dela. Reiniciar, seguir sem preparação ou o vigia
  * interrompem a execução antiga: ela para de esperar a IA na hora (a vaga da fila serial da campanha é liberada) e nunca
@@ -143,13 +147,14 @@ export async function scheduleCombatPreps(campaignId: Types.ObjectId): Promise<n
             await MaddoxCombatPrepModel.updateOne({ _id: prep._id, status: "running" }, { $set: { status: "pending", jobId: null } })
             log.warn({ campaignId: String(campaignId), prepId: key }, "[maddox] preparação sem job vivo (reinício): de volta à fila")
         }
-        liveJobs.add(key)
+        const token = randomUUID()
+        liveJobs.set(key, token)
         queued += 1
         track(enqueueMaddoxJob(String(campaignId), "combat-prep", async (job) => {
             try {
                 await runCombatPrep(campaignId, prep._id, job.jobId)
             } finally {
-                liveJobs.delete(key)
+                if (liveJobs.get(key) === token) liveJobs.delete(key)
             }
         }))
     }

@@ -111,6 +111,8 @@ export function withPreparation(dto: MaddoxTacticalCombatDto, preps: readonly IM
             active,
             blocked: failed.length > 0,
             failures: viewerIsOwner ? failed.map((prep) => ({ prepId: String(prep._id), characterName: prep.characterName, error: prep.error ?? "Falha sem detalhe." })) : [],
+            // DND-75: horário do servidor na leitura; a tela corrige o próprio relógio para o aviso de parada.
+            serverTime: new Date().toISOString(),
         },
     }
 }

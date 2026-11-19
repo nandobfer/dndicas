@@ -1105,14 +1105,17 @@ porque a retomada só rodava no `check` (alguém sair da mesa). Agora `server/co
 preparação e o vigia chamam `abortPrepRun`: a espera pela IA rejeita na hora (`untilAborted`, mesmo que o provedor ignore o sinal),
 o que libera a fila serial da campanha para a nova passada. Antes de `applyInterpretation` o job confere de novo que o registro é dele
 (`status: "running"` + `jobId`), e toda gravação final (pronta, pergunta, falha) é condicional ao `jobId`: a ficha e o registro nunca
-recebem a passada antiga.
+recebem a passada antiga. O `liveJobs` guarda o token do job que pôs cada entrada, e só ele a apaga ao terminar: a execução
+antiga não apaga a entrada da nova (senão a retomada tomaria a nova por órfã e a devolveria à fila em ciclo).
 
 **Ver e agir.** A regra única de "parada" fica em `combat-prep-stall.ts`: só a `running` conta, desde o `startedAt`
 (`combatPrepSince`/`isCombatPrepStalled`, mais que `MADDOX_COMBAT_PREP_STALL_NOTICE_MS` = 3 min). A `pending` espera na fila serial
 atrás das outras e nunca é alarme (a órfã de reinício volta sozinha pela retomada). O slot leva `prep.prepId` e, em "Preparando…",
 `prep.since`; o selo mostra "Preparando… · 12 min" (a partir de 1 min, `prepElapsedLabel`; tooltip "Preparando desde 23:28"). O aviso
 é calculado **na tela**, com o relógio do cliente (`useNow` na `GamePage` + `stalledCombatPreps(order, now)`), porque nada relê a mesa
-quando o limite passa; o servidor usa a mesma regra para autorizar as ações. `CombatPrepStalledNotice`: o dono vê "A preparação da mesa de X está parada há N min." com
+quando o limite passa; o servidor usa a mesma regra para autorizar as ações. O relógio da tela é corrigido pelo do servidor:
+`preparation.serverTime` (horário da leitura) dá a diferença (`useServerClockOffset`/`serverClockOffset`), então tela adiantada ou
+atrasada não mostra o aviso antes (409 no clique) nem depois do servidor. `CombatPrepStalledNotice`: o dono vê "A preparação da mesa de X está parada há N min." com
 **"Reiniciar preparação"** (`POST …/game/combat/preps/[prepId]/restart`, `restartCombatPrep`: só parada, senão 409
 `PREP_NOT_STALLED`; volta a `pending` do zero, interrompe a execução antiga, auditoria `decision: "restart"`) e **"Seguir sem
 preparação"** (o `skip`, que aceita falha ou parada, com confirmação); os demais veem "A preparação está demorando. O dono da campanha pode reiniciá-la."

@@ -22,7 +22,7 @@ import type { MaddoxCombatActionInput } from "../../combat-schemas"
 import { useCancelCombatAction, useChooseSneakAttack, useDecideReaction, useEndCombatTurn, useRequestCombatAdjustment, useAnswerCombatPrep, useRestartCombatPrep, useRetryCombatPrep, useRollCombatStep, useSkipCombatPrep, useSubmitCombatAction } from "../../hooks/useMaddoxCombat"
 import { CombatActionBar, CombatWaitBar } from "./combat/CombatActionBar"
 import { CombatPrepBlockedNotice, CombatPrepStalledNotice } from "./combat/CombatCards"
-import { useNow } from "./combat/CombatantStatus"
+import { useNow, useServerClockOffset } from "./combat/CombatantStatus"
 import { stalledCombatPreps } from "../../combat-prep-stall"
 import {
     fetchOlderGameMessages,
@@ -139,7 +139,8 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
     const [combatInvalid, setCombatInvalid] = useState<string | null>(null)
     const tactical = state.combat?.tactical ?? null
     // DND-75: o aviso de preparação parada sai do relógio da tela (a mesa não é relida quando o limite passa).
-    const prepClock = useNow(15_000, Boolean(tactical?.order.some((slot) => slot.prep?.status === "preparing")))
+    const prepClockOffset = useServerClockOffset(tactical?.preparation?.serverTime)
+    const prepClock = useNow(15_000, Boolean(tactical?.order.some((slot) => slot.prep?.status === "preparing"))) + prepClockOffset
     const stalledPreps = tactical ? stalledCombatPreps(tactical.order, prepClock) : []
     const skip = useSkipMaddoxPlayer(state.campaignId)
     const opexActions = useMaddoxOpexTableActions(state.campaignId)

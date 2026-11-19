@@ -283,6 +283,8 @@ export interface MaddoxCombatPreparationDto {
     blocked: boolean
     /** Só para o dono da campanha. */
     failures: { prepId: string; characterName: string; error: string }[]
+    /** DND-75: horário do servidor nesta leitura (ISO): a tela corrige o relógio dela ao calcular a preparação parada. */
+    serverTime?: string
 }
 
 export interface MaddoxTacticalCombatDto {

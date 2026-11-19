@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { combatPrepSince, isCombatPrepStalled, prepElapsedLabel, stalledCombatPreps } from "@/features/maddox/combat-prep-stall"
+import { combatPrepSince, isCombatPrepStalled, prepElapsedLabel, serverClockOffset, stalledCombatPreps } from "@/features/maddox/combat-prep-stall"
 import { MADDOX_COMBAT_DOWNED_CHECK_TIMEOUT_MS, MADDOX_COMBAT_PREP_CONFLICT_RETRIES, MADDOX_COMBAT_PREP_HARD_LIMIT_MS, MADDOX_COMBAT_PREP_STALL_NOTICE_MS, MADDOX_COMBAT_PREP_TIMEOUT_MS } from "@/features/maddox/constants"
 
 /** DND-75: regra única de "preparação parada", o aviso calculado na tela e o tempo decorrido do selo. */
@@ -45,5 +45,12 @@ describe("DND-75 — preparação parada", () => {
         expect(prepElapsedLabel(ago(120 * 60_000).toISOString(), now)).toBe("2 h")
         expect(prepElapsedLabel(null, now)).toBeNull()
         expect(prepElapsedLabel("inválido", now)).toBeNull()
+    })
+
+    it("diferença entre o relógio do servidor e o da tela; sem horário válido, zero", () => {
+        expect(serverClockOffset(new Date(now + 120_000).toISOString(), now)).toBe(120_000)
+        expect(serverClockOffset(new Date(now - 60_000).toISOString(), now)).toBe(-60_000)
+        expect(serverClockOffset(undefined, now)).toBe(0)
+        expect(serverClockOffset("inválido", now)).toBe(0)
     })
 })

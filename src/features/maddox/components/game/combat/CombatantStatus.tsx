@@ -5,7 +5,7 @@ import { AlertTriangle, Brain, Check, Clock, HeartPulse, Loader2 } from "lucide-
 import { SimpleGlassTooltip, GlassTooltipProvider } from "@/components/ui/glass-tooltip"
 import { cn } from "@/core/utils"
 import { rarityColors } from "@/lib/config/colors"
-import { prepElapsedLabel } from "../../../combat-prep-stall"
+import { prepElapsedLabel, serverClockOffset } from "../../../combat-prep-stall"
 import { HP_BAND_LABELS } from "../../../combat-rules"
 import type { MaddoxCombatPrepSlotDto, MaddoxTacticalSlotDto } from "../../../game-types"
 import { RarityChip } from "../../campaigns/campaign-visuals"
@@ -20,10 +20,29 @@ export function useNow(intervalMs: number, enabled = true): number {
     const [now, setNow] = useState(() => Date.now())
     useEffect(() => {
         if (!enabled) return
+        // Ao ligar, acerta o relógio já no próximo ciclo (o valor da montagem pode estar velho), sem esperar o primeiro tick.
+        const first = setTimeout(() => setNow(Date.now()), 0)
         const timer = setInterval(() => setNow(Date.now()), intervalMs)
-        return () => clearInterval(timer)
+        return () => {
+            clearTimeout(first)
+            clearInterval(timer)
+        }
     }, [enabled, intervalMs])
     return now
+}
+
+/**
+ * DND-75: diferença entre o relógio do servidor (`serverTime` da leitura) e o da tela, medida quando a leitura chega. Somada ao
+ * relógio da tela, o aviso de preparação parada sai na mesma hora em que o servidor autoriza "Reiniciar"/"Seguir sem".
+ */
+export function useServerClockOffset(serverTime: string | null | undefined): number {
+    const [clock, setClock] = useState(() => ({ serverTime, offset: serverClockOffset(serverTime) }))
+    if (clock.serverTime !== serverTime) {
+        const next = { serverTime, offset: serverClockOffset(serverTime) }
+        setClock(next)
+        return next.offset
+    }
+    return clock.offset
 }
 
 const sinceTime = (since: string) => new Date(since).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })

@@ -1363,6 +1363,36 @@ describe("mesa Maddox — preparação do combate (DND-41)", () => {
         expect(screen.queryByRole("button", { name: "Reiniciar preparação" })).not.toBeInTheDocument()
     })
 
+    it("DND-75: o aviso aparece sozinho quando o limite passa, pelo relógio da tela, sem nova leitura da mesa", async () => {
+        vi.useFakeTimers({ toFake: ["Date", "setInterval"] })
+        try {
+            const since = new Date(Date.now() - 2 * 60_000).toISOString()
+            const stuck = { ...blocked, order: [slot("pc:kael", "Kael", "m1", { prep: { status: "preparing" as const, prepId: "p1", since } })], preparation: { active: true, blocked: false, failures: [] } }
+            await renderGame(combatState(stuck))
+            const reads = get.mock.calls.length
+            expect(screen.queryByTestId("combat-prep-stalled")).not.toBeInTheDocument()
+            await act(async () => {
+                vi.advanceTimersByTime(75_000)
+            })
+            expect(screen.getByTestId("combat-prep-stalled")).toHaveTextContent("A preparação da mesa de Kael está parada há 3 min.")
+            expect(get.mock.calls.length).toBe(reads)
+        } finally {
+            vi.useRealTimers()
+        }
+    })
+
+    it("DND-75: o aviso segue o relógio do servidor (serverTime), não o da tela adiantada ou atrasada", async () => {
+        const at = (ms: number) => new Date(Date.now() + ms).toISOString()
+        const stateWith = (since: string, serverTime: string) => combatState({ ...blocked, order: [slot("pc:kael", "Kael", "m1", { prep: { status: "preparing" as const, prepId: "p1", since } })], preparation: { active: true, blocked: false, failures: [], serverTime } })
+        // Tela 2 min adiantada: pelo relógio dela seriam 4 min, mas o servidor mede 2 — sem aviso (e sem 409 no clique).
+        const ahead = await renderGame(stateWith(at(-4 * 60_000), at(-2 * 60_000)))
+        expect(screen.queryByTestId("combat-prep-stalled")).not.toBeInTheDocument()
+        ahead.unmount()
+        // Tela 2 min atrasada: pelo relógio dela seria 1,5 min, mas o servidor mede 3,5 — o aviso já aparece.
+        await renderGame(stateWith(at(-1.5 * 60_000), at(2 * 60_000)))
+        expect(screen.getByTestId("combat-prep-stalled")).toHaveTextContent("A preparação da mesa de Kael está parada há 3 min.")
+    })
+
     it("quem não é dono vê só o aviso de espera, sem os botões", async () => {
         await renderGame(combatState({ ...blocked, preparation: { active: true, blocked: true, failures: [] } }, { isOwner: false, memberId: "m2" }))
         expect(screen.getByTestId("combat-prep-waiting-owner")).toHaveTextContent("Aguardando o dono da campanha")
