@@ -1371,6 +1371,21 @@ describe("mesa Maddox — preparação do combate (DND-41)", () => {
         expect(screen.getByTestId("combat-wait-text")).toHaveTextContent("O Maddox está retomando a vez do combate…")
         expect(screen.getByText("Perguntar ao mestre")).toBeInTheDocument()
     })
+
+    it("DND-75: em combate tático a mesa tem uma só lista — o card da mesa com jogadores e inimigos, sem rastreador nem faixa", async () => {
+        const running = { phase: "running" as const, round: 2, activeKey: "npc:g", order: [slot("npc:g", "Goblin", null, { initiative: 19, active: true }), slot("pc:kael", "Kael", "m1", { initiative: 15 }), slot("pc:lyra", "Lyra", "m2", { initiative: 4 })] }
+        await renderGame(combatState(running))
+        expect(screen.getAllByTestId("table-card")).toHaveLength(1)
+        expect(screen.getAllByTestId("table-combat-order")).toHaveLength(1)
+        expect(screen.queryByTestId("initiative-strip")).not.toBeInTheDocument()
+        expect(screen.queryByTestId("initiative-tracker")).not.toBeInTheDocument()
+        expect(screen.queryByRole("list", { name: "Participantes da mesa" })).not.toBeInTheDocument()
+        const order = screen.getByTestId("table-combat-order")
+        expect(within(screen.getByTestId("game-tools")).getByTestId("table-combat-order")).toBe(order)
+        expect([...order.querySelectorAll("[data-combat-slot]")].map((row) => row.getAttribute("data-testid"))).toEqual(["combatant-npc:g", "seat-m1", "seat-m2"])
+        expect(screen.getByText("Combate · Rodada 2")).toBeInTheDocument()
+        expect(within(screen.getByRole("list", { name: "Fora do combate" })).getByTestId("seat-m3")).toBeInTheDocument()
+    })
 })
 
 describe("mesa Maddox — descanso conduzido pelo Maddox (DND-58)", () => {

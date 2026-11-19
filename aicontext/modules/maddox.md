@@ -2637,4 +2637,5 @@ antigo `InitiativeTracker` (coluna da direita e faixa compacta `initiative-strip
   ("Caído" com 0 PV à mostra, Morto, Morrendo, Estável, condições e concentração).
 
 Testes: `maddox-table-card.test.tsx` (regras, modo mesa, ordem com inimigos, título por fase, linha do jogador × do inimigo, "Fora do
-combate"); `maddox-tactical-combat.test.tsx` e `maddox-combat-prep.test.tsx` usam `renderCombatTable` (`tests/helpers/maddox-table.tsx`).
+combate"); `maddox-game.test.tsx` (a `GamePage` em combate tático tem um só card e uma só lista, sem `initiative-strip` nem
+`initiative-tracker`); `maddox-tactical-combat.test.tsx` e `maddox-combat-prep.test.tsx` usam `renderCombatTable` (`tests/helpers/maddox-table.tsx`).

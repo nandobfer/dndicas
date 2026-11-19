@@ -217,12 +217,6 @@ describe("combate tático — PV dos adversários pela configuração da campanh
         expect(within(slots[2]!).getByTestId("initiative-fallen")).toHaveTextContent("Caído")
         expect(slots[2]!.textContent).not.toMatch(/CA/)
     })
-
-    it("não existe mais a faixa compacta: a ordem fica só no card da mesa", () => {
-        renderCombatTable(withHp)
-        expect(screen.queryByTestId("initiative-strip")).not.toBeInTheDocument()
-        expect(screen.getAllByTestId("table-combat-order")).toHaveLength(1)
-    })
 })
 
 const baseMessage = (over: Partial<MaddoxGameMessageDto>): MaddoxGameMessageDto => ({
