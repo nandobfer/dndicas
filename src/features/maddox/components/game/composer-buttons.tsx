@@ -1,27 +1,32 @@
 "use client"
 
+import type { ComponentPropsWithRef } from "react"
 import { motion, useReducedMotion } from "framer-motion"
 import { ArrowUp, HelpCircle, Loader2, MinusCircle } from "lucide-react"
 import { Button } from "@/components/ui/opex/button"
 import { cn } from "@/core/utils"
+import { MADDOX_TALK_TITLE } from "../../constants"
 
-/** Botões de ícone do campo da mesa (`GameComposer`), também mostrados no tutorial da página da campanha. */
+/** Botões de ícone da mesa (`GameComposer` e o "Conversar com o Mestre"), também mostrados no tutorial da página da campanha. */
 const ICON_BUTTON = "h-8 w-8 shrink-0 rounded-full"
 
+type TalkButtonProps = Omit<ComponentPropsWithRef<"button">, "onAnimationStart" | "onDrag" | "onDragEnd" | "onDragStart" | "onDragOver" | "onDragLeave" | "onDragEnter" | "onDragExit" | "onDrop" | "children" | "style">
+
 /**
- * Botão premium de IA (DND-52): o mesmo anel gradiente azul/roxo animado do "Entender com IA" (`EntityAIUnderstandButton`),
- * no diâmetro dos outros botões do campo. Desabilitado, fica apagado e parado; com `prefers-reduced-motion`, o anel não anima.
+ * "Conversar com o Mestre" (DND-74; era o "Perguntar ao mestre" do campo da mesa): botão premium de IA (DND-52), o mesmo
+ * anel gradiente azul/roxo animado do "Entender com IA" (`EntityAIUnderstandButton`). Aceita as props do gatilho do popover
+ * (`asChild`). Desabilitado, fica apagado e parado; com `prefers-reduced-motion`, o anel não anima.
  */
-export function AskMasterButton({ disabled = false, onClick }: { disabled?: boolean; onClick?: () => void }) {
+export function MasterTalkIconButton({ disabled = false, className, title, ...props }: TalkButtonProps) {
     const reducedMotion = useReducedMotion()
     const animated = !disabled && !reducedMotion
     return (
         <motion.button
             type="button"
-            onClick={onClick}
+            {...props}
             disabled={disabled}
-            aria-label="Perguntar ao mestre"
-            title="Perguntar ao mestre"
+            aria-label={MADDOX_TALK_TITLE}
+            title={title ?? MADDOX_TALK_TITLE}
             whileHover={animated ? { scale: 1.08 } : undefined}
             whileTap={animated ? { scale: 0.94 } : undefined}
             className={cn(
@@ -30,6 +35,7 @@ export function AskMasterButton({ disabled = false, onClick }: { disabled?: bool
                 "bg-gradient-to-r from-blue-500/20 via-purple-500/20 to-blue-500/20 bg-[length:200%_auto] animate-gradient motion-reduce:animate-none",
                 "focus:outline-none focus:ring-2 focus:ring-blue-500/40",
                 "disabled:pointer-events-none disabled:animate-none disabled:opacity-50",
+                className,
             )}
         >
             <span className="grid h-full w-full place-items-center rounded-full bg-black/40 backdrop-blur-[4px] transition-colors group-hover:bg-slate-900/40">

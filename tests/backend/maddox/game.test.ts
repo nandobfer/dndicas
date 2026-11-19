@@ -44,6 +44,7 @@ vi.mock("@/features/maddox/server/action-validation", () => ({ validateDeclarati
 const { MaddoxCampaignMemberModel, MaddoxCampaignMessageModel, MaddoxCampaignModel, MaddoxCharacterModel } = await import("@/features/maddox/models")
 const campaigns = await import("@/features/maddox/server/campaigns")
 const game = await import("@/features/maddox/server/game")
+const reminders = await import("@/features/maddox/server/reminders")
 const { MADDOX_MASTER_LOCK_STALE_MS, MADDOX_MASTER_RETRY_MS } = await import("@/features/maddox/constants")
 const { subscribeGameLive, waitForCampaignIdle } = await import("@/features/maddox/server/game-live")
 
@@ -59,7 +60,10 @@ const g = {
     skipPlayer: (id: string, input: Parameters<typeof game.skipPlayer>[1], userId: string) => settle(id, userId, game.skipPlayer(id, input, userId)),
     checkTurn: (id: string, userId: string) => settle(id, userId, game.checkTurn(id, userId)),
     getGameState: (id: string, userId: string) => settle(id, userId, game.getGameState(id, userId)),
+    /** DND-74: "Conversar com o Mestre" (sucede a pergunta ao mestre do campo da mesa). */
+    talk: (id: string, texto: string, userId: string) => settle(id, userId, reminders.submitTalk(id, { texto }, userId)),
 }
+const isTalk = (message: { kind: string; reminder?: { talk?: boolean } | null }) => message.kind === "reminder" && Boolean(message.reminder?.talk)
 
 let mongo: MongoMemoryServer
 
@@ -197,15 +201,15 @@ describe("Maddox 3 — troca de turno", () => {
     it("pergunta ao mestre é respondida e não encerra o turno, mesmo depois de declarar", async () => {
         const { id, owner, seats } = await table(2)
         await g.startCampaign(id, owner)
-        let state = await g.submitGameAction(id, { kind: "question", content: "Há guardas na porta?" }, seats[0]!.userId)
+        let state = await g.talk(id, "Há guardas na porta?", seats[0]!.userId)
         expect(state.turn).toMatchObject({ number: 1, phase: "players" })
-        const question = state.messages.find((message) => message.kind === "question")!
+        const question = state.messages.find((message) => isTalk(message))!
         const answer = state.messages.find((message) => message.kind === "answer")!
         expect(question).toMatchObject({ content: "Há guardas na porta?", characterName: "Herói 0" })
         expect(answer.replyToId).toBe(question.id)
         expect(answer.content).toContain("Há guardas na porta?")
         await declare(id, seats[0]!.userId)
-        state = await g.submitGameAction(id, { kind: "question", content: "E agora?" }, seats[0]!.userId)
+        state = await g.talk(id, "E agora?", seats[0]!.userId)
         expect(state.turn.phase).toBe("players")
         expect(state.me.declared).toBe(true)
         expect(await narrations(id)).toBe(1)
@@ -214,15 +218,15 @@ describe("Maddox 3 — troca de turno", () => {
     it("DND-51: a nova pergunta do jogador continua a conversa dele no turno (responde à última resposta do Maddox)", async () => {
         const { id, owner, seats } = await table(2)
         await g.startCampaign(id, owner)
-        let state = await g.submitGameAction(id, { kind: "question", content: "Qual truque você quer?" }, seats[0]!.userId)
+        let state = await g.talk(id, "Qual truque você quer?", seats[0]!.userId)
         const firstAnswer = state.messages.find((message) => message.kind === "answer")!
-        expect(state.messages.find((message) => message.kind === "question")!.replyToId).toBeNull()
-        state = await g.submitGameAction(id, { kind: "question", content: "Orientação" }, seats[0]!.userId)
-        const reply = state.messages.filter((message) => message.kind === "question").at(-1)!
+        expect(state.messages.find((message) => isTalk(message))!.replyToId).toBeNull()
+        state = await g.talk(id, "Orientação", seats[0]!.userId)
+        const reply = state.messages.filter((message) => isTalk(message)).at(-1)!
         expect(reply.replyToId).toBe(firstAnswer.id)
         // Outro jogador começa a própria conversa; o turno segue aberto e nenhuma declaração foi gasta.
-        state = await g.submitGameAction(id, { kind: "question", content: "E eu?" }, seats[1]!.userId)
-        expect(state.messages.filter((message) => message.kind === "question").at(-1)!.replyToId).toBeNull()
+        state = await g.talk(id, "E eu?", seats[1]!.userId)
+        expect(state.messages.filter((message) => isTalk(message)).at(-1)!.replyToId).toBeNull()
         expect(state.turn).toMatchObject({ number: 1, phase: "players" })
         expect(state.me.declared).toBe(false)
     })
@@ -269,7 +273,8 @@ describe("Maddox 3 — entrada no meio da campanha", () => {
         await finishInterview(lateSeat.characterId)
 
         await expect(declare(id, late)).rejects.toMatchObject({ status: 409, code: "NEXT_TURN" })
-        await expect(g.submitGameAction(id, { kind: "question", content: "Posso entrar?" }, late)).rejects.toMatchObject({ code: "NEXT_TURN" })
+        // DND-74: a conversa com o mestre vale para quem está pronto, mesmo antes de entrar no turno.
+        expect((await g.talk(id, "Posso entrar?", late)).messages.some(isTalk)).toBe(true)
         await declare(id, seats[0]!.userId)
         const state = await declare(id, seats[1]!.userId)
         expect(state.turn).toMatchObject({ number: 2, phase: "players" })
@@ -494,11 +499,11 @@ describe("Maddox 4 — mestre em segundo plano e streaming", () => {
     it("pergunta: grava a pergunta, responde em segundo plano sem mudar o turno e liga a resposta", async () => {
         const { id, owner, seats } = await table(2)
         await g.startCampaign(id, owner)
-        const immediate = await game.submitGameAction(id, { kind: "question", content: "Há guardas?" }, seats[1]!.userId)
-        expect(immediate.messages.some((message) => message.kind === "question")).toBe(true)
+        const immediate = await reminders.submitTalk(id, { texto: "Há guardas?" }, seats[1]!.userId)
+        expect(immediate.messages.some((message) => isTalk(message))).toBe(true)
         await waitForCampaignIdle(id)
         const state = await game.getGameState(id, owner)
-        const question = state.messages.find((message) => message.kind === "question")!
+        const question = state.messages.find((message) => isTalk(message))!
         const answer = state.messages.find((message) => message.kind === "answer")!
         expect(answer).toMatchObject({ replyToId: question.id, error: null })
         expect(answer.content).toContain("Há guardas?")
@@ -510,7 +515,7 @@ describe("Maddox 4 — mestre em segundo plano e streaming", () => {
         const { id, owner, seats } = await table(1)
         await g.startCampaign(id, owner)
         fakeMaster.answer.mockRejectedValueOnce(new Error("provedor fora do ar"))
-        const state = await g.submitGameAction(id, { kind: "question", content: "E agora?" }, seats[0]!.userId)
+        const state = await g.talk(id, "E agora?", seats[0]!.userId)
         const answer = state.messages.find((message) => message.kind === "answer")!
         expect(answer).toMatchObject({ content: "", error: "O Maddox não conseguiu responder agora. Pergunte de novo." })
         expect(state.turn.phase).toBe("players")
@@ -530,7 +535,7 @@ describe("Maddox 4 — mestre em segundo plano e streaming", () => {
         }
         fakeMaster.answer.mockImplementationOnce(async () => track("Resposta."))
         fakeMaster.narrate.mockImplementationOnce(async () => track("Narração."))
-        await game.submitGameAction(id, { kind: "question", content: "Pergunta?" }, seats[0]!.userId)
+        await reminders.submitTalk(id, { texto: "Pergunta?" }, seats[0]!.userId)
         await game.submitGameAction(id, { kind: "declaration", content: "Ajo." }, seats[0]!.userId)
         await waitForCampaignIdle(id)
         expect(peak).toBe(1)
@@ -585,7 +590,7 @@ describe("Maddox 4 — mestre em segundo plano e streaming", () => {
         const { id, owner, seats } = await table(1)
         await g.startCampaign(id, owner)
         fakeMaster.answer.mockImplementationOnce(async () => new Promise<string>(() => undefined))
-        const state = await g.submitGameAction(id, { kind: "question", content: "Alguém?" }, seats[0]!.userId)
+        const state = await g.talk(id, "Alguém?", seats[0]!.userId)
         expect(state.messages.find((message) => message.kind === "answer")).toMatchObject({ error: "O Maddox não conseguiu responder agora. Pergunte de novo." })
     })
 
@@ -661,7 +666,7 @@ describe("Maddox 4 — validação da ação livre ao declarar", () => {
 
     it("perguntas e \"não fazer nada\" nunca passam pela validação", async () => {
         const { id, owner } = await rigorousTable("fiel-dnd")
-        await g.submitGameAction(id, { kind: "question", content: "Posso?" }, owner)
+        await g.talk(id, "Posso?", owner)
         await g.submitGameAction(id, { kind: "pass" }, owner)
         expect(validateDeclaration).not.toHaveBeenCalled()
     })
@@ -676,7 +681,7 @@ describe("DND-36 — declarações dos outros jogadores ocultas no chat", () => 
         await hide(id, owner, true)
         await g.startCampaign(id, owner)
         await declare(id, seats[1]!.userId, "Escondo a adaga na bota.")
-        await g.submitGameAction(id, { kind: "question", content: "Há guardas na porta?" }, seats[2]!.userId)
+        await g.talk(id, "Há guardas na porta?", seats[2]!.userId)
 
         const other = await g.getGameState(id, seats[2]!.userId)
         const author = await g.getGameState(id, seats[1]!.userId)
@@ -686,8 +691,8 @@ describe("DND-36 — declarações dos outros jogadores ocultas no chat", () => 
         expect(byKind(author.messages, "declaration")[0]).toMatchObject({ content: "Escondo a adaga na bota." })
         expect(byKind(author.messages, "declaration")[0]!.hiddenAction).toBeUndefined()
         // Pergunta ao mestre e resposta do Maddox continuam visíveis para todos.
-        expect(byKind(other.messages, "question")[0]).toMatchObject({ content: "Há guardas na porta?" })
-        expect(byKind(author.messages, "question")[0]).toMatchObject({ content: "Há guardas na porta?" })
+        expect(other.messages.filter(isTalk)[0]).toMatchObject({ content: "Há guardas na porta?" })
+        expect(author.messages.filter(isTalk)[0]).toMatchObject({ content: "Há guardas na porta?" })
         expect(byKind(author.messages, "answer")[0]!.content).toContain("o Maddox responde")
     })
 

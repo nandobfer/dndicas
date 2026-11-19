@@ -85,7 +85,7 @@ async function opexTranscript(campaign: CampaignDoc, member: MemberDoc): Promise
     return narratorTranscript(
         recent
             // Declaração oculta dos outros (DND-36): some da transcrição; o Opex só descobre o que fizeram pela narração.
-            .filter((message) => !message.error && message.kind !== "reminder" && message.kind !== "rewind" && !isHiddenPlayerAction(message, viewer))
+            .filter((message) => !message.error && message.kind !== "reminder" && message.kind !== "master-fix" && message.kind !== "rewind" && !isHiddenPlayerAction(message, viewer))
             .map((message) => {
                 const check = checkResultOf(message)
                 if (message.combatAction) return { turnNumber: message.turnNumber, kind: message.kind, characterName: null, content: message.combatAction.status === "cancelled" ? "" : message.combatAction.summary }

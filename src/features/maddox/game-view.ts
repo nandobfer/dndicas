@@ -155,7 +155,8 @@ export function gameRefetchInterval(state: Pick<MaddoxGameStateDto, "status" | "
 }
 
 /** Por que o jogador não pode injetar uma lembrança agora (`null` = pode). DND-25. */
-export function reminderBlockReason(state: Pick<MaddoxGameStateDto, "status"> & { me: Pick<MaddoxGameStateDto["me"], "memberId" | "ready"> }): string | null {
+/** "Conversar com o Mestre" (DND-74): vale em qualquer fase da campanha em andamento, para quem está pronto. */
+export function talkBlockReason(state: Pick<MaddoxGameStateDto, "status"> & { me: Pick<MaddoxGameStateDto["me"], "memberId" | "ready"> }): string | null {
     if (state.status !== "active") return "A campanha não está em andamento."
     if (!state.me.memberId || !state.me.ready) return "Conclua a entrevista de personagem com o Maddox antes de entrar no jogo."
     return null

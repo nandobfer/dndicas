@@ -162,8 +162,13 @@ describe("card da história na página da campanha (DND-37)", () => {
         const composer = within(tutorial).getByTestId("tutorial-demo-composer")
         expect(composer).toHaveAttribute("aria-hidden", "true")
         expect(composer.hasAttribute("inert")).toBe(true)
-        for (const label of ["Perguntar ao mestre", "Não fazer nada", "Declarar"]) expect(within(composer).getByRole("button", { name: label, hidden: true })).toBeInTheDocument()
-        expect(within(tutorial).getByTestId("tutorial-demo-reminder")).toHaveTextContent("Injetar Lembrança")
+        for (const label of ["Não fazer nada", "Declarar"]) expect(within(composer).getByRole("button", { name: label, hidden: true })).toBeInTheDocument()
+        // DND-74: o campo só declara; falar com o mestre é o "Conversar com o Mestre" (sem "Perguntar ao mestre" nem "Injetar Lembrança").
+        expect(within(composer).queryByRole("button", { name: "Perguntar ao mestre", hidden: true })).not.toBeInTheDocument()
+        expect(within(within(tutorial).getByTestId("tutorial-demo-talk")).getByRole("button", { name: "Conversar com o Mestre", hidden: true })).toBeInTheDocument()
+        expect(tutorial).toHaveTextContent("Conversa fora da mesa: você fala com o mestre, não como o personagem.")
+        expect(tutorial).not.toHaveTextContent("Injetar Lembrança")
+        expect(tutorial).not.toHaveTextContent("Perguntar ao mestre")
         expect(within(tutorial).getByTestId("tutorial-demo-journal")).toHaveTextContent("Diário")
         expect(within(tutorial).getByTestId("tutorial-demo-scene-image")).toHaveTextContent("Gerar imagem da cena")
 
@@ -172,12 +177,12 @@ describe("card da história na página da campanha (DND-37)", () => {
         expect(screen.getByTestId("campaign-scenario-link")).toHaveAttribute("href", "/campanhas/c1/diario")
     })
 
-    it("os botões da demonstração não têm efeito: a lembrança não abre nem envia nada", async () => {
+    it("os botões da demonstração não têm efeito: a conversa com o mestre não abre nem envia nada", async () => {
         renderWithQueryClient(<CampaignPage campaignId="c1" />)
-        const reminder = within(await screen.findByTestId("tutorial-demo-reminder")).getByTestId("inject-reminder-button")
-        expect(reminder.closest("[inert]")).not.toBeNull()
-        expect(reminder.closest(".pointer-events-none")).not.toBeNull()
-        expect(screen.queryByTestId("inject-reminder-popover")).not.toBeInTheDocument()
+        const talk = within(await screen.findByTestId("tutorial-demo-talk")).getByRole("button", { name: "Conversar com o Mestre", hidden: true })
+        expect(talk.closest("[inert]")).not.toBeNull()
+        expect(talk.closest(".pointer-events-none")).not.toBeNull()
+        expect(screen.queryByTestId("master-talk-popover")).not.toBeInTheDocument()
         expect(post).not.toHaveBeenCalled()
     })
 
@@ -186,7 +191,7 @@ describe("card da história na página da campanha (DND-37)", () => {
         renderWithQueryClient(<CampaignPage campaignId="c1" />)
         const tutorial = await screen.findByTestId("table-tutorial")
         expect(within(tutorial).queryByTestId("tutorial-demo-scene-image")).not.toBeInTheDocument()
-        expect(within(tutorial).getByTestId("tutorial-demo-reminder")).toBeInTheDocument()
+        expect(within(tutorial).getByTestId("tutorial-demo-talk")).toBeInTheDocument()
     })
 
     it("\"Ver mais dicas\" expande e recolhe com aria-expanded e funciona pelo teclado", async () => {
@@ -202,7 +207,7 @@ describe("card da história na página da campanha (DND-37)", () => {
         expect(toggle).toHaveAttribute("aria-expanded", "true")
         expect(toggle).toHaveAttribute("aria-controls", "tutorial-extras")
         const extras = await screen.findByTestId("tutorial-extras")
-        expect(extras).toHaveTextContent("Perguntas ao mestre não encerram o seu turno")
+        expect(extras).toHaveTextContent("“Conversar com o Mestre” não encerra o seu turno")
         expect(within(extras).getByTestId("tutorial-shortcuts")).toHaveTextContent("Enter declara")
         expect(within(extras).getByTestId("tutorial-shortcuts")).toHaveTextContent("Shift+Enter quebra a linha")
 

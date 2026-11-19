@@ -334,7 +334,7 @@ describe("Maddox 6 — combate narrativo de ponta a ponta", () => {
         ])
         expect(await MaddoxCombatModel.find({ campaignId: id }).lean()).toEqual([expect.objectContaining({ title: "Briga", status: "active" })])
 
-        await game.submitGameAction(id, { kind: "question", content: "Quantos guardas há?" }, player)
+        await (await import("@/features/maddox/server/reminders")).submitTalk(id, { texto: "Quantos guardas há?" }, player)
         await waitForCampaignIdle(id)
         expect(calls[1]!.toolNames).not.toContain("start_combat")
         expect(calls[1]!.toolNames).not.toContain("end_combat")

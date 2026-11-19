@@ -6,7 +6,7 @@ import { BookMarked, BookOpen, Image as ImageIcon, Loader2, MapPin, MessageCircl
 import { Input } from "@/components/ui/opex/input"
 import { rarityColors } from "@/lib/config/colors"
 import { cn } from "@/lib/utils"
-import { MADDOX_CAMPAIGN_MEMORY_KIND_LABELS, MADDOX_NPC_STATUS_LABELS, MADDOX_QUEST_STATUS_DEFS, MADDOX_AVATAR_CONTEXT, npcAvatarContext } from "../../constants"
+import { MADDOX_CAMPAIGN_MEMORY_KIND_LABELS, MADDOX_NPC_STATUS_LABELS, MADDOX_QUEST_STATUS_DEFS, MADDOX_AVATAR_CONTEXT, MADDOX_TALK_LABEL, npcAvatarContext } from "../../constants"
 import { accentInsensitivePattern } from "../../journal-search"
 import { MADDOX_JOURNAL_QUERY_MIN } from "../../journal-schemas"
 import type { MaddoxJournalSearchDto, MaddoxJournalSearchGroup } from "../../journal-types"
@@ -35,7 +35,7 @@ export function HighlightedText({ text, query }: { text: string; query: string }
     )
 }
 
-const MESSAGE_KIND_LABELS = { narration: "Narração do Maddox", answer: "Resposta do Maddox", declaration: "Declaração", question: "Pergunta ao mestre" } as const
+const MESSAGE_KIND_LABELS = { narration: "Narração do Maddox", answer: "Resposta do Maddox", declaration: "Declaração", question: "Pergunta ao mestre", talk: MADDOX_TALK_LABEL } as const
 
 interface Props {
     campaignId: string

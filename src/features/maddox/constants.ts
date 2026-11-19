@@ -345,10 +345,13 @@ export const MADDOX_GAME_CHANGED_EVENT = "maddox.game.changed"
  * reação (`combat-reaction`). `rewind` (DND-44) é a linha de aviso "O dono voltou a mesa para o turno X" / "O dono retomou o
  * turno N": nunca é descartada e fica fora da transcrição do narrador, do Opex e da busca do Diário.
  */
-export const MADDOX_GAME_MESSAGE_KINDS = ["narration", "declaration", "pass", "question", "answer", "check", "combat", "combat-action", "combat-roll", "combat-reaction", "reminder", "combat-prep", "rewind", "hit-points", "sheet-change", "combat-fix", "level-up", "experience", "chapter", "rest", "rest-request"] as const
+export const MADDOX_GAME_MESSAGE_KINDS = ["narration", "declaration", "pass", "question", "answer", "check", "combat", "combat-action", "combat-roll", "combat-reaction", "reminder", "combat-prep", "rewind", "hit-points", "sheet-change", "combat-fix", "level-up", "experience", "chapter", "rest", "rest-request", "master-fix"] as const
 export type MaddoxGameMessageKind = (typeof MADDOX_GAME_MESSAGE_KINDS)[number]
 
-/** O que o jogador envia no próprio turno. */
+/**
+ * O que o jogador envia no próprio turno. `question` (DND-74) só existe no histórico e nas perguntas dos Personagens Opex:
+ * o jogador fala com o mestre pelo "Conversar com o Mestre" (`POST …/game/talk`).
+ */
 export const MADDOX_GAME_ACTION_KINDS = ["declaration", "pass", "question"] as const
 export type MaddoxGameActionKind = (typeof MADDOX_GAME_ACTION_KINDS)[number]
 
@@ -366,6 +369,15 @@ export const MADDOX_REMINDER_STATUS_LABELS: Record<MaddoxReminderStatus, string>
     discarded: "Usada só neste turno",
 }
 export const MADDOX_REMINDER_PLACEHOLDER = "Ex.: lembre-se que tenho o talento Alerta e não posso ser surpreendido"
+
+// ── Conversar com o Mestre (DND-74) ───────────────────────────────────────────
+
+/** Nome do botão e título do popover que unificam "Perguntar ao mestre" e "Injetar Lembrança". */
+export const MADDOX_TALK_TITLE = "Conversar com o Mestre"
+export const MADDOX_TALK_SUBTITLE = "Fora da mesa: você fala com o mestre, não como o personagem."
+export const MADDOX_TALK_PLACEHOLDER = "Ex.: o que tem no chão? · lembre que estou furtivo, o teste devia ter vantagem · cancele o teste de Atletismo, eu não ia pular"
+/** Rótulo da conversa fora da mesa no chat e na busca do Diário. */
+export const MADDOX_TALK_LABEL = "Conversa com o mestre"
 /** Mensagens por página da mesa (as mais recentes; "Carregar anteriores" busca o resto). */
 export const MADDOX_GAME_PAGE_SIZE = 100
 /** Trava do turno do mestre mais antiga que isto é retomada (geração interrompida). */
@@ -797,6 +809,12 @@ export const MADDOX_SHEET_FIX_TOOL_NAMES = ["get_character_sheet", "get_characte
 export const MADDOX_MASTER_REVIEWING_MESSAGE = "O mestre está revisando um pedido; role quando a resposta chegar."
 
 export const MADDOX_COMBAT_FIX_TOOL_NAMES = ["get_combat_details", "set_combat_condition", "edit_combat_action", "correct_combatant", "correct_character_turn", "resume_combat_turn"] as const
+
+/**
+ * DND-74: correção de um teste de perícia/atributo AINDA PENDENTE pelo "Conversar com o Mestre" (só no job da resposta):
+ * alterar quem rola, CD, vantagem/desvantagem e motivo, ou cancelar. Teste rolado nunca é reescrito.
+ */
+export const MADDOX_CHECK_FIX_TOOL_NAMES = { update: "update_check", cancel: "cancel_check" } as const
 
 /** DND-51: prazo da resposta do jogador a uma pergunta da preparação do combate; depois, a preparação conclui sem a escolha. */
 export const MADDOX_COMBAT_PREP_ANSWER_TIMEOUT_MS = 3 * 60_000

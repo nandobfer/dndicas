@@ -121,7 +121,8 @@ export interface MaddoxJournalSearchMemoryHit {
 
 export interface MaddoxJournalSearchMessageHit {
     id: string
-    kind: "narration" | "declaration" | "question" | "answer"
+    /** `talk` = conversa com o mestre, fora da mesa (DND-74). */
+    kind: "narration" | "declaration" | "question" | "answer" | "talk"
     turnNumber: number
     /** Personagem autor (`null` nas falas do Maddox). */
     characterName: string | null

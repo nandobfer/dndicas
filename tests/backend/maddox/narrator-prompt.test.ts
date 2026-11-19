@@ -121,6 +121,36 @@ describe("tarefa e transcrição do narrador", () => {
         expect(answer).toContain("NÃO avance a cena")
     })
 
+    it("DND-74: a conversa com o mestre é fora da mesa, lista os testes do turno e só oferece alterar/cancelar os pendentes", () => {
+        const talk = narratorTaskText({
+            kind: "answer",
+            turnNumber: 4,
+            characterName: "Lyra",
+            question: "Cancela o teste de Atletismo, eu não ia pular.",
+            declarations: [],
+            talk: true,
+            reminderRef: "abc123",
+            checkFix: true,
+            checks: [
+                { ref: "aaa111", characterName: "Lyra", title: "Atletismo", dc: 12, mode: "normal", reason: "Saltar o fosso", status: "pending", total: null },
+                { ref: "bbb222", characterName: "Doran", title: "Percepção", dc: 10, mode: "advantage", reason: "Vigiar", status: "rolled", total: 14 },
+            ],
+        })
+        expect(talk).toContain("# Conversa com o mestre (turno 4) — fora da mesa")
+        expect(talk).toContain("O JOGADOR (não o personagem) fala com você")
+        expect(talk).toContain("[abc123] Jogador de **Lyra**: Cancela o teste de Atletismo, eu não ia pular.")
+        expect(talk).toContain("- [aaa111] Atletismo de **Lyra**, CD 12, normal — Saltar o fosso · PENDENTE")
+        expect(talk).toContain("- [bbb222] Percepção de **Doran**, CD 10, com vantagem — Vigiar · JÁ ROLADO (total 14): o resultado fica")
+        expect(talk).toContain("`update_check`")
+        expect(talk).toContain("`cancel_check`")
+        expect(talk).toContain("você pode NÃO escrever texto nenhum")
+        expect(talk).toContain("`resolve_reminder` com o id `abc123`")
+        // Sem teste pendente, as regras das ferramentas de teste não entram.
+        const quiet = narratorTaskText({ kind: "answer", turnNumber: 4, characterName: "Lyra", question: "Oi", declarations: [], talk: true, checkFix: true, checks: [] })
+        expect(quiet).not.toContain("Testes deste turno")
+        expect(quiet).not.toContain("`update_check`")
+    })
+
     it("transcrição em ordem cronológica, cortada pelas mais antigas", () => {
         const messages = [
             { turnNumber: 1, kind: "narration" as const, characterName: null, content: "A".repeat(50) },

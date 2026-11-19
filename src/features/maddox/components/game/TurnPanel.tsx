@@ -1,6 +1,6 @@
 "use client"
 
-import { memberAvatarContext } from "../../constants"
+import { MADDOX_MASTER_REVIEWING_MESSAGE, memberAvatarContext } from "../../constants"
 import { useState } from "react"
 import { Crown, Dices, Shield, SkipForward, Users } from "lucide-react"
 import { Button } from "@/components/ui/opex/button"
@@ -92,7 +92,7 @@ export function TurnPanel({ state, presence, color, skipping, onSkip, rollingFor
                                             state.turn.pendingChecks
                                                 .filter((check) => check.memberId === participant.memberId)
                                                 .map((check) => (
-                                                    <Button key={check.checkId} size="sm" variant="ghost" onClick={() => setConfirmingRoll({ checkId: check.checkId, characterName: check.characterName })} aria-label={`Rolar no lugar de ${check.characterName}`} disabled={rollingFor}>
+                                                    <Button key={check.checkId} size="sm" variant="ghost" onClick={() => setConfirmingRoll({ checkId: check.checkId, characterName: check.characterName })} aria-label={`Rolar no lugar de ${check.characterName}`} disabled={rollingFor || Boolean(state.turn.masterReviewing)} title={state.turn.masterReviewing ? MADDOX_MASTER_REVIEWING_MESSAGE : undefined}>
                                                         <Dices aria-hidden /> Rolar no lugar
                                                     </Button>
                                                 ))}

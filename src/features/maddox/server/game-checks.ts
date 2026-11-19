@@ -5,13 +5,13 @@ import { AcaoAuditoria, recordAudit } from "@/lib/db"
 import { DomainError } from "@/lib/api/route"
 import { loggerFor } from "@/lib/logger"
 import type { DiceRollResponse } from "@/features/dice-roller/types"
-import { MADDOX_CAMPAIGN_AUDIT_ENTITY, MADDOX_COMBAT_PREP_BLOCKING_STATUSES } from "../constants"
+import { MADDOX_CAMPAIGN_AUDIT_ENTITY, MADDOX_COMBAT_PREP_BLOCKING_STATUSES, MADDOX_MASTER_REVIEWING_MESSAGE } from "../constants"
 import { checkModifier, checkTitle, type MaddoxCheckSheet } from "../check-modifier"
 import { checkEffectEntry, readCheckEffectEntries } from "../check-effects"
 import { MaddoxCampaignMemberModel, MaddoxCampaignMessageModel, MaddoxCampaignModel, type IMaddoxCampaignMessage } from "../models"
 import type { MaddoxGameStateDto } from "../game-types"
 import { assertMemberCanPlay } from "./campaigns"
-import { emitCheckRolled, type MaddoxDraftCheck } from "./game-live"
+import { emitCheckRolled, hasPendingReview, type MaddoxDraftCheck } from "./game-live"
 import { assertActive, getGameState, loadAsMember, publishGameChanged, scheduleMasterTurn } from "./game"
 
 /**
@@ -79,6 +79,8 @@ export async function rollCheck(campaignId: string, checkId: string, userId: str
     if (turn?.phase !== "master" || !turn.awaitingChecks || turn.number !== message.turnNumber || (turn.checkRound ?? 0) !== check.round) {
         throw new DomainError(409, "Este teste não está mais aguardando a rolagem.", "CHECK_NOT_PENDING")
     }
+    // DND-74: o mestre está tratando uma conversa (pode alterar ou cancelar este teste): o Rolar espera a resposta.
+    if (hasPendingReview(campaignId)) throw new DomainError(409, MADDOX_MASTER_REVIEWING_MESSAGE, "MASTER_REVIEWING")
 
     const spec = { kind: check.kind, ability: check.ability, skill: check.skill ?? null }
     const sheet = check.sheetId ? await loadSheet(check.sheetId) : null

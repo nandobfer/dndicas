@@ -9,10 +9,13 @@ const content = z
     .min(1, { error: "Escreva o que o seu personagem faz" })
     .max(MADDOX_GAME_MESSAGE_MAX, { error: `A mensagem pode ter no máximo ${MADDOX_GAME_MESSAGE_MAX.toLocaleString("pt-BR")} caracteres` })
 
-/** Declaração (intenção, ação ou diálogo), pergunta ao mestre (não encerra o turno) ou "Não fazer nada". */
+/**
+ * Declaração (intenção, ação ou diálogo) ou "Não fazer nada". Desde a DND-74 o campo da mesa não pergunta mais: falar com o
+ * mestre é o "Conversar com o Mestre" (`maddoxTalkSchema`).
+ */
 export const maddoxGameActionSchema = z.discriminatedUnion(
     "kind",
-    [z.strictObject({ kind: z.literal("declaration"), content }), z.strictObject({ kind: z.literal("question"), content }), z.strictObject({ kind: z.literal("pass") })],
+    [z.strictObject({ kind: z.literal("declaration"), content }), z.strictObject({ kind: z.literal("pass") })],
     { error: "Ação inválida" },
 )
 export type MaddoxGameActionInput = z.infer<typeof maddoxGameActionSchema>
@@ -21,15 +24,15 @@ export type MaddoxGameActionInput = z.infer<typeof maddoxGameActionSchema>
 export const maddoxSkipPlayerSchema = z.strictObject({ memberId: z.string({ error: "Informe o jogador" }).trim().min(1, { error: "Informe o jogador" }) })
 export type MaddoxSkipPlayerInput = z.infer<typeof maddoxSkipPlayerSchema>
 
-/** Injetar Lembrança (DND-25): texto livre para a próxima narração do Maddox. */
-export const maddoxReminderSchema = z.strictObject({
+/** "Conversar com o Mestre" (DND-74, sucede o "Injetar Lembrança" da DND-25): texto livre, fora da mesa. */
+export const maddoxTalkSchema = z.strictObject({
     texto: z
-        .string({ error: "Escreva a lembrança" })
+        .string({ error: "Escreva a mensagem para o mestre" })
         .trim()
-        .min(1, { error: "Escreva a lembrança" })
-        .max(MADDOX_REMINDER_MAX_CHARS, { error: `A lembrança tem até ${MADDOX_REMINDER_MAX_CHARS} caracteres` }),
+        .min(1, { error: "Escreva a mensagem para o mestre" })
+        .max(MADDOX_REMINDER_MAX_CHARS, { error: `A mensagem para o mestre tem até ${MADDOX_REMINDER_MAX_CHARS} caracteres` }),
 })
-export type MaddoxReminderInput = z.infer<typeof maddoxReminderSchema>
+export type MaddoxTalkInput = z.infer<typeof maddoxTalkSchema>
 
 /** Rolar um teste pedido pelo Maddox: sem campos (dado e modificador são do servidor). */
 export const maddoxRollCheckSchema = z.strictObject({}, { error: "A rolagem não aceita dados nem modificadores." })

@@ -191,15 +191,15 @@ export function useStartMaddoxCampaign(campaignId: string) {
     })
 }
 
-/** Injetar Lembrança (DND-25): o texto vale para a próxima narração do Maddox; o estado da mesa volta junto. */
-export function useInjectMaddoxReminder(campaignId: string) {
+/** "Conversar com o Mestre" (DND-74): conversa fora da mesa; o mestre trata na hora e o estado da mesa volta junto. */
+export function useSendMasterTalk(campaignId: string) {
     const queryClient = useQueryClient()
     return useMutation({
-        mutationFn: async (texto: string) => unwrapApi((await api.post<ApiResponse<MaddoxGameStateDto>>(`${gamePath(campaignId)}/reminders`, { texto })).data),
+        mutationFn: async (texto: string) => unwrapApi((await api.post<ApiResponse<MaddoxGameStateDto>>(`${gamePath(campaignId)}/talk`, { texto })).data),
         onSuccess: (state) => {
             queryClient.setQueryData(maddoxGameKey(campaignId), state)
         },
-        onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível enviar a lembrança")),
+        onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível enviar a mensagem ao mestre")),
     })
 }
 

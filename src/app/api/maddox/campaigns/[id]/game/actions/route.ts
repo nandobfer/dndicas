@@ -8,7 +8,7 @@ import { submitGameAction } from "@/features/maddox/server/game"
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-/** POST …/game/actions — `{ kind: "declaration" | "question", content }` ou `{ kind: "pass" }` ("Não fazer nada"). */
+/** POST …/game/actions — `{ kind: "declaration", content }` ou `{ kind: "pass" }` ("Não fazer nada"). Falar com o mestre é `…/game/talk` (DND-74). */
 export const POST = withRoute<{ id: string }>(async ({ req, params }) => {
     const actor = await requirePermissionActor(MADDOX_PLAY_PERMISSION)
     const body = await parseBody(req, maddoxGameActionSchema)

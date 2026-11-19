@@ -296,7 +296,7 @@ describe("mesa Maddox — conversa e turno", () => {
         await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns/c1/npcs/npc2/opex", {}))
     })
 
-    it("Injetar Lembrança (DND-25): o botão fica ao lado de 'Gerar imagem da cena', envia o texto e a linha aparece na conversa", async () => {
+    it("Conversar com o Mestre (DND-74): um único botão, sobreposto no canto do chat (fora do cabeçalho e do campo), envia o texto à rota da conversa", async () => {
         post.mockResolvedValue(ok(gameState()))
         await renderGame(
             gameState({
@@ -304,22 +304,35 @@ describe("mesa Maddox — conversa e turno", () => {
                 sceneImages: { owner: true, canRequest: true, reason: null, generating: false, remainingToday: 9, campaignEnabled: true, canRequestPortrait: true },
             }),
         )
-        const reminder = screen.getByTestId("inject-reminder-button")
-        expect(reminder).toBeEnabled()
-        expect(screen.getByTestId("scene-image-button").nextElementSibling).toBe(reminder)
+        const talk = screen.getByRole("button", { name: "Conversar com o Mestre" })
+        expect(screen.getAllByRole("button", { name: "Conversar com o Mestre" })).toHaveLength(1)
+        expect(talk).toBeEnabled()
+        // Dentro da área das mensagens (sobreposto), não no cabeçalho nem no campo de texto.
+        const slot = screen.getByTestId("master-talk-slot")
+        expect(slot).toContainElement(talk)
+        expect(slot.className.split(" ")).toEqual(expect.arrayContaining(["absolute", "right-3", "top-3"]))
+        expect(slot.parentElement).toContainElement(screen.getByRole("log"))
+        expect(screen.getByRole("log").className.split(" ")).toContain("pr-14")
+        expect(screen.getByTestId("game-composer-box")).not.toContainElement(talk)
+        expect(screen.queryByTestId("inject-reminder-button")).not.toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: /Injetar Lembrança/ })).not.toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: "Perguntar ao mestre" })).not.toBeInTheDocument()
+        // Lembrança antiga continua com a linha de antes.
         expect(screen.getByTestId("reminder-line")).toHaveTextContent("Lyra lembrou o Maddox: “Tenho o talento Alerta.”")
-        expect(screen.getByTestId("reminder-status")).toHaveTextContent("Guardada como memória")
-        fireEvent.click(reminder)
-        fireEvent.change(await screen.findByTestId("inject-reminder-text"), { target: { value: "Estou envenenado." } })
-        fireEvent.click(screen.getByTestId("inject-reminder-send"))
-        await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns/c1/game/reminders", { texto: "Estou envenenado." }))
+        fireEvent.click(talk)
+        expect(await screen.findByTestId("master-talk-popover")).toHaveTextContent("Fora da mesa: você fala com o mestre, não como o personagem.")
+        fireEvent.change(screen.getByTestId("master-talk-text"), { target: { value: "Estou envenenado." } })
+        fireEvent.click(screen.getByTestId("master-talk-send"))
+        await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns/c1/game/talk", { texto: "Estou envenenado." }))
     })
 
-    it("Injetar Lembrança aparece para o jogador e fica desabilitado com o motivo enquanto ele não concluiu a entrevista", async () => {
+    it("Conversar com o Mestre vale também no turno do mestre (testes pendentes) e some enquanto o jogador não concluiu a entrevista", async () => {
+        const view = await renderGame(gameState({ turn: { number: 2, phase: "master", startedAt: null, generating: false, failed: false, awaitingChecks: true, pendingChecks: [] } }))
+        expect(screen.getByRole("button", { name: "Conversar com o Mestre" })).toBeEnabled()
+        view.unmount()
         await renderGame(gameState({ me: ME({ memberId: "m2", isOwner: false, ready: false }) }))
-        const reminder = screen.getByTestId("inject-reminder-button")
-        expect(reminder).toBeDisabled()
-        expect(reminder).toHaveAttribute("title", "Conclua a entrevista de personagem com o Maddox antes de entrar no jogo.")
+        expect(screen.queryByRole("button", { name: "Conversar com o Mestre" })).not.toBeInTheDocument()
+        expect(screen.queryByTestId("master-talk-slot")).not.toBeInTheDocument()
     })
 
     it("turno do mestre: o campo fica bloqueado e o Maddox aparece narrando", async () => {
@@ -340,7 +353,7 @@ describe("mesa Maddox — conversa e turno", () => {
 })
 
 describe("mesa Maddox — ações do jogador", () => {
-    it("Declarar, Perguntar ao mestre e Não fazer nada enviam a ação certa", async () => {
+    it("Declarar e Não fazer nada enviam a ação certa; o campo não pergunta mais ao mestre (DND-74)", async () => {
         await renderGame(gameState())
         post.mockResolvedValue(ok(gameState()))
         const input = screen.getByLabelText("O que o seu personagem faz")
@@ -350,9 +363,8 @@ describe("mesa Maddox — ações do jogador", () => {
         fireEvent.click(screen.getByRole("button", { name: /Declarar/ }))
         await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns/c1/game/actions", { kind: "declaration", content: "Saco a espada." }))
 
-        fireEvent.change(input, { target: { value: "Há saída nos fundos?" } })
-        fireEvent.click(screen.getByRole("button", { name: /Perguntar ao mestre/ }))
-        await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns/c1/game/actions", { kind: "question", content: "Há saída nos fundos?" }))
+        expect(within(screen.getByTestId("game-composer-box")).queryByRole("button", { name: /Perguntar ao mestre|Conversar com o Mestre/ })).not.toBeInTheDocument()
+        expect(screen.getByTestId("game-composer-hint")).toHaveTextContent("Para falar com o mestre fora da mesa, use “Conversar com o Mestre”.")
 
         fireEvent.click(screen.getByRole("button", { name: /Não fazer nada/ }))
         await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns/c1/game/actions", { kind: "pass" }))
@@ -374,20 +386,20 @@ describe("mesa Maddox — ações do jogador", () => {
         await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns/c1/game/actions", { kind: "declaration", content: "Corro." }))
     })
 
-    it("campo no desenho da entrevista: caixa única com três botões de ícone, na ordem Perguntar, Não fazer nada, Declarar", async () => {
+    it("campo no desenho da entrevista: caixa única com dois botões de ícone, na ordem Não fazer nada, Declarar", async () => {
         await renderGame(gameState())
         const box = screen.getByTestId("game-composer-box")
         for (const cls of ["flex", "items-end", "gap-2", "rounded-xl", "border", "bg-card", "focus-within:border-primary/60"]) expect(box.className.split(" ")).toContain(cls)
         const input = within(box).getByLabelText("O que o seu personagem faz")
         expect(input.className.split(" ")).toEqual(expect.arrayContaining(["flex-1", "mb-1", "max-h-[180px]"]))
         const buttons = within(box).getAllByRole("button")
-        expect(buttons.map((button) => button.getAttribute("aria-label"))).toEqual(["Perguntar ao mestre", "Não fazer nada", "Declarar"])
+        expect(buttons.map((button) => button.getAttribute("aria-label"))).toEqual(["Não fazer nada", "Declarar"])
         for (const button of buttons) {
             expect(button.className.split(" ")).toEqual(expect.arrayContaining(["h-8", "w-8", "rounded-full"]))
             expect(button).toHaveAttribute("title")
             expect(button.textContent).toBe("")
         }
-        expect(buttons[2]).toHaveAttribute("type", "submit")
+        expect(buttons[1]).toHaveAttribute("type", "submit")
         expect(buttons[0]).toHaveAttribute("type", "button")
         // Estado e contador abaixo da caixa, fora dela.
         expect(within(box).queryByTestId("game-composer-hint")).not.toBeInTheDocument()
@@ -412,13 +424,14 @@ describe("mesa Maddox — ações do jogador", () => {
         await waitFor(() => expect(input.value).toBe("Ataco."))
     })
 
-    it("depois de declarar só dá para perguntar ao mestre", async () => {
+    it("depois de declarar o campo espera o próximo turno; falar com o mestre continua pelo \"Conversar com o Mestre\"", async () => {
         await renderGame(gameState({ me: ME({ declared: true }), participants: [participant("m1", "u-owner", "Kael", { declared: true }), participant("m2", "u-ana", "Lyra")] }))
-        fireEvent.change(screen.getByLabelText("O que o seu personagem faz"), { target: { value: "Mais alguém na sala?" } })
+        expect(screen.getByLabelText("O que o seu personagem faz")).toBeDisabled()
+        expect(screen.getByLabelText("O que o seu personagem faz")).toHaveAttribute("placeholder", "Você já declarou neste turno")
         expect(screen.getByRole("button", { name: /Declarar/ })).toBeDisabled()
         expect(screen.getByRole("button", { name: /Não fazer nada/ })).toBeDisabled()
-        expect(screen.getByRole("button", { name: /Perguntar ao mestre/ })).toBeEnabled()
-        expect(screen.getByTestId("game-composer-hint")).toHaveTextContent("Você já declarou. Aguardando os outros jogadores")
+        expect(screen.getByRole("button", { name: "Conversar com o Mestre" })).toBeEnabled()
+        expect(screen.getByTestId("game-composer-hint")).toHaveTextContent("Você já declarou. Aguardando os outros jogadores — para falar com o mestre, use “Conversar com o Mestre”.")
     })
 
     it("quem entrou no meio do turno espera o próximo; quem não concluiu a entrevista vê o link para ela", async () => {
@@ -789,6 +802,19 @@ describe("mesa Maddox — layout em tela inteira", () => {
 })
 
 describe("mesa Maddox — testes pedidos pelo Maddox (Maddox 5)", () => {
+    it("DND-74: enquanto o mestre trata uma conversa, o Rolar do teste espera; o teste cancelado aparece sem o Rolar", async () => {
+        const reviewing = gameState({ rigor: "fiel-dnd", me: ME({ memberId: "m2", isOwner: false }), turn: { ...awaitingTurn, masterReviewing: true }, messages: [checkMessage()] })
+        const view = await renderGame(reviewing)
+        const card = screen.getByTestId("game-check-request")
+        expect(within(card).getByRole("button", { name: "Rolar" })).toBeDisabled()
+        expect(card).toHaveTextContent("O mestre está revisando um pedido; role quando a resposta chegar.")
+        view.unmount()
+        await renderGame(gameState({ rigor: "fiel-dnd", me: ME({ memberId: "m2", isOwner: false }), messages: [checkMessage({ status: "cancelled", cancelReason: "Ela só mostrou o contrato" }), message("f1", { kind: "master-fix", phase: "master", turnNumber: 2, characterName: "Lyra", content: "Teste de Furtividade de Lyra cancelado", masterFix: { kind: "check-cancel" } })] }))
+        expect(screen.getByTestId("game-check-cancelled")).toHaveTextContent("Teste de Lyra cancelado (ela só mostrou o contrato).")
+        expect(screen.queryByRole("button", { name: "Rolar" })).not.toBeInTheDocument()
+        expect(screen.getByTestId("master-fix-line")).toHaveTextContent("Teste de Furtividade de Lyra cancelado")
+    })
+
     it("o jogador indicado vê o pedido com o d20, as partes do modificador e 'Rolar'; a rolagem vai ao servidor sem dado nem modificador", async () => {
         post.mockResolvedValue(ok({ roll: roll17, state: gameState({ me: ME({ memberId: "m2", isOwner: false }), turn: { ...awaitingTurn, awaitingChecks: false, pendingChecks: [], generating: true }, messages: [checkMessage({ status: "rolled", roll: roll17 })] }) }))
         await renderGame(gameState({ rigor: "fiel-dnd", me: ME({ memberId: "m2", isOwner: false }), turn: awaitingTurn, messages: [message("n2", { kind: "narration", phase: "master", turnNumber: 2, content: "Lyra avança…" }), checkMessage()] }))
@@ -1206,7 +1232,7 @@ describe("sugestões de ação do Maddox (DND-30)", () => {
         expect(post).toHaveBeenCalledTimes(1)
     })
 
-    it("depois de declarar ficam desabilitadas com a escolhida marcada; o campo livre continua para perguntas", async () => {
+    it("depois de declarar ficam desabilitadas com a escolhida marcada; falar com o mestre segue pelo \"Conversar com o Mestre\"", async () => {
         const declared = withOptions({ me: ME({ declared: true }) }, [message("d9", { kind: "declaration", turnNumber: 2, memberId: "m1", characterName: "Kael", content: "procuro o faroleiro" })])
         await renderGame(declared)
         for (const option of OPTIONS) expect(optionButton(option)).toBeDisabled()
@@ -1370,6 +1396,23 @@ describe("mesa Maddox — preparação do combate (DND-41)", () => {
         expect(screen.getByTestId("turn-banner")).not.toHaveTextContent("Turno dos jogadores")
         expect(screen.getByTestId("combat-wait-text")).toHaveTextContent("O Maddox está retomando a vez do combate…")
         expect(screen.getByText("Perguntar ao mestre")).toBeInTheDocument()
+    })
+
+    it("DND-74: o \"Perguntar ao mestre\" da barra do combate abre a mesma conversa (sem campo de pergunta à parte) e não gasta ação", async () => {
+        const running = { phase: "running" as const, round: 1, activeKey: "pc:kael", order: [slot("pc:kael", "Kael", "m1", { active: true, initiative: 18 }), slot("npc:g", "Goblin", null, { initiative: 10 })] }
+        const state = combatState(running)
+        state.turn = { ...state.turn, phase: "players", awaitingChecks: false }
+        state.me.combat = { ...state.me.combat!, myTurn: true, options: { action: [], bonus: [] }, adjustments: [] }
+        post.mockResolvedValue(ok(state))
+        await renderGame(state)
+        expect(screen.queryByTestId("master-talk-popover")).not.toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: /Perguntar ao mestre/ }))
+        expect(await screen.findByTestId("master-talk-popover")).toHaveTextContent("Conversar com o Mestre")
+        expect(screen.queryByLabelText("O que o seu personagem faz")).not.toBeInTheDocument()
+        fireEvent.change(screen.getByTestId("master-talk-text"), { target: { value: "Estou escondido?" } })
+        fireEvent.click(screen.getByTestId("master-talk-send"))
+        await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns/c1/game/talk", { texto: "Estou escondido?" }))
+        expect(post).toHaveBeenCalledTimes(1)
     })
 })
 

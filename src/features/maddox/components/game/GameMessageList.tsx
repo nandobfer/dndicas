@@ -1,11 +1,11 @@
 "use client"
 
-import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
+import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
-import { AlertCircle, ArrowDown, BookOpen, EyeOff, HelpCircle, Loader2, MinusCircle, Moon } from "lucide-react"
+import { AlertCircle, ArrowDown, BookOpen, Clock, EyeOff, HelpCircle, Loader2, MessagesSquare, MinusCircle, Moon } from "lucide-react"
 import { Button } from "@/components/ui/opex/button"
 import { Markdown } from "@/components/ui/opex/markdown"
-import { MADDOX_AVATAR_CONTEXT, messageAvatarContext } from "../../constants"
+import { MADDOX_AVATAR_CONTEXT, MADDOX_TALK_LABEL, messageAvatarContext } from "../../constants"
 import type { MaddoxGameMessageDto, MaddoxLevelUpStepDto, MaddoxLiveGenerationDto } from "../../game-types"
 import { opexActingLabel, type MaddoxActionOptionsView } from "../../game-view"
 import { GameActionOptions } from "./GameActionOptions"
@@ -19,6 +19,7 @@ import { GameCombatCard } from "./GameCombatCard"
 import { CombatActionCard, CombatOrderCard, CombatPrepCard, CombatReactionCard, CombatRollCard } from "./combat/CombatCards"
 import { LiveNpcRolls } from "./combat/LiveNpcRolls"
 import { ReminderLine } from "./ReminderLine"
+import { MasterFixLine } from "./MasterFixLine"
 import { RewindNoticeLine } from "./RewindNoticeLine"
 import { HitPointsLine } from "./HitPointsLine"
 import { SheetChangeLine } from "./SheetChangeLine"
@@ -62,6 +63,13 @@ interface Props {
     retryingLevelUpId?: string | null
     /** Descanso (DND-58): dados de vida, trocas e a preparação com falha; nunca no diário (só leitura). */
     rest?: RestHandlers | null
+    /**
+     * DND-74: o "Conversar com o Mestre", sobreposto no canto superior direito da área das mensagens (fixo na rolagem, com
+     * espaço reservado para não cobrir as mensagens). `null` = sem botão (e sem o espaço); nunca no diário.
+     */
+    talk?: ReactNode
+    /** DND-74: o mestre está tratando uma conversa: o Rolar dos testes espera a resposta. */
+    masterReviewing?: boolean
 }
 
 export interface ActionOptionsHandlers {
@@ -109,8 +117,9 @@ function stepReplaysOf(replays: ReadonlyMap<string, DiceRollResponse>, messageId
 
 const NO_COMBAT: CombatHandlers = { isOwner: false, reacting: false, onRollAction: noRoll, onRollCombat: noRoll, onCancelAction: () => undefined, onDecideReaction: () => undefined }
 
-export function GameMessageList({ messages, myMemberId, maddoxAvatarUrl, color, narrating, live = [], opexActing: opexActingInput = null, hasMore, loadingMore, onLoadMore, replays = NO_REPLAYS, onRollCheck = noRoll, combat: handlers = NO_COMBAT, readOnly = false, highlightId = null, actionOptions: optionsInput = null, onLevelUp = null, onRetryLevelUp = null, retryingLevelUpId = null, rest: restInput = null }: Props) {
+export function GameMessageList({ messages, myMemberId, maddoxAvatarUrl, color, narrating, live = [], opexActing: opexActingInput = null, hasMore, loadingMore, onLoadMore, replays = NO_REPLAYS, onRollCheck = noRoll, combat: handlers = NO_COMBAT, readOnly = false, highlightId = null, actionOptions: optionsInput = null, onLevelUp = null, onRetryLevelUp = null, retryingLevelUpId = null, rest: restInput = null, talk: talkInput = null, masterReviewing = false }: Props) {
     const restHandlers = readOnly ? null : restInput
+    const talk = readOnly ? null : talkInput
     const combat = readOnly ? NO_COMBAT : handlers
     const actionOptions = readOnly ? null : optionsInput
     const opexActing = readOnly ? null : opexActingInput
@@ -158,7 +167,12 @@ export function GameMessageList({ messages, myMemberId, maddoxAvatarUrl, color, 
 
     return (
         <div className="relative min-h-0 flex-1">
-            <div ref={scrollRef} onScroll={onScroll} className="h-full overflow-y-auto px-4 pb-2 pt-4" role="log" aria-live={readOnly ? "off" : "polite"} aria-label={readOnly ? "Histórico da campanha" : "Mesa da campanha"}>
+            {talk && (
+                <div className="absolute right-3 top-3 z-10 rounded-full bg-background/80 p-1 shadow-md backdrop-blur" data-testid="master-talk-slot">
+                    {talk}
+                </div>
+            )}
+            <div ref={scrollRef} onScroll={onScroll} className={`h-full overflow-y-auto pb-2 pt-4 ${talk ? "pl-4 pr-14" : "px-4"}`} role="log" aria-live={readOnly ? "off" : "polite"} aria-label={readOnly ? "Histórico da campanha" : "Mesa da campanha"}>
                 {hasMore && (
                     <div className="flex justify-center pb-3">
                         <Button type="button" size="sm" variant="ghost" onClick={onLoadMore} disabled={loadingMore}>
@@ -204,8 +218,12 @@ export function GameMessageList({ messages, myMemberId, maddoxAvatarUrl, color, 
                                     <CombatReactionCard message={message} mine={actsAs(message)} isOwner={combat.isOwner} busy={combat.reacting} onDecide={combat.onDecideReaction} />
                                 ) : message.kind === "combat-prep" && message.combatPrep ? (
                                     <CombatPrepCard message={message} busy={Boolean(combat.answeringPrep)} onAnswer={combat.onAnswerPrep} />
+                                ) : message.kind === "reminder" && message.reminder?.talk ? (
+                                    <TalkMessage message={message} mine={message.memberId !== null && message.memberId === myMemberId} color={color} />
                                 ) : message.kind === "reminder" ? (
                                     <ReminderLine message={message} color={color} />
+                                ) : message.kind === "master-fix" ? (
+                                    <MasterFixLine message={message} color={color} />
                                 ) : message.kind === "rewind" ? (
                                     <RewindNoticeLine message={message} color={color} />
                                 ) : message.kind === "hit-points" ? (
@@ -223,7 +241,7 @@ export function GameMessageList({ messages, myMemberId, maddoxAvatarUrl, color, 
                                 ) : message.kind === "rest" && message.rest ? (
                                     <RestCard message={message} color={color} handlers={restHandlers} replays={replays} />
                                 ) : message.kind === "check" && message.check ? (
-                                    <GameCheckCard message={message} mine={actsAs(message)} color={color} replay={replays.get(message.id) ?? null} onRoll={onRollCheck} />
+                                    <GameCheckCard message={message} mine={actsAs(message)} color={color} replay={replays.get(message.id) ?? null} onRoll={onRollCheck} masterReviewing={!readOnly && masterReviewing} />
                                 ) : (
                                     <GameMessage message={message} mine={message.memberId !== null && message.memberId === myMemberId} replyTo={message.replyToId ? (byId.get(message.replyToId) ?? null) : null} maddoxAvatarUrl={maddoxAvatarUrl} color={color} />
                                 )}
@@ -383,6 +401,36 @@ function GameMessage({ message, mine, replyTo, maddoxAvatarUrl, color }: { messa
                     )}
                 </p>
                 <p className="whitespace-pre-wrap">{message.content}</p>
+            </div>
+        </motion.div>
+    )
+}
+
+/**
+ * DND-74: mensagem do "Conversar com o Mestre" — conversa fora da mesa, identificada pelo JOGADOR (nome do usuário), com o
+ * selo "fora da mesa" e borda tracejada, distinta da fala do personagem. As minhas ficam à direita.
+ */
+function TalkMessage({ message, mine, color }: { message: MaddoxGameMessageDto; mine: boolean; color: string }) {
+    const name = message.authorName ?? message.characterName ?? "Jogador"
+    const pending = message.reminder?.status === "pending"
+    return (
+        <motion.div {...bubble} className={`flex items-start gap-2.5 pb-3 ${mine ? "flex-row-reverse" : ""}`} data-testid="game-talk" data-status={message.reminder?.status ?? "pending"}>
+            <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center self-start rounded-full border border-dashed border-white/25 bg-white/[0.04]" aria-hidden>
+                <MessagesSquare className="h-3.5 w-3.5" style={{ color }} />
+            </span>
+            <div className={`min-w-0 max-w-[85%] space-y-1 break-words rounded-2xl border border-dashed px-3.5 py-2 text-sm text-foreground ${mine ? "rounded-tr-sm border-primary/40 bg-primary/10" : "rounded-tl-sm border-white/20 bg-white/[0.03]"}`}>
+                <p className="flex flex-wrap items-center gap-1 text-xs font-semibold text-white/80">
+                    {name}
+                    <span className="inline-flex items-center gap-0.5 font-normal text-white/60" data-testid="game-talk-label">
+                        <MessagesSquare className="h-3 w-3" aria-hidden /> {MADDOX_TALK_LABEL.toLowerCase()} · fora da mesa
+                    </span>
+                </p>
+                <p className="whitespace-pre-wrap">{message.content}</p>
+                {pending && (
+                    <p className="flex items-center gap-1 text-[11px] text-white/45" data-testid="game-talk-pending">
+                        <Clock className="h-3 w-3" aria-hidden /> Aguardando o mestre
+                    </p>
+                )}
             </div>
         </motion.div>
     )

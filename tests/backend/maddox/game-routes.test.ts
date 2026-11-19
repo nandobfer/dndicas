@@ -36,7 +36,7 @@ const sceneImagesService = {
 vi.doMock("@/features/maddox/server/scene-images", () => sceneImagesService)
 const campaignsService = { assertMemberCanPlay: vi.fn(async () => undefined) }
 vi.doMock("@/features/maddox/server/campaigns", () => campaignsService)
-const remindersService = { submitReminder: vi.fn(async () => state) }
+const remindersService = { submitTalk: vi.fn(async () => state) }
 vi.doMock("@/features/maddox/server/reminders", () => remindersService)
 const rewindService = {
     listRewindTurns: vi.fn(async () => ({ turns: [{ turnNumber: 2, excerpt: "A ponte cai." }], undoTarget: 2, originTurn: 3, atTurn: 3 })),
@@ -161,21 +161,22 @@ describe("rotas da mesa Maddox", () => {
         expect(service.checkTurn).toHaveBeenCalledWith("c1", "user-1")
     })
 
-    it("ações: valida o corpo (400 em pt-BR) e repassa declaração, pergunta e \"Não fazer nada\"", async () => {
+    it("ações: valida o corpo (400 em pt-BR) e repassa declaração e \"Não fazer nada\"; a pergunta saiu do campo (DND-74)", async () => {
         const route = await importFresh<typeof import("@/app/api/maddox/campaigns/[id]/game/actions/route")>("@/app/api/maddox/campaigns/[id]/game/actions/route")
         const url = `${base}/game/actions`
         for (const body of [{ kind: "declaration", content: "   " }, { kind: "declaration", content: "x".repeat(4001) }, { kind: "atacar", content: "x" }, { kind: "pass", content: "extra" }]) {
             const response = await route.POST(post(url, body), ctx({ id: "c1" }))
             expect(response.status).toBe(400)
         }
-        const empty = await route.POST(post(url, { kind: "question", content: "" }), ctx({ id: "c1" }))
+        const empty = await route.POST(post(url, { kind: "declaration", content: "" }), ctx({ id: "c1" }))
         expect(JSON.stringify(await empty.json())).toContain("Escreva o que o seu personagem faz")
         expect(service.submitGameAction).not.toHaveBeenCalled()
 
         await route.POST(post(url, { kind: "declaration", content: "  Abro a porta.  " }), ctx({ id: "c1" }))
         expect(service.submitGameAction).toHaveBeenLastCalledWith("c1", { kind: "declaration", content: "Abro a porta." }, "user-1")
-        await route.POST(post(url, { kind: "question", content: "Há guardas?" }), ctx({ id: "c1" }))
-        expect(service.submitGameAction).toHaveBeenLastCalledWith("c1", { kind: "question", content: "Há guardas?" }, "user-1")
+        // DND-74: perguntar é o "Conversar com o Mestre" (…/game/talk); o campo da mesa não aceita mais a pergunta.
+        expect((await route.POST(post(url, { kind: "question", content: "Há guardas?" }), ctx({ id: "c1" }))).status).toBe(400)
+        expect(service.submitGameAction).toHaveBeenCalledTimes(1)
         await route.POST(post(url, { kind: "pass" }), ctx({ id: "c1" }))
         expect(service.submitGameAction).toHaveBeenLastCalledWith("c1", { kind: "pass" }, "user-1")
     })
@@ -187,11 +188,11 @@ describe("rotas da mesa Maddox", () => {
         expect(service.skipPlayer).toHaveBeenCalledWith("c1", { memberId: "m2" }, "user-1")
     })
 
-    it("Injetar Lembrança (DND-25): exige maddox.play, recusa texto vazio ou acima de 500 caracteres e repassa o texto ao serviço", async () => {
-        type ReminderRoute = typeof import("@/app/api/maddox/campaigns/[id]/game/reminders/route")
-        const path = "@/app/api/maddox/campaigns/[id]/game/reminders/route"
-        const url = `${base}/game/reminders`
-        remindersService.submitReminder.mockClear()
+    it("Conversar com o Mestre (DND-74, sucede o Injetar Lembrança): exige maddox.play, recusa texto vazio ou acima de 500 caracteres e repassa o texto ao serviço", async () => {
+        type ReminderRoute = typeof import("@/app/api/maddox/campaigns/[id]/game/talk/route")
+        const path = "@/app/api/maddox/campaigns/[id]/game/talk/route"
+        const url = `${base}/game/talk`
+        remindersService.submitTalk.mockClear()
         who = "noPermission"
         expect((await (await importFresh<ReminderRoute>(path)).POST(post(url, { texto: "Oi" }), ctx({ id: "c1" }))).status).toBe(403)
         who = "player"
@@ -199,11 +200,11 @@ describe("rotas da mesa Maddox", () => {
         expect((await route.POST(post(url, { texto: "   " }), ctx({ id: "c1" }))).status).toBe(400)
         expect((await route.POST(post(url, { texto: "a".repeat(501) }), ctx({ id: "c1" }))).status).toBe(400)
         expect((await route.POST(post(url, { texto: "Oi", extra: 1 }), ctx({ id: "c1" }))).status).toBe(400)
-        expect(remindersService.submitReminder).not.toHaveBeenCalled()
+        expect(remindersService.submitTalk).not.toHaveBeenCalled()
         const response = await route.POST(post(url, { texto: "  lembre-se que tenho o talento Alerta  " }), ctx({ id: "c1" }))
         expect(response.status).toBe(200)
         expect(permissions).toContain("maddox.play")
-        expect(remindersService.submitReminder).toHaveBeenCalledWith("c1", { texto: "lembre-se que tenho o talento Alerta" }, "user-1")
+        expect(remindersService.submitTalk).toHaveBeenCalledWith("c1", { texto: "lembre-se que tenho o talento Alerta" }, "user-1")
         expect((await route.POST(post(url, { texto: "a".repeat(500) }), ctx({ id: "c1" }))).status).toBe(200)
     })
 

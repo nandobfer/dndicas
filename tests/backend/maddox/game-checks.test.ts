@@ -568,3 +568,93 @@ describe("DND-69 — efeito registrado depois do request_check aparece na prévi
         expect(saved!.check!.effects).toEqual([expect.objectContaining({ name: "Orientação", dice: "1d4", status: "expected" })])
     })
 })
+
+const reminders = await import("@/features/maddox/server/reminders")
+const runs = await import("@/features/maddox/server/question-runs")
+const fixes = await import("@/features/maddox/server/check-fixes")
+
+describe("DND-74 — Conversar com o Mestre altera e cancela o teste pendente (DND-72)", () => {
+    const pendingCheck = async (id: string) => (await MaddoxCampaignMessageModel.findOne({ campaignId: id, kind: "check" }).lean())!
+    const lyraCharacterId = async (id: string) => String((await MaddoxCharacterModel.findOne({ campaignId: id, name: "Lyra" }).lean())!._id)
+    const openRun = async (id: string, jobId: string, userId: string, isOwner: boolean, characterId: string | null) =>
+        runs.openQuestionRun({ campaignId: id, jobId, turnNumber: 2, questionId: String(new mongoose.Types.ObjectId()), askerUserId: userId, askerCharacterId: characterId, askerIsOwner: isOwner, playerTexts: [] })
+
+    it("alterar: o card muda na hora, a linha mostra antes → depois, sem balão; o Rolar espera enquanto o mestre trata o pedido", async () => {
+        const table = await faithfulTable()
+        await untilCheckRequested(table)
+        const request = await pendingCheck(table.id)
+        let rollWhileReviewing: unknown = null
+        script.push([
+            {
+                tools: [{ name: "update_check", input: { personagem: "Lyra", cd: 10, modo: "normal" } }],
+                during: async () => {
+                    rollWhileReviewing = await checks.rollCheck(table.id, String(request._id), table.player).catch((error: unknown) => error)
+                },
+            },
+        ])
+        await reminders.submitTalk(table.id, { texto: "Estou furtiva desde a entrada: a CD devia ser menor." }, table.player)
+        await waitForCampaignIdle(table.id)
+
+        expect(rollWhileReviewing).toMatchObject({ code: "MASTER_REVIEWING" })
+        const prompt = calls.at(-1)!
+        expect(prompt.toolNames).toEqual(expect.arrayContaining(["update_check", "cancel_check"]))
+        expect(prompt.userText).toContain(`[${String(request._id).slice(-6)}] Furtividade de **Lyra**, CD 15, com vantagem — Esgueirar-se entre os guardas · PENDENTE`)
+        const fixed = await pendingCheck(table.id)
+        expect(fixed.check).toMatchObject({ status: "pending", dc: 10, mode: "normal" })
+        const line = await MaddoxCampaignMessageModel.findOne({ campaignId: table.id, kind: "master-fix" }).lean()
+        expect(line).toMatchObject({ content: "Teste de Furtividade de Lyra atualizado: CD 15 → 10; vantagem → normal", masterFix: { kind: "check-update" } })
+        const talk = await MaddoxCampaignMessageModel.findOne({ campaignId: table.id, kind: "reminder" }).lean()
+        expect(await MaddoxCampaignMessageModel.countDocuments({ campaignId: table.id, kind: "answer", replyToId: talk!._id })).toBe(0)
+        expect(vi.mocked(recordAudit)).toHaveBeenCalledWith(expect.objectContaining({ userId: table.player, acao: "ATUALIZAR", depois: expect.objectContaining({ checkFix: "update_check", antes: { dc: 15, mode: "advantage" }, depois: { dc: 10, mode: "normal" } }) }))
+        // A mesa continua esperando a rolagem; agora ela sai com a correção.
+        const state = await game.getGameState(table.id, table.owner)
+        expect(state.turn).toMatchObject({ phase: "master", awaitingChecks: true })
+        expect(state.messages.find((message) => message.kind === "master-fix")).toMatchObject({ content: line!.content, masterFix: { kind: "check-update" } })
+    })
+
+    it("cancelar: o card perde o Rolar, a linha registra o cancelamento e o turno é liberado (a narração continua sem o teste)", async () => {
+        const table = await faithfulTable()
+        await untilCheckRequested(table)
+        script.push([{ tools: [{ name: "cancel_check", input: { personagem: "Lyra", motivo: "Ela só mostrou o contrato e o selo" } }], text: "Tem razão: não há o que rolar." }])
+        script.push([{ text: "O fiscal lê o contrato e acena. O que vocês fazem?" }])
+        await reminders.submitTalk(table.id, { texto: "Eu não ia persuadir ninguém, só mostrar o contrato." }, table.player)
+        await waitForCampaignIdle(table.id)
+
+        const check = await pendingCheck(table.id)
+        expect(check.check).toMatchObject({ status: "cancelled", cancelReason: "Ela só mostrou o contrato e o selo" })
+        expect(await MaddoxCampaignMessageModel.findOne({ campaignId: table.id, kind: "master-fix" }).lean()).toMatchObject({ content: "Teste de Furtividade de Lyra cancelado", masterFix: { kind: "check-cancel" } })
+        const state = await game.getGameState(table.id, table.player)
+        expect(state.turn).toMatchObject({ number: 2, phase: "players", awaitingChecks: false })
+        expect(state.messages.find((message) => message.kind === "check")!.check).toMatchObject({ status: "cancelled" })
+        // A continuação recebe o teste cancelado, com o motivo.
+        expect(calls.at(-1)!.userText).toContain("cancelado")
+        await expect(checks.rollCheck(table.id, String(check._id), table.player)).rejects.toMatchObject({ code: "CHECK_NOT_PENDING" })
+    })
+
+    it("teste já rolado não é reescrito; jogador comum não troca quem rola; fora da conversa a ferramenta recusa", async () => {
+        const table = await faithfulTable()
+        await untilCheckRequested(table)
+        const request = await pendingCheck(table.id)
+        const characterId = await lyraCharacterId(table.id)
+
+        await expect(fixes.updatePendingCheck(undefined, { personagem: "Lyra", cd: 10 })).rejects.toThrow("Conversar com o Mestre")
+        await openRun(table.id, "job-jogadora", table.player, false, characterId)
+        await expect(fixes.updatePendingCheck("job-jogadora", { personagem: "Lyra", novoPersonagem: "Doran" })).rejects.toThrow("Só o dono da campanha troca quem rola um teste.")
+        await expect(fixes.updatePendingCheck("job-jogadora", { personagem: "Lyra", cd: 15, modo: "vantagem" })).rejects.toThrow("Nada muda")
+
+        await openRun(table.id, "job-dono", table.owner, true, null)
+        const moved = await fixes.updatePendingCheck("job-dono", { teste: String(request._id).slice(-6), novoPersonagem: "Doran" })
+        expect(moved).toMatchObject({ aplicado: true, resultado: "Teste de Furtividade de Lyra atualizado: quem rola: Lyra → Doran" })
+        expect(await pendingCheck(table.id)).toMatchObject({ characterName: "Doran", memberId: new mongoose.Types.ObjectId(table.doran.memberId), check: { sheetId: new mongoose.Types.ObjectId(table.doran.sheetId!) } })
+        // Agora o teste é do Doran: a jogadora não corrige mais o teste.
+        await expect(fixes.cancelPendingCheck("job-jogadora", { teste: String(request._id).slice(-6), motivo: "x" })).rejects.toThrow("só corrige o teste do próprio personagem")
+
+        await MaddoxCampaignMessageModel.updateOne({ _id: request._id }, { $set: { "check.status": "rolled", "check.roll": { total: 17 } } })
+        await expect(fixes.updatePendingCheck("job-dono", { teste: String(request._id).slice(-6), cd: 5 })).rejects.toThrow("já foi rolado (total 17): o resultado fica")
+        await expect(fixes.cancelPendingCheck("job-dono", { teste: String(request._id).slice(-6), motivo: "x" })).rejects.toThrow("já foi rolado")
+        expect((await pendingCheck(table.id)).check).toMatchObject({ status: "rolled", dc: 15 })
+        expect((await fixes.talkChecks(new mongoose.Types.ObjectId(table.id)))[0]).toMatchObject({ status: "rolled", total: 17 })
+        runs.closeQuestionRun("job-jogadora")
+        runs.closeQuestionRun("job-dono")
+    })
+})

@@ -64,6 +64,10 @@ export interface MaddoxGameMessageDto {
     sceneImages?: MaddoxGameSceneImageDto[]
     /** Lembrança injetada por um jogador (`kind: "reminder"`, DND-25): o texto vem em `content`. */
     reminder?: MaddoxReminderDto | null
+    /** DND-74: quem escreveu a conversa com o mestre (o nome do usuário, não do personagem). */
+    authorName?: string | null
+    /** DND-74: linha de resultado do "Conversar com o Mestre". */
+    masterFix?: MaddoxMasterFixDto | null
     /** Sugestões de ação da narração para o personagem de quem vê (DND-30); as dos outros nunca chegam. */
     actionOptions?: string[] | null
     /** NPCs Opex cujo agente não respondeu nesta narração (DND-27): só o dono recebe, com o motivo. */
@@ -176,6 +180,15 @@ export interface MaddoxRestWaitDto {
 /** Situação de uma lembrança: esperando a próxima narração, guardada como memória ou usada só naquela narração. */
 export interface MaddoxReminderDto {
     status: "pending" | "saved" | "discarded"
+    /** DND-74: mensagem do "Conversar com o Mestre" (conversa fora da mesa). Ausente nas lembranças antigas. */
+    talk?: boolean
+}
+
+/** DND-74: linha de resultado do "Conversar com o Mestre" (`kind: "master-fix"`); o texto vem em `content`. */
+export interface MaddoxMasterFixDto {
+    kind: "reminder" | "check-update" | "check-cancel"
+    /** Lembrança: guardada como memória da campanha ou usada só agora. */
+    status?: "saved" | "discarded"
 }
 
 /** Imagem gerada pelo Maddox numa cena (Maddox 10). A descrição enviada ao gerador nunca chega à tela. */

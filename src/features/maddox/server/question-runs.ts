@@ -70,9 +70,11 @@ export async function questionThread(campaignId: Types.ObjectId, questionId: Typ
     const seen = new Set<string>()
     while (cursor && thread.length < QUESTION_THREAD_MAX && !seen.has(String(cursor))) {
         seen.add(String(cursor))
-        const message: Pick<IMaddoxCampaignMessage, "_id" | "kind" | "content" | "characterName" | "replyToId"> | null = await MaddoxCampaignMessageModel.findOne({ _id: cursor, campaignId }).select("kind content characterName replyToId").lean()
-        if (!message || (message.kind !== "question" && message.kind !== "answer")) break
-        thread.unshift({ id: String(message._id), role: message.kind === "question" ? "player" : "maddox", characterName: message.characterName ?? null, content: message.content })
+        const message: Pick<IMaddoxCampaignMessage, "_id" | "kind" | "content" | "characterName" | "replyToId" | "reminder"> | null = await MaddoxCampaignMessageModel.findOne({ _id: cursor, campaignId }).select("kind content characterName replyToId reminder").lean()
+        // DND-74: a conversa com o mestre (`reminder` com `talk`) é a fala do jogador, como a pergunta.
+        const playerTalk = message?.kind === "question" || (message?.kind === "reminder" && Boolean(message.reminder?.talk))
+        if (!message || (!playerTalk && message.kind !== "answer")) break
+        thread.unshift({ id: String(message._id), role: playerTalk ? "player" : "maddox", characterName: message.characterName ?? null, content: message.content })
         cursor = message.replyToId ?? null
     }
     return thread

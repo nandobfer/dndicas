@@ -225,6 +225,16 @@ describe("Maddox 9 — busca por texto", () => {
         expect(ombro.party.items.map((item) => item.characterName)).toEqual(["Aldric"])
     })
 
+    it("DND-74: a conversa com o mestre entra na busca como conversa (não pergunta do personagem); lembrança antiga e linha de resultado não entram", async () => {
+        const c = await campaignWithJournal()
+        const campaignId = new mongoose.Types.ObjectId(c.id)
+        await MaddoxCampaignMessageModel.create({ campaignId, turnNumber: 1, phase: "players", kind: "reminder", characterName: "Lyra", content: "O que tem no chão da cripta?", reminder: { status: "discarded", talk: true } })
+        await MaddoxCampaignMessageModel.create({ campaignId, turnNumber: 1, phase: "players", kind: "reminder", characterName: "Lyra", content: "Lembre do chão da cripta antigo.", reminder: { status: "discarded" } })
+        await MaddoxCampaignMessageModel.create({ campaignId, turnNumber: 1, phase: "players", kind: "master-fix", characterName: "Lyra", content: "Lembrança injetada: chão da cripta escorregadio", masterFix: { kind: "reminder", status: "discarded" } })
+        const hits = await journal.searchJournal(c.id, { q: "chão da cripta" }, c.player)
+        expect(hits.messages.items).toEqual([expect.objectContaining({ kind: "talk", characterName: "Lyra", excerpt: expect.stringContaining("O que tem no chão da cripta?") })])
+    })
+
     it("busca pelas tags e não traz respostas que falharam", async () => {
         const c = await campaignWithJournal()
         const vila = await journal.searchJournal(c.id, { q: "vila" }, c.player)
