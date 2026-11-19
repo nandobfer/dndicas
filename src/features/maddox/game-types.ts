@@ -269,6 +269,10 @@ export interface MaddoxTacticalSlotDto {
 export interface MaddoxCombatPrepSlotDto {
     /** `asking` (DND-51): a preparação espera a resposta do jogador a uma pergunta. */
     status: "waiting" | "preparing" | "asking" | "ready" | "failed"
+    /** DND-75: id da preparação (ações do dono sobre a preparação parada). */
+    prepId?: string
+    /** DND-75: só em "Preparando…": início do job, em ISO (a tela calcula o tempo e o aviso de parada). */
+    since?: string | null
 }
 
 /** DND-41: estado da preparação da mesa de combate. `failures` (com o motivo) só chega ao dono da campanha. */
@@ -279,6 +283,8 @@ export interface MaddoxCombatPreparationDto {
     blocked: boolean
     /** Só para o dono da campanha. */
     failures: { prepId: string; characterName: string; error: string }[]
+    /** DND-75: horário do servidor nesta leitura (ISO): a tela corrige o relógio dela ao calcular a preparação parada. */
+    serverTime?: string
 }
 
 export interface MaddoxTacticalCombatDto {

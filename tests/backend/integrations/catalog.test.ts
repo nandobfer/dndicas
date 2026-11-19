@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import {
     DEFAULT_CRON_JOBS,
-    ENGRAMIND_CAMPAIGN_SYNC_JOB_ID, MADDOX_SESSIONS_CLEANUP_JOB_ID,
+    ENGRAMIND_CAMPAIGN_SYNC_JOB_ID, MADDOX_COMBAT_PREP_RECOVERY_JOB_ID, MADDOX_SESSIONS_CLEANUP_JOB_ID,
     HEALTH_CHECK_JOB_ID,
     INTEGRATION_IDS,
     INTEGRATIONS,
@@ -71,12 +71,13 @@ describe("catálogo das integrações do DnDicas", () => {
         expect(umami.publicFields.find((field) => field.key === "active")?.defaultValue).toBe(true)
     })
 
-    it("as rotinas padrão são a verificação de status (5 min), a limpeza do Agente Opex, a sincronização das memórias das campanhas com o Engramind (15 min) e a das sessões do Maddox (60 min)", () => {
+    it("as rotinas padrão são a verificação de status (5 min), a limpeza do Agente Opex, a sincronização das memórias das campanhas com o Engramind (15 min) e a das sessões do Maddox (60 min) e a retomada das preparações de combate do Maddox (1 min)", () => {
         expect(DEFAULT_CRON_JOBS.map((job) => [job.id, job.schedule])).toEqual([
             [HEALTH_CHECK_JOB_ID, { type: "interval", minutes: 5 }],
             [OPEX_FILES_CLEANUP_JOB_ID, { type: "interval", minutes: 60 }],
             [ENGRAMIND_CAMPAIGN_SYNC_JOB_ID, { type: "interval", minutes: 15 }],
             [MADDOX_SESSIONS_CLEANUP_JOB_ID, { type: "interval", minutes: 60 }],
+            [MADDOX_COMBAT_PREP_RECOVERY_JOB_ID, { type: "interval", minutes: 1 }],
         ])
     })
 })

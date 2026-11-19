@@ -733,8 +733,22 @@ export const MADDOX_COMBAT_ADJUST_MAX_STEPS = 10
 export const MADDOX_COMBAT_DOWNED_CHECK_TIMEOUT_MS = 60_000
 /** Preparação "em andamento" sem job vivo há mais que isto (processo reiniciado) volta para a fila. */
 export const MADDOX_COMBAT_PREP_STALE_MS = 30_000
+/**
+ * DND-75: preparação "Preparando…" (job em andamento) há mais que isto é tida como parada: o dono vê o aviso com "Reiniciar
+ * preparação" e "Seguir sem preparação", e o selo mostra há quanto tempo. A que só espera na fila ("Aguardando") nunca conta.
+ */
+export const MADDOX_COMBAT_PREP_STALL_NOTICE_MS = 3 * 60_000
+/** DND-75: intervalo mínimo, por campanha, entre as retomadas das preparações feitas na leitura da mesa. */
+export const MADDOX_COMBAT_PREP_RECOVERY_THROTTLE_MS = 15_000
+/** DND-75: motivo gravado pelo vigia na preparação que passou do teto. */
+export const MADDOX_COMBAT_PREP_HARD_LIMIT_ERROR = "A preparação passou do tempo limite e foi interrompida."
 /** Novas leituras da ficha quando o jogador a altera durante a preparação. */
 export const MADDOX_COMBAT_PREP_CONFLICT_RETRIES = 2
+/**
+ * DND-75: teto de uma preparação "em andamento": conferência de quem está a 0 PV + todas as gerações que o laço pode fazer
+ * (a primeira e uma por conflito de ficha, `MADDOX_COMBAT_PREP_CONFLICT_RETRIES`) + folga. Passou, o vigia a marca como falha.
+ */
+export const MADDOX_COMBAT_PREP_HARD_LIMIT_MS = MADDOX_COMBAT_DOWNED_CHECK_TIMEOUT_MS + MADDOX_COMBAT_PREP_TIMEOUT_MS * (1 + MADDOX_COMBAT_PREP_CONFLICT_RETRIES) + 60_000
 /** Teto técnico de uma geração do pedido de ajuste (DND-49: 2 → 4 min, para caber as consultas ao catálogo). */
 export const MADDOX_COMBAT_ADJUST_TIMEOUT_MS = 4 * 60_000
 /** Texto do pedido de ajuste de uma opção. */
