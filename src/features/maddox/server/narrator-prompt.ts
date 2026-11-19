@@ -548,7 +548,7 @@ export type NarratorTask =
           sheetFix?: boolean
           /** DND-59: combate tático em andamento — a resposta corrige o combate na hora (condição, card, adversário, economia). */
           combatFix?: boolean
-          /** DND-59: o pedido é um lembrete (Injetar Lembrança) corrigido na hora; id curto para `resolve_reminder`. */
+          /** DND-59/74: id curto da conversa com o mestre para `resolve_reminder` (só com `talk`). */
           reminderRef?: string
           /** DND-74: o pedido veio do "Conversar com o Mestre" (pergunta, lembrete ou correção; o balão é opcional). */
           talk?: boolean
@@ -750,22 +750,8 @@ function taskBody(task: NarratorTask): string {
             ...talkCheckLines(task.checks ?? [], Boolean(task.checkFix)),
             "",
             MADDOX_TALK_TASK_RULES,
+            `Se o jogador diz que o personagem usa uma magia ou recurso que soma dado a testes (Orientação, Inspiração de Bardo), registre já com \`${MADDOX_CHECK_EFFECT_TOOL_NAMES.apply}\` (o dado entra nos próximos testes pedidos e no teste ainda não rolado); se a ferramenta recusar, diga o motivo ao jogador. Nunca diga que o efeito vale sem o retorno dela.`,
             ...(task.reminderRef ? [`Ao terminar, chame \`resolve_reminder\` com o id \`${task.reminderRef}\`: \`guardar: true\` (com \`tipo\`, \`titulo\`, \`texto\` e \`visibility\`) só quando for um fato durável da campanha; quando o pedido for uma lembrança, informe também \`resultado\` (o que fica valendo, em uma frase curta).`] : []),
-            ...(task.sheetFix ? ["", MADDOX_SHEET_FIX_TASK_RULES] : []),
-            ...(task.combatFix ? ["", MADDOX_COMBAT_FIX_TASK_RULES] : []),
-            "",
-            MADDOX_STATE_OR_SILENCE_RULE,
-        ].join("\n")
-    }
-    if (task.kind === "answer" && task.reminderRef) {
-        return [
-            `# Lembrete de ${task.characterName} (turno ${task.turnNumber})`,
-            `[${task.reminderRef}] **${task.characterName}** lembra: ${task.question.trim()}`,
-            ...(task.declarations.length ? ["", "Declarações já feitas neste turno (ainda não resolvidas):", ...declarationLines(task.declarations)] : []),
-            "",
-            `Se o lembrete diz que o personagem usa uma magia ou recurso que soma dado a testes (Orientação, Inspiração de Bardo), registre já com \`${MADDOX_CHECK_EFFECT_TOOL_NAMES.apply}\` (o dado entra nos próximos testes pedidos e no teste ainda não rolado); se a ferramenta recusar, diga o motivo ao jogador. Nunca diga que o efeito vale sem o retorno dela.`,
-            "O jogador quer que você considere isto AGORA. Se o lembrete aponta algo errado no estado do jogo (condição, card de ação ainda não rolado, PV, ficha, economia), CORRIJA já com as ferramentas, antes que o jogador role. Se não houver nada a corrigir, diga em uma frase como isso vale. Depois chame `resolve_reminder` com o id entre colchetes (`guardar: true` só quando for um fato durável da campanha).",
-            "Responda ao jogador em poucas frases: o que mudou de fato (pelo retorno das ferramentas) ou por que não mudou. NÃO avance a cena, não resolva declarações e não atribua ações a ninguém: o turno continua aberto.",
             ...(task.sheetFix ? ["", MADDOX_SHEET_FIX_TASK_RULES] : []),
             ...(task.combatFix ? ["", MADDOX_COMBAT_FIX_TASK_RULES] : []),
             "",

@@ -349,10 +349,11 @@ export const MADDOX_GAME_MESSAGE_KINDS = ["narration", "declaration", "pass", "q
 export type MaddoxGameMessageKind = (typeof MADDOX_GAME_MESSAGE_KINDS)[number]
 
 /**
- * O que o jogador envia no próprio turno. `question` (DND-74) só existe no histórico e nas perguntas dos Personagens Opex:
- * o jogador fala com o mestre pelo "Conversar com o Mestre" (`POST …/game/talk`).
+ * O que o jogador envia no próprio turno (`POST …/game/actions`). Desde a DND-74 a pergunta saiu do campo: o jogador fala com o
+ * mestre pelo "Conversar com o Mestre" (`POST …/game/talk`); `kind: "question"` só existe nas mensagens antigas e nas perguntas
+ * dos Personagens Opex.
  */
-export const MADDOX_GAME_ACTION_KINDS = ["declaration", "pass", "question"] as const
+export const MADDOX_GAME_ACTION_KINDS = ["declaration", "pass"] as const
 export type MaddoxGameActionKind = (typeof MADDOX_GAME_ACTION_KINDS)[number]
 
 export const MADDOX_GAME_MESSAGE_MAX = 4_000
@@ -361,12 +362,17 @@ export const MADDOX_GAME_MESSAGE_MAX = 4_000
 
 /** Tamanho máximo de uma lembrança injetada por um jogador. */
 export const MADDOX_REMINDER_MAX_CHARS = 500
-export const MADDOX_REMINDER_STATUSES = ["pending", "saved", "discarded"] as const
+/**
+ * `failed` (DND-74) só existe na conversa com o mestre: a resposta falhou e a conversa fica encerrada (o jogador envia de
+ * novo); ela nunca volta a `pending` para uma narração consumir sem as ferramentas de correção.
+ */
+export const MADDOX_REMINDER_STATUSES = ["pending", "saved", "discarded", "failed"] as const
 export type MaddoxReminderStatus = (typeof MADDOX_REMINDER_STATUSES)[number]
 export const MADDOX_REMINDER_STATUS_LABELS: Record<MaddoxReminderStatus, string> = {
     pending: "Aguardando o Maddox",
     saved: "Guardada como memória",
     discarded: "Usada só neste turno",
+    failed: "O mestre não conseguiu responder: envie de novo",
 }
 export const MADDOX_REMINDER_PLACEHOLDER = "Ex.: lembre-se que tenho o talento Alerta e não posso ser surpreendido"
 

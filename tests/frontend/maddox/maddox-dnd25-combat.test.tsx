@@ -70,6 +70,14 @@ describe("DND-25/74 — lembrança e Conversar com o Mestre na conversa da mesa"
         expect(screen.getByTestId("game-talk-pending").textContent).toContain("Aguardando o mestre")
         expect(screen.queryByTestId("reminder-line")).toBeNull()
         expect(screen.queryByTestId("game-question")).toBeNull()
+        expect(screen.queryByTestId("game-talk-failed")).toBeNull()
+    })
+
+    it("DND-74: a conversa que falhou fica encerrada com o aviso para enviar de novo (sem “Aguardando o mestre”)", () => {
+        render(<GameMessageList messages={[message({ id: "t2", kind: "reminder", phase: "players", memberId: "m1", characterName: "Kael", authorName: "Bruno", content: "Cancele o teste.", reminder: { status: "failed", talk: true } })]} myMemberId="m1" maddoxAvatarUrl={null} color="#fff" narrating={false} hasMore={false} loadingMore={false} onLoadMore={() => undefined} />)
+        expect(screen.getByTestId("game-talk")).toHaveAttribute("data-status", "failed")
+        expect(screen.getByTestId("game-talk-failed").textContent).toContain("O mestre não conseguiu responder: envie de novo")
+        expect(screen.queryByTestId("game-talk-pending")).toBeNull()
     })
 
     it("DND-74: a linha de resultado segue o desenho da lembrança injetada, com o que aconteceu com a lembrança", () => {

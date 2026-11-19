@@ -1,11 +1,11 @@
 "use client"
 
 import { motion } from "framer-motion"
-import { BookmarkCheck, Clock, Lightbulb, Sparkles } from "lucide-react"
+import { AlertCircle, BookmarkCheck, Clock, Lightbulb, Sparkles } from "lucide-react"
 import { MADDOX_REMINDER_STATUS_LABELS } from "../../constants"
 import type { MaddoxGameMessageDto } from "../../game-types"
 
-const STATUS_ICONS = { pending: Clock, saved: BookmarkCheck, discarded: Sparkles } as const
+const STATUS_ICONS = { pending: Clock, saved: BookmarkCheck, discarded: Sparkles, failed: AlertCircle } as const
 
 /**
  * Lembrança injetada por um jogador (DND-25), vista por toda a mesa como linha discreta: "{Personagem} lembrou o

@@ -897,6 +897,8 @@ export async function answerQuestion(campaignId: Types.ObjectId, jobId: string, 
         }
     } catch (failure) {
         live.end({ messageId: null, error: MADDOX_ANSWER_FAILED_MESSAGE })
+        // DND-74: a conversa nunca fica "Aguardando o mestre" depois de o job dela morrer (nunca lança).
+        if (options.reminder) await (await import("./reminders")).releaseReminders(campaignId, jobId)
         throw failure
     }
     await publishGameChanged(campaignId)
@@ -924,10 +926,10 @@ export function scheduleReminderFix(campaignId: Types.ObjectId, reminderId: Type
 
 
 /** Linhas de resultado que uma correção grava na mesa (DND-74: dispensam o balão de resposta da conversa). */
-const TALK_RESULT_KINDS = ["master-fix", "sheet-change", "combat-fix", "hit-points", "experience", "level-up"] as const
+export const TALK_RESULT_KINDS = ["master-fix", "sheet-change", "combat-fix", "hit-points", "experience", "level-up"] as const
 
 /** O job da conversa gravou alguma correção (linha de resultado) ou decidiu a lembrança com um resultado. */
-async function talkActed(campaignId: Types.ObjectId, jobId: string, since: Types.ObjectId): Promise<boolean> {
+export async function talkActed(campaignId: Types.ObjectId, jobId: string, since: Types.ObjectId): Promise<boolean> {
     if (jobReminders(String(campaignId), jobId).some((item) => item.decided && item.result)) return true
     return Boolean(await MaddoxCampaignMessageModel.exists({ campaignId, _id: { $gt: since }, kind: { $in: [...TALK_RESULT_KINDS] } }))
 }
@@ -972,6 +974,8 @@ export async function skipPlayer(campaignId: string, input: MaddoxSkipPlayerInpu
 export async function checkTurn(campaignId: string, userId: string): Promise<MaddoxGameStateDto> {
     const { campaign } = await loadAsMember(campaignId, userId)
     if (campaign.status === "active") {
+        // DND-74: conversa com o mestre cujo job morreu (processo reiniciado) fica encerrada como falha.
+        if (await (await import("./reminders")).reapStaleTalks(campaign._id)) await publishGameChanged(campaign._id)
         await fillEmptyTurn(campaign)
         if (campaign.turn?.combatActor) {
             const { evaluateCombatAbsence } = await import("./tactical-actions")

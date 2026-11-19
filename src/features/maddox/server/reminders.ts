@@ -7,7 +7,7 @@ import type { MaddoxGameStateDto } from "../game-types"
 import { MaddoxCampaignMessageModel, MaddoxCampaignModel, type IMaddoxCampaignMessage } from "../models"
 import { assertMemberCanPlay } from "./campaigns"
 import { assertActive, characterOf, getGameState, lastTalkTip, loadAsMember, publishGameChanged } from "./game"
-import { isActiveMaddoxJob, jobReminders, setJobReminders, type MaddoxDraftReminder } from "./game-live"
+import { isActiveMaddoxJob, isCampaignBusy, jobReminders, setJobReminders, type MaddoxDraftReminder } from "./game-live"
 
 /**
  * Injetar Lembrança (DND-25) — SOMENTE servidor. Um membro pronto envia um texto curto; desde a DND-59 o Maddox o
@@ -19,8 +19,10 @@ import { isActiveMaddoxJob, jobReminders, setJobReminders, type MaddoxDraftRemin
  *
  * DND-74: a lembrança virou o "Conversar com o Mestre" (`submitTalk`): a mensagem é uma `reminder` com `reminder.talk`,
  * vale em qualquer fase da campanha, continua a conversa do jogador no turno (`replyToId`) e o resultado aparece como a
- * linha compacta `master-fix` ("Lembrança injetada: …", "Teste de X atualizado", "Teste de X cancelado"). As lembranças
- * antigas (sem `talk`) seguem como estavam.
+ * linha compacta `master-fix` ("Lembrança injetada: …", "Teste de X atualizado", "Teste de X cancelado"). A conversa só é
+ * tratada pelo job dela (tem as ferramentas de correção): a narração nunca a reivindica. Se a resposta falha (ou o job
+ * morre: `reapStaleTalks`), ela fica `failed` e o jogador envia de novo; ela nunca volta a `pending`. As lembranças
+ * antigas (sem `talk`) seguem como estavam: falha devolve a `pending` e a próxima narração as considera.
  */
 
 const log = loggerFor({ module: "maddox", feature: "reminders" })
@@ -69,10 +71,11 @@ export async function submitTalk(campaignId: string, input: MaddoxTalkInput, use
 
 /**
  * Começo de uma narração: reivindica as lembranças pendentes (as soltas e as de uma geração que já não roda, ex.: o
- * processo caiu) para o job e as guarda nele. Devolve as que a narração deve considerar.
+ * processo caiu) para o job e as guarda nele. Devolve as que a narração deve considerar. DND-74: a conversa com o mestre
+ * (`reminder.talk`) nunca entra: só o job dela tem as ferramentas de correção para executar o pedido.
  */
 export async function claimReminders(campaignId: Types.ObjectId, jobId: string): Promise<MaddoxDraftReminder[]> {
-    const pending = await MaddoxCampaignMessageModel.find({ campaignId, kind: "reminder", "reminder.status": "pending" })
+    const pending = await MaddoxCampaignMessageModel.find({ campaignId, kind: "reminder", "reminder.status": "pending", "reminder.talk": { $ne: true } })
         .sort({ _id: 1 })
         .limit(REMINDERS_PER_NARRATION * 2)
         .select("_id characterName content reminder")
@@ -120,14 +123,50 @@ const draftOf = (item: Pick<IMaddoxCampaignMessage, "_id" | "characterName" | "c
     ...(item.reminder?.talk ? { talk: true, result: null } : {}),
 })
 
-/** Geração que falhou: as lembranças dela voltam a esperar a próxima narração. Nunca lança. */
-export async function releaseReminders(campaignId: Types.ObjectId, jobId: string): Promise<void> {
+/**
+ * Geração que falhou: as lembranças dela voltam a esperar a próxima narração. Nunca lança. DND-74: a conversa com o mestre não
+ * volta a esperar (a narração não teria as ferramentas para executá-la): fica `talkStatus` — `failed` quando a resposta falhou
+ * (o balão pede para enviar de novo) ou `discarded` quando a resposta já foi gravada e só a situação não.
+ */
+export async function releaseReminders(campaignId: Types.ObjectId, jobId: string, talkStatus: "failed" | "discarded" = "failed"): Promise<void> {
     try {
-        await MaddoxCampaignMessageModel.updateMany({ campaignId, kind: "reminder", "reminder.status": "pending", "reminder.jobId": jobId }, { $set: { "reminder.jobId": null, "reminder.claimedAt": null } })
+        await MaddoxCampaignMessageModel.updateMany({ campaignId, kind: "reminder", "reminder.status": "pending", "reminder.jobId": jobId, "reminder.talk": { $ne: true } }, { $set: { "reminder.jobId": null, "reminder.claimedAt": null } })
+        await MaddoxCampaignMessageModel.updateMany({ campaignId, kind: "reminder", "reminder.status": "pending", "reminder.jobId": jobId, "reminder.talk": true }, { $set: { "reminder.status": talkStatus, "reminder.resolvedAt": new Date() } })
     } catch (error) {
         log.warn({ err: error instanceof Error ? error.message : String(error), campaignId: String(campaignId), jobId }, "[maddox] falha ao devolver as lembranças da geração")
     }
     setJobReminders(String(campaignId), jobId, [])
+}
+
+/**
+ * Conversa ainda não reivindicada só é dada como perdida com a fila da campanha ociosa E mais velha que isto: o teto cobre o
+ * intervalo entre gravar a mensagem e enfileirar o job dela (`submitTalk`).
+ */
+const TALK_UNCLAIMED_STALE_MS = 2 * 60 * 1000
+
+/**
+ * DND-74: conversas com o mestre `pending` cujo job morreu ficam `failed` — a narração não as consome e o jogador envia de
+ * novo. Reivindicada (`jobId`): o job dela não está mais ativo (o processo caiu no meio da resposta). Não reivindicada: a fila
+ * da campanha está ociosa (`isCampaignBusy` falso: o job que ia pegá-la não existe mais) e ela passou do teto; com a fila
+ * ocupada (ex.: uma narração longa na frente) ela continua esperando o job dela. Devolve quantas encerrou; nunca lança.
+ */
+export async function reapStaleTalks(campaignId: Types.ObjectId): Promise<number> {
+    try {
+        const pending = await MaddoxCampaignMessageModel.find({ campaignId, kind: "reminder", "reminder.status": "pending", "reminder.talk": true }).select("_id reminder").lean<Pick<IMaddoxCampaignMessage, "_id" | "reminder">[]>()
+        const cutoff = Date.now() - TALK_UNCLAIMED_STALE_MS
+        const idle = !isCampaignBusy(String(campaignId))
+        const stale = pending.filter((item) => (item.reminder?.jobId ? !isActiveMaddoxJob(String(campaignId), item.reminder.jobId) : idle && item._id.getTimestamp().getTime() < cutoff))
+        if (!stale.length) return 0
+        const done = await MaddoxCampaignMessageModel.updateMany(
+            { _id: { $in: stale.map((item) => item._id) }, "reminder.status": "pending" },
+            { $set: { "reminder.status": "failed", "reminder.resolvedAt": new Date() } },
+        )
+        if (done.modifiedCount) log.warn({ campaignId: String(campaignId), talks: done.modifiedCount }, "[maddox] conversas com o mestre sem job ativo encerradas como falha")
+        return done.modifiedCount
+    } catch (error) {
+        log.warn({ err: error instanceof Error ? error.message : String(error), campaignId: String(campaignId) }, "[maddox] falha ao encerrar as conversas sem job")
+        return 0
+    }
 }
 
 /** Ids curtos (do fim do `_id`) que o prompt usa para cada lembrança. */
@@ -178,7 +217,8 @@ export async function commitReminders(campaignId: Types.ObjectId, jobId: string,
         await commitRemindersUnsafe(campaignId, jobId, turnNumber)
     } catch (error) {
         log.warn({ err: error instanceof Error ? error.message : String(error), campaignId: String(campaignId), jobId }, "[maddox] falha ao gravar a situação das lembranças; elas voltam a esperar a próxima narração")
-        await releaseReminders(campaignId, jobId)
+        // A resposta já foi gravada: a conversa com o mestre fica encerrada como tratada.
+        await releaseReminders(campaignId, jobId, "discarded")
     }
 }
 

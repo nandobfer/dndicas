@@ -5,7 +5,7 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import { AlertCircle, ArrowDown, BookOpen, Clock, EyeOff, HelpCircle, Loader2, MessagesSquare, MinusCircle, Moon } from "lucide-react"
 import { Button } from "@/components/ui/opex/button"
 import { Markdown } from "@/components/ui/opex/markdown"
-import { MADDOX_AVATAR_CONTEXT, MADDOX_TALK_LABEL, messageAvatarContext } from "../../constants"
+import { MADDOX_AVATAR_CONTEXT, MADDOX_REMINDER_STATUS_LABELS, MADDOX_TALK_LABEL, messageAvatarContext } from "../../constants"
 import type { MaddoxGameMessageDto, MaddoxLevelUpStepDto, MaddoxLiveGenerationDto } from "../../game-types"
 import { opexActingLabel, type MaddoxActionOptionsView } from "../../game-view"
 import { GameActionOptions } from "./GameActionOptions"
@@ -429,6 +429,11 @@ function TalkMessage({ message, mine, color }: { message: MaddoxGameMessageDto; 
                 {pending && (
                     <p className="flex items-center gap-1 text-[11px] text-white/45" data-testid="game-talk-pending">
                         <Clock className="h-3 w-3" aria-hidden /> Aguardando o mestre
+                    </p>
+                )}
+                {message.reminder?.status === "failed" && (
+                    <p className="flex items-center gap-1 text-[11px] text-amber-300/80" data-testid="game-talk-failed">
+                        <AlertCircle className="h-3 w-3" aria-hidden /> {MADDOX_REMINDER_STATUS_LABELS.failed}
                     </p>
                 )}
             </div>

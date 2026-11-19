@@ -692,8 +692,9 @@ export const aiMaddoxMaster: MaddoxMaster = {
         // com o mestre tem (segue `replyToId` como a pergunta).
         const thread = context.reminderId && !context.talk ? [] : (await runs.questionThread(campaignId, questionId)).slice(0, -1)
         const sheetFix = Boolean(campaign && MADDOX_SHEET_RIGORS.includes(campaign.rigor))
-        // DND-74: alterar/cancelar o teste pendente nos graus com testes; a tarefa lista os testes do turno.
-        const checkFix = Boolean(campaign && MADDOX_CHECK_RIGORS.includes(campaign.rigor))
+        // DND-74: alterar/cancelar o teste pendente nos graus com testes, só na conversa com o mestre (não nas perguntas do
+        // Personagem Opex); a tarefa lista os testes do turno.
+        const checkFix = Boolean(context.talk && campaign && MADDOX_CHECK_RIGORS.includes(campaign.rigor))
         const checks = checkFix ? await (await import("./check-fixes")).talkChecks(campaignId) : []
         // DND-59: com o combate tático em andamento, a resposta corrige o combate na hora (condição, card, adversário, economia).
         const combatFix = Boolean(campaign && MADDOX_TACTICAL_COMBAT_RIGORS.includes(campaign.rigor) && (await (await import("./tactical-combat")).findActiveTactical(campaignId)))

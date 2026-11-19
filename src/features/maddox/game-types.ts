@@ -18,6 +18,7 @@ import type {
     MaddoxCombatantSide,
     MaddoxGameMessageKind,
     MaddoxRigorLevel,
+    MaddoxReminderStatus,
     MaddoxTurnPhase,
     MaddoxLevelUpStatus,
     MaddoxProgressionMode,
@@ -179,7 +180,7 @@ export interface MaddoxRestWaitDto {
 
 /** Situação de uma lembrança: esperando a próxima narração, guardada como memória ou usada só naquela narração. */
 export interface MaddoxReminderDto {
-    status: "pending" | "saved" | "discarded"
+    status: MaddoxReminderStatus
     /** DND-74: mensagem do "Conversar com o Mestre" (conversa fora da mesa). Ausente nas lembranças antigas. */
     talk?: boolean
 }
