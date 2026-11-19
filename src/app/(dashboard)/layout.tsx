@@ -1,6 +1,7 @@
 "use client"
 
 import { motion } from "framer-motion"
+import { usePathname } from "next/navigation"
 import { GlassHeader } from "@/components/ui/glass-header"
 import { LiquidGlassBackground } from "@/components/ui/glass-background"
 import { motionConfig } from "@/lib/config/motion-configs"
@@ -11,6 +12,7 @@ import { DiceRollerProvider } from "@/features/dice-roller/components/dice-roll-
 import { GlobalFabGroup } from "@/features/dice-roller/components/global-fab-group"
 import { OpexScopeProvider } from "@/features/opex-agent/components/OpexScopeProvider"
 import { useIsOwlbearCatalogEmbed } from "@/features/owlbear/hooks/use-is-owlbear-catalog-embed"
+import { isMaddoxGamePath } from "@/features/maddox/game-route"
 import { HeaderViewAs } from "@/features/perfix/components/view-as/HeaderViewAs"
 import { ViewAsBanner } from "@/features/perfix/components/view-as/ViewAsBanner"
 
@@ -18,6 +20,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     useWarmSearchCache()
     // Catálogo aberto dentro da extensão do Owlbear: só o conteúdo, sem header nem rodapé.
     const isOwlbearCatalogEmbed = useIsOwlbearCatalogEmbed()
+    // A mesa da campanha Maddox ocupa a área útil inteira: sem rodapé (o header continua).
+    const hideFooter = isOwlbearCatalogEmbed || isMaddoxGamePath(usePathname())
 
     return (
         <OpexScopeProvider>
@@ -49,7 +53,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     {children}
                 </motion.main>
 
-                {!isOwlbearCatalogEmbed && <GlassFooter />}
+                {!hideFooter && <GlassFooter />}
             </div>
 
             <GlobalFabGroup />

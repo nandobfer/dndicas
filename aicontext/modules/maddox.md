@@ -347,6 +347,9 @@ original — por `[Nome](#mention:Tipo:id)`, que o `Markdown` mostra como o badg
   (`mentionsToMarkup`). A consolidação pede a mesma marcação; cenário, situação inicial e perfil passam pela mesma
   resolução com os nomes reservados. Até 25 citações por texto.
 
+**Mesa sem rodapé (DND-73).** O layout do dashboard não renderiza o `GlassFooter` em `/campanhas/[id]/mesa`
+(`isMaddoxGamePath`, em `src/features/maddox/game-route.ts`); lobby, Diário e entrevistas continuam com o rodapé.
+
 **Chat em tela inteira (entrevista e mesa).** A tela do chat é uma coluna com a altura da área útil
 (`lg:h-[calc(100dvh_-_7rem_-_var(--view-as-banner-height,0px))] lg:min-h-[640px]`; no celular, a entrevista usa 6rem e
 `min-h-[480px]`; a faixa "Visualizar como", só durante a simulação, publica a altura real em `--view-as-banner-height`) com o
