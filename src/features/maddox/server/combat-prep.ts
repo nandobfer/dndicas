@@ -10,10 +10,11 @@ import { detectSneakAttack, riderLabel } from "../combat-prep"
 import { combatAddSchema, combatModifySchema, combatPrepResponseSchema, combatRemoveSchema, combatSheetChangeSchema, parseList, requiresCatalogSource, sneakAttackSchema, type CombatSheetChange } from "../combat-prep-schemas"
 import { abilityModifier } from "../combat-rules"
 import { emptyOverlay, type CombatOptionPatch, type CombatPrepChange, type CombatPrepOverlay, type CombatPrepRider, type PreparedCombatOption, type TacticalCharacterState } from "../combat-types"
-import { MADDOX_CAMPAIGN_AUDIT_ENTITY, MADDOX_COMBAT_PREP_ANSWER_TIMEOUT_MS, MADDOX_COMBAT_PREP_BLOCKING_STATUSES, MADDOX_COMBAT_PREP_CONFLICT_RETRIES, MADDOX_COMBAT_PREP_EXPIRED_NOTICE, MADDOX_COMBAT_PREP_STALE_MS, MADDOX_COMBAT_PREP_TRAIT_TEXT_MAX } from "../constants"
+import { MADDOX_CAMPAIGN_AUDIT_ENTITY, MADDOX_COMBAT_PREP_ANSWER_TIMEOUT_MS, MADDOX_COMBAT_PREP_BLOCKING_STATUSES, MADDOX_COMBAT_PREP_CONFLICT_RETRIES, MADDOX_COMBAT_PREP_EXPIRED_NOTICE, MADDOX_COMBAT_PREP_HARD_LIMIT_ERROR, MADDOX_COMBAT_PREP_HARD_LIMIT_MS, MADDOX_COMBAT_PREP_STALE_MS, MADDOX_COMBAT_PREP_TRAIT_TEXT_MAX } from "../constants"
 import { MaddoxCampaignMessageModel, MaddoxCampaignModel, MaddoxCombatPrepModel, type IMaddoxCampaign, type IMaddoxCombatPrep } from "../models"
 import { masteryKeyFromName, masteryLabel, masteryLimit, type MaddoxMasteryKey } from "../weapon-mastery"
 import { MADDOX_HIT_POINT_OPERATIONS } from "../hit-points-ops"
+import { isCombatPrepStalled } from "../combat-prep-stall"
 import { catalogReadText, checkCatalogSource, createCatalogReadLog, type CatalogReadLog, type CatalogSource } from "./catalog-reads"
 import { catalogReferencesText, itemMastery, mentionCandidates, resolveCatalogReferences, type CatalogReference, type CatalogReferenceCandidate } from "./catalog-references"
 import { describeSheetChange } from "./combat-sheet-writes"
@@ -40,6 +41,12 @@ const running = ((globalThis as unknown as { __maddoxCombatPrepRuns?: Set<Promis
 export async function waitForCombatPreps(): Promise<void> {
     while (running.size) await Promise.allSettled([...running])
 }
+
+/**
+ * DND-75: início deste processo. Uma preparação `running` que começou antes dele não tem job vivo (o deploy ou o reinício
+ * matou a fila, que fica só na memória): a retomada a devolve à fila sem esperar a folga de `MADDOX_COMBAT_PREP_STALE_MS`.
+ */
+const processStartedAt = ((globalThis as unknown as { __maddoxProcessStartedAt?: Date }).__maddoxProcessStartedAt ??= new Date())
 
 const track = (promise: Promise<void>) => {
     running.add(promise)
@@ -98,7 +105,7 @@ export async function scheduleCombatPreps(campaignId: Types.ObjectId): Promise<n
     const overdue = await MaddoxCombatPrepModel.find({ combatId: combat._id, status: "awaiting-player", "question.deadline": { $lte: new Date() } }).select("_id").lean<{ _id: Types.ObjectId }[]>()
     for (const prep of overdue) await expireQuestion(prep._id)
     for (const prep of await MaddoxCombatPrepModel.find({ combatId: combat._id, status: "awaiting-player" }).select("_id question").lean<Pick<PrepDoc, "_id" | "question">[]>()) armAnswerTimer(campaignId, prep)
-    const staleBefore = new Date(Date.now() - MADDOX_COMBAT_PREP_STALE_MS)
+    const staleBefore = new Date(Math.max(Date.now() - MADDOX_COMBAT_PREP_STALE_MS, processStartedAt.getTime()))
     const preps = await MaddoxCombatPrepModel.find({ combatId: combat._id, $or: [{ status: "pending" }, { status: "running", startedAt: { $lt: staleBefore } }] })
         .sort({ _id: 1 })
         .select("_id status")
@@ -108,7 +115,10 @@ export async function scheduleCombatPreps(campaignId: Types.ObjectId): Promise<n
     for (const prep of preps) {
         const key = String(prep._id)
         if (liveJobs.has(key)) continue
-        if (prep.status === "running") await MaddoxCombatPrepModel.updateOne({ _id: prep._id, status: "running" }, { $set: { status: "pending", jobId: null } })
+        if (prep.status === "running") {
+            await MaddoxCombatPrepModel.updateOne({ _id: prep._id, status: "running" }, { $set: { status: "pending", jobId: null } })
+            log.warn({ campaignId: String(campaignId), prepId: key }, "[maddox] preparação sem job vivo (reinício): de volta à fila")
+        }
         liveJobs.add(key)
         queued += 1
         track(enqueueMaddoxJob(String(campaignId), "combat-prep", async (job) => {
@@ -673,7 +683,8 @@ async function runCombatPrep(campaignId: Types.ObjectId, prepId: Types.ObjectId,
         }
     } catch (error) {
         log.warn({ err: errorText(error), campaignId: String(campaignId), prepId: String(prepId), character: claimed.characterName }, "[maddox] falha na preparação da mesa de combate")
-        const failed = await MaddoxCombatPrepModel.updateOne({ _id: prepId, status: "running" }, { $set: { status: "failed", error: errorText(error), finishedAt: new Date(), jobId: null } })
+        // Só a execução dona do registro grava a falha: reiniciada pelo dono (DND-75), a antiga não derruba a nova.
+        const failed = await MaddoxCombatPrepModel.updateOne({ _id: prepId, status: "running", jobId }, { $set: { status: "failed", error: errorText(error), finishedAt: new Date(), jobId: null } })
         if (failed.modifiedCount > 0) await haltQuestionCards(await questionCardsOf({ _id: prepId }), "failed")
     }
     await afterPrepSettled(campaignId, claimed)
@@ -857,7 +868,12 @@ export async function answerCombatPrep(campaignId: string, prepId: string, text:
 
 // ── Decisões do dono da campanha ──────────────────────────────────────────────
 
-async function loadOwnerPrep(campaignId: string, prepId: string, userId: string): Promise<{ campaign: IMaddoxCampaign; prep: PrepDoc }> {
+/** O que a decisão do dono aceita: só a falha ("Tentar de novo"), só a parada ("Reiniciar") ou as duas ("Seguir sem preparação"). */
+type OwnerPrepAccepts = "failed" | "stalled" | "failed-or-stalled"
+
+const stalledNow = (prep: PrepDoc) => (prep.status === "running" || prep.status === "pending") && isCombatPrepStalled(prep)
+
+async function loadOwnerPrep(campaignId: string, prepId: string, userId: string, accepts: OwnerPrepAccepts = "failed"): Promise<{ campaign: IMaddoxCampaign; prep: PrepDoc }> {
     const { loadAsMember, assertActive } = await import("./game")
     const { campaign } = await loadAsMember(campaignId, userId)
     assertActive(campaign)
@@ -865,7 +881,9 @@ async function loadOwnerPrep(campaignId: string, prepId: string, userId: string)
     if (!Types.ObjectId.isValid(prepId)) throw new DomainError(404, "Preparação não encontrada.", "NOT_FOUND")
     const prep = await MaddoxCombatPrepModel.findOne({ _id: new Types.ObjectId(prepId), campaignId: campaign._id }).lean<PrepDoc>()
     if (!prep) throw new DomainError(404, "Preparação não encontrada.", "NOT_FOUND")
-    if (prep.status !== "failed") throw new DomainError(409, "Esta preparação não está com falha.", "PREP_NOT_FAILED")
+    if (accepts === "failed" && prep.status !== "failed") throw new DomainError(409, "Esta preparação não está com falha.", "PREP_NOT_FAILED")
+    if (accepts === "stalled" && !stalledNow(prep)) throw new DomainError(409, "Esta preparação ainda está em andamento.", "PREP_NOT_STALLED")
+    if (accepts === "failed-or-stalled" && prep.status !== "failed" && !stalledNow(prep)) throw new DomainError(409, "Esta preparação não está com falha nem parada.", "PREP_NOT_FAILED")
     return { campaign, prep }
 }
 
@@ -882,14 +900,32 @@ export async function retryCombatPrep(campaignId: string, prepId: string, userId
     return getGameState(campaignId, userId)
 }
 
+/**
+ * DND-75 "Reiniciar preparação": a preparação parada ("Preparando…"/"Aguardando" além do aviso) volta para a fila do zero.
+ * A execução antiga, se ainda viva, não grava mais nada (as gravações dela exigem o `jobId` que ela tinha).
+ */
+export async function restartCombatPrep(campaignId: string, prepId: string, userId: string) {
+    const { campaign, prep } = await loadOwnerPrep(campaignId, prepId, userId, "stalled")
+    const updated = await MaddoxCombatPrepModel.updateOne({ _id: prep._id, status: prep.status, jobId: prep.jobId ?? null }, { $set: { status: "pending", jobId: null, startedAt: null, error: null } })
+    if (updated.modifiedCount === 0) throw new DomainError(409, "A preparação mudou. Atualize a mesa.", "PREP_CHANGED")
+    liveJobs.delete(String(prep._id))
+    await recordAudit({ userId, entidade: MADDOX_CAMPAIGN_AUDIT_ENTITY, entidadeId: String(campaign._id), acao: AcaoAuditoria.ATUALIZAR, depois: { combatPrep: String(prep._id), character: prep.characterName, decision: "restart", from: prep.status } })
+    log.warn({ campaignId, prepId, character: prep.characterName, from: prep.status }, "[maddox] dono reiniciou a preparação parada")
+    await scheduleCombatPreps(campaign._id)
+    const { publishGameChanged, getGameState } = await import("./game")
+    await publishGameChanged(campaign._id)
+    return getGameState(campaignId, userId)
+}
+
 /** "Seguir sem preparação": a ficha usa a lista base do servidor (cálculo corrigido e ataque furtivo detectado). */
 export async function skipCombatPrep(campaignId: string, prepId: string, userId: string) {
-    const { campaign, prep } = await loadOwnerPrep(campaignId, prepId, userId)
+    const { campaign, prep } = await loadOwnerPrep(campaignId, prepId, userId, "failed-or-stalled")
     const active = await activeStateOf(campaign._id, prep)
     const context = active ? await loadPrepSheet(active.state, campaign._id).catch(() => null) : null
     const riders: CombatPrepRider[] = context?.sneakAttack ? [{ key: "sneak-attack", dice: context.sneakAttack, source: "server", reason: null }] : []
-    const updated = await MaddoxCombatPrepModel.updateOne({ _id: prep._id, status: "failed" }, { $set: { status: "skipped", overlay: emptyOverlay(), riders, changes: [], finishedAt: new Date(), jobId: null } })
+    const updated = await MaddoxCombatPrepModel.updateOne({ _id: prep._id, status: prep.status, ...(prep.status === "failed" ? {} : { jobId: prep.jobId ?? null }) }, { $set: { status: "skipped", overlay: emptyOverlay(), riders, changes: [], finishedAt: new Date(), jobId: null } })
     if (updated.modifiedCount === 0) throw new DomainError(409, "A preparação mudou. Atualize a mesa.", "PREP_CHANGED")
+    liveJobs.delete(String(prep._id))
     // Revisão DND-51 (F11): a falha deixa de valer no card (a mesa segue com a lista base).
     if (prep.messageId && prep.question) await MaddoxCampaignMessageModel.updateOne({ _id: prep.messageId }, { $set: { "combatPrep.question.settled": true, "combatPrep.question.halted": null } })
     await recordAudit({ userId, entidade: MADDOX_CAMPAIGN_AUDIT_ENTITY, entidadeId: String(campaign._id), acao: AcaoAuditoria.ATUALIZAR, depois: { combatPrep: String(prep._id), character: prep.characterName, decision: "skip" } })
@@ -897,6 +933,28 @@ export async function skipCombatPrep(campaignId: string, prepId: string, userId:
     await afterPrepSettled(campaign._id, prep)
     const { getGameState } = await import("./game")
     return getGameState(campaignId, userId)
+}
+
+/**
+ * DND-75 (vigia): preparação "em andamento" há mais que `MADDOX_COMBAT_PREP_HARD_LIMIT_MS` (job travado) vira falha, e o
+ * dono decide pelo fluxo de sempre ("Tentar de novo" / "Seguir sem preparação"). Devolve quantas foram encerradas.
+ */
+export async function expireOverdueCombatPreps(now: number = Date.now()): Promise<number> {
+    const overdue = await MaddoxCombatPrepModel.find({ status: "running", startedAt: { $lt: new Date(now - MADDOX_COMBAT_PREP_HARD_LIMIT_MS) } })
+        .select("_id campaignId jobId characterName startedAt")
+        .lean<Pick<PrepDoc, "_id" | "campaignId" | "jobId" | "characterName" | "startedAt">[]>()
+    let expired = 0
+    for (const prep of overdue) {
+        const updated = await MaddoxCombatPrepModel.updateOne({ _id: prep._id, status: "running", jobId: prep.jobId ?? null }, { $set: { status: "failed", error: MADDOX_COMBAT_PREP_HARD_LIMIT_ERROR, finishedAt: new Date(now), jobId: null } })
+        if (updated.modifiedCount === 0) continue
+        expired += 1
+        liveJobs.delete(String(prep._id))
+        log.warn({ campaignId: String(prep.campaignId), prepId: String(prep._id), character: prep.characterName, startedAt: prep.startedAt }, "[maddox] preparação passou do tempo limite: marcada como falha")
+        await haltQuestionCards(await questionCardsOf({ _id: prep._id }), "failed")
+        const { publishGameChanged } = await import("./game")
+        await publishGameChanged(prep.campaignId)
+    }
+    return expired
 }
 
 /** Fim do combate: as preparações que ainda não terminaram são descartadas (nada é gravado na ficha). */

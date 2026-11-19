@@ -66,7 +66,7 @@ describe("XpBar (DND-63)", () => {
             expect(within(card).getByTestId("seat-character-name").contains(xpBar)).toBe(false)
         })
 
-        it("PV logo abaixo do nome, com a CA à direita na mesma linha, também fora do combate", () => {
+        it("PV em linha própria da largura do assento (DND-75), com a CA à direita na mesma linha, também fora do combate", () => {
             renderSeats([seat({ hp: { current: 9, max: 12, temp: 3 }, armorClass })])
             const vitals = screen.getByTestId("seat-vitals")
             const hp = within(vitals).getByTestId("seat-hp")
@@ -75,8 +75,11 @@ describe("XpBar (DND-63)", () => {
             expect(hp.compareDocumentPosition(ca) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
             expect(hp).toHaveTextContent("9/12 +3")
             expect(within(hp).getByRole("progressbar", { name: "PV de Kael: 9 de 12 (+3 temporários)" })).toHaveAttribute("aria-valuenow", "9")
-            // A linha fica na coluna do nome, logo depois do nome do jogador.
-            expect(screen.getByTestId("seat-character-name").parentElement).toBe(vitals.parentElement)
+            // DND-75: a linha de PV é filha direta do assento (largura do card), depois do cabeçalho e antes do XP.
+            const card = screen.getByTestId("seat-m1")
+            expect(vitals.parentElement).toBe(card)
+            expect(within(card).getByTestId("seat-header").contains(vitals)).toBe(false)
+            expect(within(card).getByTestId("seat-header").compareDocumentPosition(vitals) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
             // Badge de CA: só o valor, sem o rótulo "CA".
             expect(ca).toHaveTextContent(/^17$/)
         })

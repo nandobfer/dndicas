@@ -70,6 +70,10 @@ export const useAnswerCombatPrep = (campaignId: string) =>
 export const useRetryCombatPrep = (campaignId: string) =>
     useCombatMutation<string, MaddoxGameStateDto>(campaignId, async (prepId) => unwrapApi((await api.post<ApiResponse<MaddoxGameStateDto>>(`${combatPath(campaignId)}/preps/${prepId}/retry`, {})).data), "Não foi possível tentar de novo")
 
+/** DND-75: o dono reinicia a preparação parada ("Preparando…"/"Aguardando" além do aviso). */
+export const useRestartCombatPrep = (campaignId: string) =>
+    useCombatMutation<string, MaddoxGameStateDto>(campaignId, async (prepId) => unwrapApi((await api.post<ApiResponse<MaddoxGameStateDto>>(`${combatPath(campaignId)}/preps/${prepId}/restart`, {})).data), "Não foi possível reiniciar a preparação")
+
 export const useSkipCombatPrep = (campaignId: string) =>
     useCombatMutation<string, MaddoxGameStateDto>(campaignId, async (prepId) => unwrapApi((await api.post<ApiResponse<MaddoxGameStateDto>>(`${combatPath(campaignId)}/preps/${prepId}/skip`, {})).data), "Não foi possível seguir sem a preparação")
 

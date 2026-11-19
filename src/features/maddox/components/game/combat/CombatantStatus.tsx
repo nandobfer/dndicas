@@ -1,8 +1,11 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { AlertTriangle, Brain, Check, Clock, HeartPulse, Loader2 } from "lucide-react"
+import { SimpleGlassTooltip, GlassTooltipProvider } from "@/components/ui/glass-tooltip"
 import { cn } from "@/core/utils"
 import { rarityColors } from "@/lib/config/colors"
+import { prepElapsedLabel } from "../../../combat-prep-stall"
 import { HP_BAND_LABELS } from "../../../combat-rules"
 import type { MaddoxCombatPrepSlotDto, MaddoxTacticalSlotDto } from "../../../game-types"
 import { RarityChip } from "../../campaigns/campaign-visuals"
@@ -12,15 +15,39 @@ import { HpBar, type HpBarValue } from "./HpBar"
 const PREP_LABELS: Record<MaddoxCombatPrepSlotDto["status"], string> = { waiting: "Aguardando", preparing: "Preparando…", asking: "Pergunta ao jogador", ready: "Pronto", failed: "Falhou" }
 const PREP_COLORS: Record<MaddoxCombatPrepSlotDto["status"], string> = { waiting: rarityColors.common, preparing: rarityColors.legendary, asking: rarityColors.rare, ready: rarityColors.uncommon, failed: rarityColors.artifact }
 
-/** DND-41: selo da preparação da mesa de um personagem. */
+/** DND-75: relógio da tela (atualiza a cada `intervalMs`) para os tempos decorridos. */
+export function useNow(intervalMs: number, enabled = true): number {
+    const [now, setNow] = useState(() => Date.now())
+    useEffect(() => {
+        if (!enabled) return
+        setNow(Date.now())
+        const timer = setInterval(() => setNow(Date.now()), intervalMs)
+        return () => clearInterval(timer)
+    }, [enabled, intervalMs])
+    return now
+}
+
+const sinceTime = (since: string) => new Date(since).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+
+/** DND-41: selo da preparação da mesa de um personagem. DND-75: "Preparando…"/"Aguardando" mostra há quanto tempo. */
 export function PrepSeal({ prep }: { prep: MaddoxCombatPrepSlotDto }) {
+    const timed = (prep.status === "preparing" || prep.status === "waiting") && Boolean(prep.since)
+    const now = useNow(30_000, timed)
     const Icon = prep.status === "ready" ? Check : prep.status === "failed" ? AlertTriangle : prep.status === "preparing" ? Loader2 : Clock
-    return (
-        <span data-testid="initiative-prep" data-status={prep.status}>
+    const elapsed = timed ? prepElapsedLabel(prep.since, now) : null
+    const seal = (
+        <span data-testid="initiative-prep" data-status={prep.status} tabIndex={timed ? 0 : undefined}>
             <RarityChip color={PREP_COLORS[prep.status]}>
                 <Icon className={cn("h-3 w-3", prep.status === "preparing" && "animate-spin")} aria-hidden /> {PREP_LABELS[prep.status]}
+                {elapsed && <span data-testid="initiative-prep-elapsed"> · {elapsed}</span>}
             </RarityChip>
         </span>
+    )
+    if (!timed || !prep.since) return seal
+    return (
+        <GlassTooltipProvider>
+            <SimpleGlassTooltip content={`${prep.status === "preparing" ? "Preparando" : "Aguardando"} desde ${sinceTime(prep.since)}`}>{seal}</SimpleGlassTooltip>
+        </GlassTooltipProvider>
     )
 }
 
@@ -41,11 +68,10 @@ export function CombatantVitals({ slot, hp, name, className }: { slot: MaddoxTac
 
 /** Situação do combatente: "Caído" com 0 PV à mostra, morto, morrendo, estável, condições e concentração. */
 export function CombatantChips({ slot }: { slot: MaddoxTacticalSlotDto }) {
-    // Com os números à mostra, o 0 PV continua dizendo "Caído" (a faixa não aparece no lugar do número).
-    const fallen = slot.kind === "combatant" && slot.defeated && Boolean(slot.hp)
-    if (!fallen && slot.conditions.length === 0 && !slot.concentration && !slot.dying && !slot.stable && !slot.dead) return null
+    if (!combatantHasChips(slot)) return null
+    const fallen = combatantFallen(slot)
     return (
-        <div className="flex flex-wrap gap-1">
+        <>
             {fallen && (
                 <span data-testid="initiative-fallen">
                     <RarityChip color={HP_BAND_COLORS.caido}>{HP_BAND_LABELS.caido}</RarityChip>
@@ -68,6 +94,12 @@ export function CombatantChips({ slot }: { slot: MaddoxTacticalSlotDto }) {
                     <Brain className="h-3 w-3" aria-hidden /> {slot.concentration}
                 </RarityChip>
             )}
-        </div>
+        </>
     )
 }
+
+// Com os números à mostra, o 0 PV continua dizendo "Caído" (a faixa não aparece no lugar do número).
+const combatantFallen = (slot: MaddoxTacticalSlotDto) => slot.kind === "combatant" && slot.defeated && Boolean(slot.hp)
+
+/** O combatente tem algum chip de situação para mostrar. */
+export const combatantHasChips = (slot: MaddoxTacticalSlotDto) => combatantFallen(slot) || slot.conditions.length > 0 || Boolean(slot.concentration) || Boolean(slot.dying) || Boolean(slot.stable) || Boolean(slot.dead)

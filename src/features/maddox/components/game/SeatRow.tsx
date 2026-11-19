@@ -12,7 +12,7 @@ import type { MaddoxGameParticipantDto, MaddoxTacticalSlotDto } from "../../game
 import { MADDOX_SEAT_LABELS, type MaddoxSeatStatus } from "../../game-view"
 import { MemberAvatar, OpexChip } from "../campaigns/campaign-visuals"
 import { XpBar } from "../campaigns/XpBar"
-import { CombatantChips, CombatantVitals, PrepSeal } from "./combat/CombatantStatus"
+import { CombatantChips, CombatantVitals, PrepSeal, combatantHasChips } from "./combat/CombatantStatus"
 import { HpBar } from "./combat/HpBar"
 import { COMBAT_COLOR } from "./GameCombatCard"
 
@@ -64,16 +64,20 @@ export function SeatRow({ participant = null, seat = null, slot = null, isMe = f
     const vitals = slot ? <CombatantVitals slot={slot} hp={participant?.hp} name={name} className="min-w-0 flex-1" /> : hp ? <HpBar hp={hp} name={name} className="min-w-0 flex-1" /> : null
     const armorClass = participant?.armorClass
 
+    const chips = slot ? <CombatantChips slot={slot} /> : null
+    const hasChips = Boolean(slot?.prep || (slot && combatantHasChips(slot)))
+
+    // DND-75: o cabeçalho (iniciativa, avatar, nome, ações) fica numa linha só; selo, PV e XP ocupam a largura do card.
     const body = (
         <>
-            <div className="flex items-start gap-2.5">
+            <div className="flex items-center gap-2.5" data-testid="seat-header">
                 {slot && (
-                    <span className="mt-2 w-6 shrink-0 text-center text-sm font-black text-white" data-testid="initiative-value">
+                    <span className="w-6 shrink-0 text-center text-sm font-black text-white" data-testid="initiative-value">
                         {slot.initiative ?? "…"}
                     </span>
                 )}
                 {avatar}
-                <div className="min-w-0 flex-1 space-y-1">
+                <div className="min-w-0 flex-1 space-y-0.5">
                     <p className={cn("flex flex-wrap items-center gap-x-1.5 gap-y-0.5 break-words text-sm font-medium leading-snug text-white", out && "line-through")} data-testid="seat-character-name">
                         <span className="min-w-0 break-words">{characterName}</span>
                         {(participant?.opex ?? slot?.opex) && <OpexChip />}
@@ -87,17 +91,21 @@ export function SeatRow({ participant = null, seat = null, slot = null, isMe = f
                             </span>
                         </p>
                     )}
-                    {slot?.prep && <PrepSeal prep={slot.prep} />}
-                    {(vitals || armorClass) && (
-                        <div className="flex items-center gap-2" data-testid="seat-vitals">
-                            {vitals}
-                            {armorClass && <ArmorClassChip armorClass={armorClass} characterName={name} />}
-                        </div>
-                    )}
-                    {slot && <CombatantChips slot={slot} />}
                 </div>
                 {actions && <div className="flex shrink-0 items-center gap-0.5">{actions}</div>}
             </div>
+            {hasChips && (
+                <div className="flex flex-wrap items-center gap-1" data-testid="seat-chips">
+                    {slot?.prep && <PrepSeal prep={slot.prep} />}
+                    {chips}
+                </div>
+            )}
+            {(vitals || armorClass) && (
+                <div className="flex items-center gap-2" data-testid="seat-vitals">
+                    {vitals}
+                    {armorClass && <ArmorClassChip armorClass={armorClass} characterName={name} />}
+                </div>
+            )}
             {participant && <XpBar xp={participant.xp} color={color} />}
         </>
     )

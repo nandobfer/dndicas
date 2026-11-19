@@ -119,4 +119,29 @@ describe("card da mesa — combate tático", () => {
         expect(screen.queryByRole("list", { name: "Fora do combate" })).not.toBeInTheDocument()
         expect(screen.queryByText("Fora do combate")).not.toBeInTheDocument()
     })
+
+    it("layout (reabertura): cabeçalho só com iniciativa, avatar, nome e ações; selo, chips, PV e XP em linhas da largura do card", () => {
+        const withPrep: MaddoxTacticalCombatDto = { ...combat, order: combat.order.map((item) => (item.actorKey === "pc:lyra" ? { ...item, prep: { status: "preparing" as const }, conditions: [{ key: "invisible" as const, label: "Invisível" }] } : item)) }
+        renderCombatTable(withPrep, { participants, me: { memberId: "m1", isOwner: true } })
+        const lyra = screen.getByTestId("seat-m2")
+        const header = within(lyra).getByTestId("seat-header")
+        expect(header.parentElement).toBe(lyra)
+        expect(header.className).toContain("items-center")
+        expect(within(header).getByTestId("initiative-value")).toHaveTextContent("4")
+        expect(within(header).getByTestId("seat-character-name")).toHaveTextContent("Lyra")
+        expect(within(header).getByRole("button", { name: "Pular a vez de Lyra" })).toBeInTheDocument()
+        // Nada disso fica ao lado do avatar: cada um é filho direto da linha, na ordem selo/chips → PV → XP.
+        const chips = within(lyra).getByTestId("seat-chips")
+        const vitals = within(lyra).getByTestId("seat-vitals")
+        const xp = within(lyra).getByTestId("xp-bar")
+        expect([chips.parentElement, vitals.parentElement, xp.parentElement]).toEqual([lyra, lyra, lyra])
+        expect([...lyra.children]).toEqual([header, chips, vitals, xp])
+        expect(within(chips).getByTestId("initiative-prep")).toBeInTheDocument()
+        expect(chips).toHaveTextContent("Invisível")
+        expect(header.contains(within(lyra).getByTestId("seat-hp"))).toBe(false)
+        // O inimigo: cabeçalho e, embaixo, a faixa de PV na largura do card (sem chips quando não há).
+        const guarda = screen.getByTestId("combatant-npc:a1")
+        expect([...guarda.children].map((child) => child.getAttribute("data-testid"))).toEqual(["seat-header", "seat-vitals"])
+        expect(within(guarda).getByTestId("seat-vitals")).toContainElement(within(guarda).getByTestId("initiative-band"))
+    })
 })

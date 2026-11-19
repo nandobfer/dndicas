@@ -19,9 +19,9 @@ import { actionOptionsView, combatBannerText, combatRecoveringBannerText, combat
 import { useMaddoxOpexTableActions } from "../../hooks/useMaddoxOpex"
 import { OpexFailureBanner } from "./OpexFailureBanner"
 import type { MaddoxCombatActionInput } from "../../combat-schemas"
-import { useCancelCombatAction, useChooseSneakAttack, useDecideReaction, useEndCombatTurn, useRequestCombatAdjustment, useAnswerCombatPrep, useRetryCombatPrep, useRollCombatStep, useSkipCombatPrep, useSubmitCombatAction } from "../../hooks/useMaddoxCombat"
+import { useCancelCombatAction, useChooseSneakAttack, useDecideReaction, useEndCombatTurn, useRequestCombatAdjustment, useAnswerCombatPrep, useRestartCombatPrep, useRetryCombatPrep, useRollCombatStep, useSkipCombatPrep, useSubmitCombatAction } from "../../hooks/useMaddoxCombat"
 import { CombatActionBar, CombatWaitBar } from "./combat/CombatActionBar"
-import { CombatPrepBlockedNotice } from "./combat/CombatCards"
+import { CombatPrepBlockedNotice, CombatPrepStalledNotice } from "./combat/CombatCards"
 import {
     fetchOlderGameMessages,
     useMaddoxGame,
@@ -129,6 +129,7 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
     const prepRetry = useRetryCombatPrep(state.campaignId)
     const prepAnswer = useAnswerCombatPrep(state.campaignId)
     const prepSkip = useSkipCombatPrep(state.campaignId)
+    const prepRestart = useRestartCombatPrep(state.campaignId)
     const combatAdjust = useRequestCombatAdjustment(state.campaignId)
     const combatReact = useDecideReaction(state.campaignId)
     const [asking, setAsking] = useState(false)
@@ -354,9 +355,10 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
                                 />
                             ) : (
                                 <>
-                                    {tactical.preparation?.blocked && (
-                                        <div className="border-t px-4 pt-3">
+                                    {tactical.preparation && (tactical.preparation.blocked || Boolean(tactical.preparation.stalled?.length)) && (
+                                        <div className="space-y-1.5 border-t px-4 pt-3">
                                             <CombatPrepBlockedNotice preparation={tactical.preparation} isOwner={state.me.isOwner} retrying={prepRetry.isPending} skipping={prepSkip.isPending} onRetry={(prepId) => prepRetry.mutate(prepId)} onSkip={(prepId) => prepSkip.mutate(prepId)} />
+                                            <CombatPrepStalledNotice preparation={tactical.preparation} isOwner={state.me.isOwner} restarting={prepRestart.isPending} skipping={prepSkip.isPending} onRestart={(prepId) => prepRestart.mutate(prepId)} onSkip={(prepId) => prepSkip.mutate(prepId)} />
                                         </div>
                                     )}
                                     <CombatWaitBar combat={tactical} isOwner={state.me.isOwner} recovering={recoveringCombatTurn} canAsk={questionBlock === null} onAsk={() => setAsking((value) => !value)} />

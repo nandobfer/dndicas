@@ -18,6 +18,8 @@ import { MADDOX_CHECK_DIE_HIDE_MS, MADDOX_COMBAT_ADJUST_TEXT_MAX, MADDOX_MASTER_
 import type { MaddoxCombatPreparationDto, MaddoxGameCombatEventDto, MaddoxGameMessageDto } from "../../../game-types"
 import { MemberAvatar, OpexChip, RarityChip } from "../../campaigns/campaign-visuals"
 import { COMBAT_COLOR } from "../GameCombatCard"
+import { prepElapsedLabel } from "../../../combat-prep-stall"
+import { useNow } from "./CombatantStatus"
 import { ReplayDie } from "./ReplayDie"
 import { ECONOMY_COLORS, ECONOMY_LABELS, HP_BAND_COLORS, attackFumbled } from "./combat-visuals"
 import { useHeldRoll, type HeldRoll } from "./use-held-roll"
@@ -609,6 +611,54 @@ function CombatPrepQuestionCard({ characterName, question, busy, onAnswer }: { c
                 </p>
             </div>
         </motion.div>
+    )
+}
+
+/**
+ * DND-75: preparação parada ("Preparando…"/"Aguardando" além de `MADDOX_COMBAT_PREP_STALL_NOTICE_MS`, decidido no
+ * servidor). O dono reinicia ou segue sem ela (com confirmação); os demais só veem que está demorando.
+ */
+export function CombatPrepStalledNotice({ preparation, isOwner, restarting, skipping, onRestart, onSkip }: { preparation: MaddoxCombatPreparationDto; isOwner: boolean; restarting: boolean; skipping: boolean; onRestart: (prepId: string) => void; onSkip: (prepId: string) => void }) {
+    const [confirming, setConfirming] = useState<{ prepId: string; characterName: string } | null>(null)
+    const stalled = preparation.stalled ?? []
+    const now = useNow(30_000, stalled.length > 0)
+    if (!stalled.length) return null
+    if (!isOwner) {
+        return (
+            <div className="flex items-center gap-2 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning" role="status" data-testid="combat-prep-stalled-waiting">
+                <Timer className="h-3.5 w-3.5 shrink-0" aria-hidden /> A preparação está demorando. O dono da campanha pode reiniciá-la.
+            </div>
+        )
+    }
+    return (
+        <div className="space-y-1.5" data-testid="combat-prep-stalled">
+            {stalled.map((item) => (
+                <div key={item.prepId} className="flex flex-wrap items-center gap-2 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning" role="alert" data-testid="combat-prep-stalled-item">
+                    <Timer className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                    <span className="min-w-0 flex-1">
+                        A preparação da mesa de {item.characterName} está parada há {prepElapsedLabel(item.since, now) ?? "alguns minutos"}.
+                    </span>
+                    <Button size="sm" variant="outline" className="h-7" onClick={() => onRestart(item.prepId)} disabled={restarting || skipping}>
+                        {restarting ? <Loader2 className="animate-spin" aria-hidden /> : <RefreshCw aria-hidden />} Reiniciar preparação
+                    </Button>
+                    <Button size="sm" variant="ghost" className="h-7" onClick={() => setConfirming({ prepId: item.prepId, characterName: item.characterName })} disabled={restarting || skipping}>
+                        <SkipForward aria-hidden /> Seguir sem preparação
+                    </Button>
+                </div>
+            ))}
+            <ConfirmDialog
+                open={Boolean(confirming)}
+                onOpenChange={(open) => (open ? null : setConfirming(null))}
+                title={`Seguir sem a preparação de ${confirming?.characterName ?? "personagem"}?`}
+                description="A ficha usa a lista que o servidor calcula, sem a revisão do Maddox. O combate segue."
+                confirmLabel="Seguir sem preparação"
+                pending={skipping}
+                onConfirm={() => {
+                    if (confirming) onSkip(confirming.prepId)
+                    setConfirming(null)
+                }}
+            />
+        </div>
     )
 }
 

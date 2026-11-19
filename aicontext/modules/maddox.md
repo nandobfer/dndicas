@@ -1087,8 +1087,29 @@ fecham a ordem quando era a última pendente. IA indisponível ou erro do proved
 
 **A ordem espera.** `finishInitiativeIfReady` não fecha a ordem com preparação `pending`, `running` ou `failed`; `hasRoundWaits(pendingOnly)`
 conta a preparação da rodada como espera (a continuação do mestre não entra). Sem tempo limite. Ao terminar a última, o job chama
-`finishInitiativeIfReady` e `advanceAfterChecks`. Retomada depois de um reinício: o `check` chama `scheduleCombatPreps`, que reenfileira as
-pendentes e as `running` sem job vivo há mais que `MADDOX_COMBAT_PREP_STALE_MS`.
+`finishInitiativeIfReady` e `advanceAfterChecks`. Retomada depois de um reinício: `scheduleCombatPreps` reenfileira as pendentes e as
+`running` sem job vivo (`liveJobs`) que começaram antes do processo atual (`__maddoxProcessStartedAt`) ou há mais que
+`MADDOX_COMBAT_PREP_STALE_MS`, vence as perguntas com prazo passado e religa os timers das demais.
+
+**Preparação presa (DND-75).** A fila e o `liveJobs` vivem só na memória: um deploy deixava a preparação "Preparando…" para sempre,
+porque a retomada só rodava no `check` (alguém sair da mesa). Agora `server/combat-prep-recovery.ts` retoma sozinho:
+- ao subir o servidor (`src/instrumentation.ts`, `recoverCombatPreps()`: toda campanha com preparação `pending`/`running`/`awaiting-player`;
+  a falha de uma campanha só vai ao log);
+- na leitura da mesa (`getGameState` → `recoverCampaignCombatPreps`, sem `await` porque a leitura também roda dentro de jobs da fila
+  serial; no máximo a cada `MADDOX_COMBAT_PREP_RECOVERY_THROTTLE_MS` = 15 s por campanha);
+- na rotina interna `maddox-combat-prep-recovery` (Integrações › Crons, 1 min, `runCombatPrepRecovery`), que também roda o **vigia**
+  `expireOverdueCombatPreps`: `running` há mais que `MADDOX_COMBAT_PREP_HARD_LIMIT_MS` (teto da geração + conferência de 0 PV + 1 min)
+  vira `failed` com `MADDOX_COMBAT_PREP_HARD_LIMIT_ERROR`, e o dono decide pelo fluxo de falha.
+Toda gravação final do job (pronta, pergunta, falha) é condicional ao `jobId` dele: a execução antiga, reiniciada ou vencida, não
+sobrescreve a nova.
+
+**Ver e agir.** A regra única de "parada" fica em `combat-prep-stall.ts` (`combatPrepSince`: `startedAt` da `running`, `updatedAt` da
+`pending`; `isCombatPrepStalled`: há mais que `MADDOX_COMBAT_PREP_STALL_NOTICE_MS` = 3 min). O slot leva `prep.since` e o selo mostra
+"Preparando… · 12 min" (a partir de 1 min, `prepElapsedLabel`; tooltip "Preparando desde 23:28"). `preparation.stalled` (sem motivo
+de erro, vai a todos) alimenta o `CombatPrepStalledNotice`: o dono vê "A preparação da mesa de X está parada há N min." com
+**"Reiniciar preparação"** (`POST …/game/combat/preps/[prepId]/restart`, `restartCombatPrep`: só parada, senão 409
+`PREP_NOT_STALLED`; volta a `pending` do zero, auditoria `decision: "restart"`) e **"Seguir sem preparação"** (o `skip`, que aceita
+falha ou parada, com confirmação); os demais veem "A preparação está demorando. O dono da campanha pode reiniciá-la."
 
 **Falha.** Só o dono da campanha recebe o motivo (`combat.tactical.preparation.failures`) e decide, com auditoria: `POST
 …/game/combat/preps/[prepId]/retry` ("Tentar de novo": volta para a fila) e `POST …/game/combat/preps/[prepId]/skip` ("Seguir sem
@@ -2177,7 +2198,7 @@ Graus com ficha (`MADDOX_SHEET_RIGORS`) escolhem na criação o modo `progressio
 - Tempo real: `notifyCampaignChanged` ignora ids `opex:` e `notifyJournalChanged` só avisa membros humanos (o Pusher recusa o canal `private-maddox-u-opex:…` e derrubaria o lote inteiro).
 - Testes: `tests/backend/maddox/level-progression.test.ts` mocka `server/level-up-ai`, `server/settings` e `decideOpex`/`loadOpexModel` de `opex-player`; `tests/backend/character-sheets/level-up.test.ts` cobre o motor.
 - **Barra de XP (DND-63)**: no modo Experiência, cada personagem com ficha e entrevista concluída mostra a barrinha (`components/campaigns/XpBar.tsx`, `data-testid="xp-bar"`, `role="progressbar"`, cor do rigor) no card "Na mesa" (`TurnPanel`), no card "Participantes" da página da campanha e na aba Grupo do Diário. O servidor decide: o campo `xp: MaddoxXpProgressDto | null` (`level`, `value`, `floor`, `next`, `missing`, `percent`) vem em `MaddoxCampaignCharacterDto` (`server/campaigns.ts`, mesma consulta das fichas do slug), `MaddoxGameParticipantDto` (`server/game.ts`) e `MaddoxJournalPartyMemberDto` (`listJournalParty`; a busca do Diário não leva), sempre `null` no modo Marco, nos graus narrativos e sem ficha (`server/experience-progress.ts`: `xpProgressEnabled` = `progressionModeOf(campaign) === "experiencia"`, a mesma regra da concessão de XP, agora no módulo leve `server/progression-mode.ts` reexportado por `level-ups.ts`; elegibilidade única em `xpProgressOf`, usada por `characterDto` e `loadXpProgress`). Da ficha saem só nível e XP. Cálculo puro em `experience-progress.ts` (`experienceProgress` sobre `xpForLevel`/`xpToNextLevel`; `percent` entre o limiar do nível e o do próximo, 0–100; XP já no próximo limiar = 100% e "nível N alcançado"; nível 20 = cheia e "Nível máximo"; `xpProgressLabel` com os rótulos pt-BR). Atualiza com a XP nova pelo `maddox.game.changed`/`maddox.campaign.changed` que já recarregam a mesa e a campanha. Testes: `tests/backend/maddox/experience-progress.test.ts`, `tests/frontend/maddox/maddox-xp-bar.test.tsx`.
-- **Card "Na mesa" (DND-63, reabertura)**: cada assento (`TurnPanel`, `data-testid="seat-<memberId>"`) tem a linha do avatar e, abaixo, a barra de XP **filha direta do assento**, na largura total do card. Na coluna do nome: nome do personagem (+ `OpexChip`), o jogador (omitido para o Personagem Opex, que fica só com o chip) e a linha `seat-vitals` com a barra de PV (`seat-hp`, `flex-1`) e a CA à direita (`seat-armor-class`, só o número). A situação do turno é a bolinha `seat-status` (`role="img"`, `aria-label` = rótulo de `MADDOX_SEAT_LABELS`, cor de `SEAT_COLORS`, `SimpleGlassTooltip`) no canto superior direito do avatar, irmã do botão do avatar (nunca dentro dele); o Opex não tem bolinha; o ponto online/offline saiu. PV: `MaddoxGameParticipantDto.hp { current, max, temp }`, da ficha (`hpCurrent`/`hpMax`/`hpTemp`, o grupo vê o PV dos personagens), dentro e fora do combate, só nos graus com ficha (`hasLevels`) e com PV máximo, carregado em lote por `loadHitPointsSummaries` (`server/seat-hit-points.ts`, normalização em `sheetHitPointsOf`) em paralelo com a CA; falha de leitura = `log.warn` e sem barra (a CA e o resto da mesa ficam; o inverso também). PV editado na ficha fora do Maddox (`patchSheet`/`patchSheetWithAccess` com `hpCurrent`/`hpMax`/`hpTemp`) chama `notifySheetHitPointsChanged` (import sob demanda, nunca lança), que publica `maddox.game.changed` nas campanhas em andamento (`status: "active"`, graus com ficha) do personagem, para os outros jogadores verem a barra nova. `HpBar` (`components/game/combat/HpBar.tsx`, `role="progressbar"`, "PV de X: 9 de 12 (+3 temporários)") é o mesmo do rastreador de iniciativa (`testId` padrão `initiative-hp`). Testes: `tests/backend/maddox/seat-hit-points.test.ts`, `armor-class-bonuses.test.ts` (PV no estado da mesa), `maddox-xp-bar.test.tsx` (layout).
+- **Card "Na mesa" (DND-63, reabertura)**: cada assento (`TurnPanel`, `data-testid="seat-<memberId>"`) tem a linha do avatar e, abaixo, a barra de XP **filha direta do assento**, na largura total do card. Na coluna do nome: nome do personagem (+ `OpexChip`) e o jogador (omitido para o Personagem Opex, que fica só com o chip). DND-75 (reabertura): a linha `seat-vitals` com a barra de PV (`seat-hp`, `flex-1`) e a CA à direita (`seat-armor-class`, só o número) saiu da coluna do nome e também é filha direta do assento, na largura do card, entre o cabeçalho e o XP. A situação do turno é a bolinha `seat-status` (`role="img"`, `aria-label` = rótulo de `MADDOX_SEAT_LABELS`, cor de `SEAT_COLORS`, `SimpleGlassTooltip`) no canto superior direito do avatar, irmã do botão do avatar (nunca dentro dele); o Opex não tem bolinha; o ponto online/offline saiu. PV: `MaddoxGameParticipantDto.hp { current, max, temp }`, da ficha (`hpCurrent`/`hpMax`/`hpTemp`, o grupo vê o PV dos personagens), dentro e fora do combate, só nos graus com ficha (`hasLevels`) e com PV máximo, carregado em lote por `loadHitPointsSummaries` (`server/seat-hit-points.ts`, normalização em `sheetHitPointsOf`) em paralelo com a CA; falha de leitura = `log.warn` e sem barra (a CA e o resto da mesa ficam; o inverso também). PV editado na ficha fora do Maddox (`patchSheet`/`patchSheetWithAccess` com `hpCurrent`/`hpMax`/`hpTemp`) chama `notifySheetHitPointsChanged` (import sob demanda, nunca lança), que publica `maddox.game.changed` nas campanhas em andamento (`status: "active"`, graus com ficha) do personagem, para os outros jogadores verem a barra nova. `HpBar` (`components/game/combat/HpBar.tsx`, `role="progressbar"`, "PV de X: 9 de 12 (+3 temporários)") é o mesmo do rastreador de iniciativa (`testId` padrão `initiative-hp`). Testes: `tests/backend/maddox/seat-hit-points.test.ts`, `armor-class-bonuses.test.ts` (PV no estado da mesa), `maddox-xp-bar.test.tsx` (layout).
 
 ## Descanso curto e longo (DND-58)
 
@@ -2634,8 +2655,11 @@ antigo `InitiativeTracker` (coluna da direita e faixa compacta `initiative-strip
   XP, "Pular a vez" e "Rolar no lugar". Combatente do mestre: `combatant-<actorKey>`, ícone de espadas/caveira, sem jogador, CA,
   ações nem XP. Personagem na ordem sem assento: avatar e dados de combate, sem os dados de mesa.
 - **Peças compartilhadas** em `combat/CombatantStatus.tsx`: `PrepSeal`, `CombatantVitals` (barra ou faixa) e `CombatantChips`
-  ("Caído" com 0 PV à mostra, Morto, Morrendo, Estável, condições e concentração).
+  ("Caído" com 0 PV à mostra, Morto, Morrendo, Estável, condições e concentração; `combatantHasChips` diz se há algum).
+- **Estrutura da linha (reabertura)**, igual dentro e fora do combate: o cabeçalho `seat-header` (`items-center`) tem só iniciativa,
+  avatar, nome/jogador e ações — sem vazio embaixo do avatar. Abaixo, filhas diretas da linha e na largura do card: `seat-chips`
+  (selo de preparação + chips, só se houver), `seat-vitals` (barra de PV `flex-1` ou faixa, CA à direita) e a `xp-bar`.
 
 Testes: `maddox-table-card.test.tsx` (regras, modo mesa, ordem com inimigos, título por fase, linha do jogador × do inimigo, "Fora do
-combate"); `maddox-game.test.tsx` (a `GamePage` em combate tático tem um só card e uma só lista, sem `initiative-strip` nem
+combate", estrutura da linha); `maddox-game.test.tsx` (a `GamePage` em combate tático tem um só card e uma só lista, sem `initiative-strip` nem
 `initiative-tracker`); `maddox-tactical-combat.test.tsx` e `maddox-combat-prep.test.tsx` usam `renderCombatTable` (`tests/helpers/maddox-table.tsx`).
