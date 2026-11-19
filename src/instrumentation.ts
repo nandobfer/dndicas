@@ -6,7 +6,8 @@
  *    para as integrações, `seed-integrations-from-env`) — sem banco, o app sobe e tenta de novo no
  *    primeiro acesso;
  * 2. inicia o agendador interno das rotinas (Integrações › Crons) com tick a cada minuto. A rota
- *    `/api/routines/scheduler-tick` executa o MESMO motor sob demanda.
+ *    `/api/routines/scheduler-tick` executa o MESMO motor sob demanda;
+ * 3. retoma as preparações de combate do Maddox que o reinício deixou sem job (DND-75).
  */
 export async function register() {
     if (process.env.NEXT_RUNTIME !== "nodejs") return
@@ -20,4 +21,9 @@ export async function register() {
 
     const { startCronScheduler } = await import("@/features/integrations/scheduler/cron-scheduler")
     startCronScheduler()
+
+    // DND-75: preparações de combate do Maddox que o reinício deixou sem job (a fila vive só na memória) voltam à fila.
+    void import("@/features/maddox/server/combat-prep-recovery")
+        .then(({ recoverCombatPreps }) => recoverCombatPreps())
+        .catch((error: unknown) => logger.error({ err: error }, "[boot] Falha ao retomar as preparações de combate do Maddox"))
 }

@@ -205,6 +205,8 @@ export const HEALTH_CHECK_JOB_ID = "integrations-health-check"
 export const OPEX_FILES_CLEANUP_JOB_ID = "opex-files-cleanup"
 /** Agente Maddox: retoma as exclusões pendentes das sessões do OpenCode das campanhas. */
 export const MADDOX_SESSIONS_CLEANUP_JOB_ID = "maddox-opencode-sessions-cleanup"
+/** Agente Maddox (DND-75): retoma as preparações de combate sem job vivo e encerra por tempo as travadas. */
+export const MADDOX_COMBAT_PREP_RECOVERY_JOB_ID = "maddox-combat-prep-recovery"
 /** Reconciliação das memórias das campanhas Maddox com o Engramind (DND-21). */
 export const ENGRAMIND_CAMPAIGN_SYNC_JOB_ID = "engramind-campaign-memories-sync"
 
@@ -256,6 +258,13 @@ export const DEFAULT_CRON_JOBS: CronJobConfig[] = [
         label: "Excluir as sessões do OpenCode pendentes do Agente Maddox",
         kind: "internal",
         schedule: { type: "interval", minutes: 60 },
+        enabled: true,
+    },
+    {
+        id: MADDOX_COMBAT_PREP_RECOVERY_JOB_ID,
+        label: "Retomar as preparações de combate presas do Agente Maddox",
+        kind: "internal",
+        schedule: { type: "interval", minutes: 1 },
         enabled: true,
     },
 ]

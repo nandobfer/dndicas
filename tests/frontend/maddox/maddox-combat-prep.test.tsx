@@ -10,8 +10,8 @@ import { freshEconomy } from "@/features/maddox/combat-rules"
 vi.mock("@/features/dice-roller/components/dice-roller-panel", () => ({ DiceRollerPanel: () => <div data-testid="dice-panel" /> }))
 
 const { CombatActionBar, CombatWaitBar, combatMenuNotices } = await import("@/features/maddox/components/game/combat/CombatActionBar")
-const { InitiativeTracker } = await import("@/features/maddox/components/game/combat/InitiativeTracker")
-const { CombatPrepBlockedNotice, CombatPrepCard } = await import("@/features/maddox/components/game/combat/CombatCards")
+const { renderCombatTable } = await import("../../helpers/maddox-table")
+const { CombatPrepBlockedNotice, CombatPrepCard, CombatPrepStalledNotice } = await import("@/features/maddox/components/game/combat/CombatCards")
 const { SheetChangeLine } = await import("@/features/maddox/components/game/SheetChangeLine")
 
 const option = (over: Partial<CombatOption>): CombatOption => ({ id: "x", category: "weapons", economy: "action", label: "X", detail: "", target: "enemy", multiTarget: false, resolution: "attack", ...over })
@@ -56,12 +56,8 @@ const bar = (props: Partial<Parameters<typeof CombatActionBar>[0]> = {}) => (
 
 describe("DND-41 — a mesa enquanto o mestre prepara o combate", () => {
     it('a barra de espera mostra "O mestre está preparando o combate" e o rastreador mostra o selo de cada personagem', () => {
-        render(
-            <>
-                <CombatWaitBar combat={preparing} canAsk={false} onAsk={vi.fn()} />
-                <InitiativeTracker combat={preparing} title="Emboscada" color="#3B82F6" />
-            </>,
-        )
+        render(<CombatWaitBar combat={preparing} canAsk={false} onAsk={vi.fn()} />)
+        renderCombatTable(preparing, { title: "Emboscada" })
         expect(screen.getByTestId("combat-wait-text")).toHaveTextContent("O mestre está preparando o combate")
         expect(screen.getAllByTestId("initiative-prep").map((seal) => [seal.getAttribute("data-status"), seal.textContent?.trim()])).toEqual([
             ["ready", "Pronto"],
@@ -238,14 +234,50 @@ describe("DND-51 — a preparação pergunta ao jogador e a correção aparece n
     })
 
     it('o selo "Pergunta ao jogador" na ordem e a linha pública da correção da ficha', () => {
-        render(
-            <>
-                <InitiativeTracker combat={{ ...preparing, order: [slot({ actorKey: "pc:nala", name: "Nala", prep: { status: "asking" } })] }} title="Emboscada" color="#3B82F6" />
-                <SheetChangeLine message={{ ...base, kind: "sheet-change", content: "Ficha de Nala corrigida:\n- Atributo de conjuração: nenhum → Sabedoria (Você escolheu Sabedoria.)\n- Magia Rajada de Veneno: não existia → truque" }} />
-            </>,
-        )
+        renderCombatTable({ ...preparing, order: [slot({ actorKey: "pc:nala", name: "Nala", prep: { status: "asking" } })] }, { title: "Emboscada" })
+        render(<SheetChangeLine message={{ ...base, kind: "sheet-change", content: "Ficha de Nala corrigida:\n- Atributo de conjuração: nenhum → Sabedoria (Você escolheu Sabedoria.)\n- Magia Rajada de Veneno: não existia → truque" }} />)
         expect(screen.getByText("Pergunta ao jogador")).toBeInTheDocument()
         expect(screen.getByTestId("sheet-change-line")).toHaveTextContent("Ficha de Nala corrigida:")
         expect(screen.getAllByTestId("sheet-change-item").map((item) => item.textContent)).toEqual(["Atributo de conjuração: nenhum → Sabedoria (Você escolheu Sabedoria.)", "Magia Rajada de Veneno: não existia → truque"])
+    })
+})
+
+describe("DND-75 — preparação parada: tempo no selo e ações do dono", () => {
+    const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString()
+
+    it('o selo "Preparando…" mostra há quanto tempo (a partir de 1 min); "Aguardando" na fila não', () => {
+        const combat: MaddoxTacticalCombatDto = {
+            ...preparing,
+            order: [slot({ actorKey: "pc:vaelyra", name: "Vaelyra", prep: { status: "preparing", since: minutesAgo(12) } }), slot({ actorKey: "pc:kael", name: "Kael", prep: { status: "waiting", since: minutesAgo(30) } }), slot({ actorKey: "pc:nala", name: "Nala", prep: { status: "ready" } })],
+        }
+        renderCombatTable(combat, { title: "Cripta" })
+        const seals = screen.getAllByTestId("initiative-prep")
+        expect(seals.map((seal) => seal.textContent?.trim())).toEqual(["Preparando… · 12 min", "Aguardando", "Pronto"])
+        expect(within(seals[0]).getByTestId("initiative-prep-elapsed")).toHaveTextContent("12 min")
+    })
+
+    it("o dono vê o aviso com o tempo, reinicia e segue sem a preparação (com confirmação)", async () => {
+        const onRestart = vi.fn()
+        const onSkip = vi.fn()
+        const stalled = [{ prepId: "p1", characterName: "Lizwan", since: minutesAgo(23) }]
+        render(<CombatPrepStalledNotice stalled={stalled} now={Date.now()} isOwner restarting={false} skipping={false} onRestart={onRestart} onSkip={onSkip} />)
+        expect(screen.getByTestId("combat-prep-stalled-item")).toHaveTextContent("A preparação da mesa de Lizwan está parada há 23 min.")
+        fireEvent.click(screen.getByRole("button", { name: "Reiniciar preparação" }))
+        expect(onRestart).toHaveBeenCalledWith("p1")
+        fireEvent.click(screen.getByRole("button", { name: "Seguir sem preparação" }))
+        expect(onSkip).not.toHaveBeenCalled()
+        const dialog = await screen.findByRole("alertdialog")
+        fireEvent.click(within(dialog).getByRole("button", { name: "Seguir sem preparação" }))
+        expect(onSkip).toHaveBeenCalledWith("p1")
+    })
+
+    it("quem não é dono só vê que está demorando, sem botões; sem preparação parada, nada aparece", () => {
+        const stalled = [{ prepId: "p1", characterName: "Lizwan", since: minutesAgo(5) }]
+        const { unmount } = render(<CombatPrepStalledNotice stalled={stalled} now={Date.now()} isOwner={false} restarting={false} skipping={false} onRestart={vi.fn()} onSkip={vi.fn()} />)
+        expect(screen.getByTestId("combat-prep-stalled-waiting")).toHaveTextContent("A preparação está demorando. O dono da campanha pode reiniciá-la.")
+        expect(screen.queryByRole("button")).toBeNull()
+        unmount()
+        render(<CombatPrepStalledNotice stalled={[]} now={Date.now()} isOwner restarting={false} skipping={false} onRestart={vi.fn()} onSkip={vi.fn()} />)
+        expect(screen.queryByTestId("combat-prep-stalled")).toBeNull()
     })
 })

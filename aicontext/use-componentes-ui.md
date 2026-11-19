@@ -633,6 +633,9 @@ a faixa amarela da simulação (`ViewAsBanner`) fica logo abaixo do header, só 
 - **Catálogo dentro do Owlbear** (`/?owlbearCatalogEmbed=1`): sem header e sem rodapé. O hook
   `useIsOwlbearCatalogEmbed` (`src/features/owlbear/hooks/`) lê o parâmetro no primeiro render e guarda uma
   marca no `sessionStorage` do iframe, para manter o modo ao navegar dentro dele.
+- **Mesa da campanha Maddox** (`/campanhas/[id]/mesa`): com header, mas sem rodapé (DND-73). A regra é
+  `isMaddoxGamePath` (`src/features/maddox/game-route.ts`), lida pelo layout com `usePathname()`; as demais
+  telas da campanha (lobby, Diário, entrevistas) mantêm o rodapé.
 
 ### Categorias e itens (`src/lib/config/navigation.ts`)
 

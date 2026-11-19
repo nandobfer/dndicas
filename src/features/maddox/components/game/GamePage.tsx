@@ -19,10 +19,11 @@ import { actionOptionsView, combatBannerText, combatRecoveringBannerText, combat
 import { useMaddoxOpexTableActions } from "../../hooks/useMaddoxOpex"
 import { OpexFailureBanner } from "./OpexFailureBanner"
 import type { MaddoxCombatActionInput } from "../../combat-schemas"
-import { useCancelCombatAction, useChooseSneakAttack, useDecideReaction, useEndCombatTurn, useRequestCombatAdjustment, useAnswerCombatPrep, useRetryCombatPrep, useRollCombatStep, useSkipCombatPrep, useSubmitCombatAction } from "../../hooks/useMaddoxCombat"
+import { useCancelCombatAction, useChooseSneakAttack, useDecideReaction, useEndCombatTurn, useRequestCombatAdjustment, useAnswerCombatPrep, useRestartCombatPrep, useRetryCombatPrep, useRollCombatStep, useSkipCombatPrep, useSubmitCombatAction } from "../../hooks/useMaddoxCombat"
 import { CombatActionBar, CombatWaitBar } from "./combat/CombatActionBar"
-import { InitiativeTracker } from "./combat/InitiativeTracker"
-import { CombatPrepBlockedNotice } from "./combat/CombatCards"
+import { CombatPrepBlockedNotice, CombatPrepStalledNotice } from "./combat/CombatCards"
+import { useNow, useServerClockOffset } from "./combat/CombatantStatus"
+import { stalledCombatPreps } from "../../combat-prep-stall"
 import {
     fetchOlderGameMessages,
     useMaddoxGame,
@@ -130,6 +131,7 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
     const prepRetry = useRetryCombatPrep(state.campaignId)
     const prepAnswer = useAnswerCombatPrep(state.campaignId)
     const prepSkip = useSkipCombatPrep(state.campaignId)
+    const prepRestart = useRestartCombatPrep(state.campaignId)
     const combatAdjust = useRequestCombatAdjustment(state.campaignId)
     const combatReact = useDecideReaction(state.campaignId)
     // DND-74: o "Conversar com o Mestre" (canto do chat) também abre pelo "Perguntar ao mestre" da barra do combate.
@@ -137,6 +139,10 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
     const levelUps = useGameLevelUps(state.campaignId, state.me.levelUps)
     const [combatInvalid, setCombatInvalid] = useState<string | null>(null)
     const tactical = state.combat?.tactical ?? null
+    // DND-75: o aviso de preparação parada sai do relógio da tela (a mesa não é relida quando o limite passa).
+    const prepClockOffset = useServerClockOffset(tactical?.preparation?.serverTime)
+    const prepClock = useNow(15_000, Boolean(tactical?.order.some((slot) => slot.prep?.status === "preparing"))) + prepClockOffset
+    const stalledPreps = tactical ? stalledCombatPreps(tactical.order, prepClock) : []
     const skip = useSkipMaddoxPlayer(state.campaignId)
     const opexActions = useMaddoxOpexTableActions(state.campaignId)
     const rollCheck = useRollMaddoxCheck(state.campaignId)
@@ -273,7 +279,6 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
                             {rewindBannerText(state.turn.rewind)}
                         </p>
                     )}
-                    {tactical && state.combat && <InitiativeTracker combat={tactical} title={state.combat.title} color={color} compact />}
                     {levelUps.banner}
                     {state.me.isOwner && state.turn.opexActor?.failed && <OpexFailureBanner actor={state.turn.opexActor} retrying={opexActions.retry.isPending} skipping={opexActions.skip.isPending} onRetry={() => opexActions.retry.mutate(state.turn.opexActor!.memberId)} onSkip={() => opexActions.skip.mutate(state.turn.opexActor!.memberId)} />}
                     </>
@@ -359,9 +364,10 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
                                 />
                             ) : (
                                 <>
-                                    {tactical.preparation?.blocked && (
-                                        <div className="border-t px-4 pt-3">
+                                    {tactical.preparation && (tactical.preparation.blocked || stalledPreps.length > 0) && (
+                                        <div className="space-y-1.5 border-t px-4 pt-3">
                                             <CombatPrepBlockedNotice preparation={tactical.preparation} isOwner={state.me.isOwner} retrying={prepRetry.isPending} skipping={prepSkip.isPending} onRetry={(prepId) => prepRetry.mutate(prepId)} onSkip={(prepId) => prepSkip.mutate(prepId)} />
+                                            <CombatPrepStalledNotice stalled={stalledPreps} now={prepClock} isOwner={state.me.isOwner} restarting={prepRestart.isPending} skipping={prepSkip.isPending} onRestart={(prepId) => prepRestart.mutate(prepId)} onSkip={(prepId) => prepSkip.mutate(prepId)} />
                                         </div>
                                     )}
                                     <CombatWaitBar combat={tactical} isOwner={state.me.isOwner} recovering={recoveringCombatTurn} canAsk={talkBlock === null} onAsk={() => setTalkOpen(true)} />
@@ -383,7 +389,6 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
                     )}
                 </section>
                 <div className="space-y-6 lg:min-h-0 lg:overflow-y-auto" data-testid="game-tools">
-                    {tactical && state.combat && <InitiativeTracker combat={tactical} title={state.combat.title} color={color} />}
                     <TurnPanel
                         state={state}
                         presence={presence}

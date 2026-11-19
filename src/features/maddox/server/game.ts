@@ -1241,6 +1241,9 @@ export async function getGameState(campaignId: string, userId: string): Promise<
         // Personagem Opex na vez (DND-26): depois de um reinício, a leitura da mesa retoma a execução (idempotente).
         if (campaign.turn?.phase === "players" && (campaign.turn.opexActor || campaign.turn.combatActor)) void import("./opex-table").then(({ driveOpex }) => driveOpex(campaign._id)).catch(() => undefined)
     }
+    // DND-75: preparação da mesa de combate presa (deploy ou reinício) volta à fila na leitura, no máximo a cada 15 s. Sem
+    // esperar (como as demais retomadas): a leitura também roda dentro de jobs da fila serial da campanha.
+    if (campaign.status === "active") void import("./combat-prep-recovery").then(({ recoverCampaignCombatPreps }) => recoverCampaignCombatPreps(campaign._id))
     // Descanso aberto (DND-58): preparações presas (reinício do processo) voltam à fila; a faixa mostra quem falta.
     const restModule = await import("./rest")
     const restWaiting = campaign.status === "active" ? await restModule.restWaiting(campaign._id) : []

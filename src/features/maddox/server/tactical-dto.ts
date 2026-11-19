@@ -1,5 +1,6 @@
 import { Types } from "mongoose"
 import { MADDOX_COMBAT_ADJUST_FAILED_MESSAGE } from "../constants"
+import { combatPrepSince } from "../combat-prep-stall"
 import { conditionDisplayLabel, hpBand } from "../combat-rules"
 import type { IMaddoxCombatAction, IMaddoxCombatReaction, IMaddoxCombatRoll } from "../combat-types"
 import type { MaddoxCombatActionDto, MaddoxCombatReactionDto, MaddoxCombatRollDto, MaddoxMyCombatDto, MaddoxTacticalCombatDto, MaddoxTacticalSlotDto } from "../game-types"
@@ -102,12 +103,16 @@ export function withPreparation(dto: MaddoxTacticalCombatDto, preps: readonly IM
         order: dto.order.map((slot) => {
             const prep = slot.kind === "character" ? byKey.get(slot.actorKey) : undefined
             const status = prep ? PREP_SLOT[prep.status] : null
-            return status ? { ...slot, prep: { status } } : slot
+            if (!prep || !status) return slot
+            const since = combatPrepSince(prep)
+            return { ...slot, prep: { status, prepId: String(prep._id), ...(since ? { since: since.toISOString() } : {}) } }
         }),
         preparation: {
             active,
             blocked: failed.length > 0,
             failures: viewerIsOwner ? failed.map((prep) => ({ prepId: String(prep._id), characterName: prep.characterName, error: prep.error ?? "Falha sem detalhe." })) : [],
+            // DND-75: horário do servidor na leitura; a tela corrige o próprio relógio para o aviso de parada.
+            serverTime: new Date().toISOString(),
         },
     }
 }
