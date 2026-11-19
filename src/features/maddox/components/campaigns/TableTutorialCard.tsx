@@ -7,11 +7,10 @@ import { Button } from "@/components/ui/opex/button"
 import { GlassCard as Card, GlassCardContent as CardContent, GlassCardDescription as CardDescription, GlassCardHeader as CardHeader, GlassCardTitle as CardTitle } from "@/components/ui/glass-card"
 import { rarityColors } from "@/lib/config/colors"
 import { cn } from "@/lib/utils"
-import { MADDOX_REMINDER_MAX_CHARS } from "../../constants"
+import { MADDOX_REMINDER_MAX_CHARS, MADDOX_TALK_TITLE } from "../../constants"
 import type { MaddoxCampaignDetailDto } from "../../campaign-types"
 import type { MaddoxSceneImageControlDto } from "../../game-types"
-import { AskMasterButton, DeclareButton, PassTurnButton } from "../game/composer-buttons"
-import { InjectReminderButton } from "../game/InjectReminderButton"
+import { DeclareButton, MasterTalkIconButton, PassTurnButton } from "../game/composer-buttons"
 import { SceneImageButton } from "../game/SceneImageButton"
 import { JournalLinkButton } from "../journal/JournalLinkButton"
 import { RarityChip } from "./campaign-visuals"
@@ -25,18 +24,17 @@ const STEPS: readonly { title: string; text: string; icon: LucideIcon; color: st
 ]
 
 const TIPS: readonly { text: string; icon: LucideIcon; color: string }[] = [
-    { text: "Perguntas ao mestre não encerram o seu turno — dá para perguntar mesmo depois de declarar.", icon: HelpCircle, color: rarityColors.rare },
+    { text: `“${MADDOX_TALK_TITLE}” não encerra o seu turno — dá para falar com o mestre mesmo depois de declarar, e no combate não gasta ação.`, icon: HelpCircle, color: rarityColors.rare },
     { text: "A declaração é final: uma por turno. Pense na intenção antes de enviar.", icon: Flag, color: rarityColors.veryRare },
     { text: "O turno fecha quando todos os jogadores com a mesa aberta declararam ou passaram. Quem está offline não trava a mesa.", icon: Users, color: rarityColors.uncommon },
     { text: "Quem entra ou conclui a entrevista no meio do turno joga a partir do próximo.", icon: UserPlus, color: rarityColors.legendary },
-    { text: `A lembrança (até ${MADDOX_REMINDER_MAX_CHARS} caracteres) não é uma ação do personagem: é um recado que o Maddox considera na próxima narração.`, icon: Lightbulb, color: rarityColors.legendary },
+    { text: `A conversa com o mestre (até ${MADDOX_REMINDER_MAX_CHARS} caracteres) é fora da mesa: quem fala é você, não o personagem. O mestre responde, lembra ou corrige na hora.`, icon: Lightbulb, color: rarityColors.legendary },
     { text: "O Diário guarda só o que os jogadores sabem: histórico, NPCs, locais, missões e a busca.", icon: Eye, color: rarityColors.rare },
 ]
 
 /** Controle de demonstração do "Gerar imagem da cena" (só aparece ao dono). */
 const DEMO_SCENE_IMAGE: MaddoxSceneImageControlDto = { owner: true, canRequest: true, reason: null, generating: false, remainingToday: 0, campaignEnabled: true, canRequestPortrait: false }
 const noop = () => undefined
-const noopAsync = async () => undefined
 
 /** Moldura dos botões reais em demonstração: aparência de ativos, mas sem foco, clique ou teclado. */
 function DemoFrame({ children, className, testId }: { children: ReactNode; className?: string; testId: string }) {
@@ -145,13 +143,12 @@ export function TableTutorialCard({ campaign, color, footer }: { campaign: Maddo
                                 O que o seu personagem faz?
                             </span>
                             <DemoFrame className="flex items-center gap-2" testId="tutorial-demo-composer">
-                                <AskMasterButton />
                                 <PassTurnButton />
                                 <DeclareButton type="button" />
                             </DemoFrame>
                         </div>
-                        <ul className="mt-3 grid gap-2 sm:grid-cols-3" aria-label="Botões do campo da mesa">
-                            <ControlHint icon={HelpCircle} color={rarityColors.rare} title="Perguntar ao mestre" text="Tira uma dúvida sobre a cena. Não encerra o seu turno." variants={item} />
+                        <ul className="mt-3 grid gap-2 sm:grid-cols-2" aria-label="Botões do campo da mesa">
+
                             <ControlHint icon={MinusCircle} color={rarityColors.common} title="Não fazer nada" text="Passa a sua vez neste turno." variants={item} />
                             <ControlHint icon={ArrowUp} color={color} title="Declarar" text="Envia o que o seu personagem faz, diz ou pretende." variants={item} />
                         </ul>
@@ -163,9 +160,9 @@ export function TableTutorialCard({ campaign, color, footer }: { campaign: Maddo
                         Ferramentas da mesa
                     </h3>
                     <ul className={cn("grid gap-3", isOwner ? "md:grid-cols-3" : "md:grid-cols-2")} aria-label="Ferramentas da mesa">
-                        <ToolCard variants={item} hover={hover} color={rarityColors.legendary} title="Injetar Lembrança" text={`Lembre o Maddox de algo que ele deve considerar agora (até ${MADDOX_REMINDER_MAX_CHARS} caracteres).`}>
-                            <DemoFrame testId="tutorial-demo-reminder">
-                                <InjectReminderButton blockReason={null} sending={false} onSend={noopAsync} />
+                        <ToolCard variants={item} hover={hover} color={rarityColors.legendary} title={MADDOX_TALK_TITLE} text={`Conversa fora da mesa: você fala com o mestre, não como o personagem. Tire dúvidas, lembre o Maddox de algo ou peça correções (até ${MADDOX_REMINDER_MAX_CHARS} caracteres). Fica no canto do chat e não gasta a sua vez nem ações do combate.`}>
+                            <DemoFrame testId="tutorial-demo-talk">
+                                <MasterTalkIconButton />
                             </DemoFrame>
                         </ToolCard>
                         <ToolCard variants={item} hover={hover} color={rarityColors.rare} title="Diário" text="Histórico, NPCs, locais, missões e a busca — só o que os jogadores sabem.">

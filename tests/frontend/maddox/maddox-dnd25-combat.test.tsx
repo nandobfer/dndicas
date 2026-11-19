@@ -1,6 +1,6 @@
 /** @vitest-environment happy-dom */
 import { describe, expect, it, vi } from "vitest"
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { fireEvent, render, screen } from "@testing-library/react"
 import type { DiceRollResponse } from "@/features/dice-roller/types"
 import type { MaddoxGameMessageDto, MaddoxLiveGenerationDto, MaddoxLiveRollDto } from "@/features/maddox/game-types"
 
@@ -18,12 +18,12 @@ vi.mock("@/features/dice-roller/components/dice-roller-panel", () => ({
     ),
 }))
 
-const { InjectReminderButton } = await import("@/features/maddox/components/game/InjectReminderButton")
+const { MasterFixLine } = await import("@/features/maddox/components/game/MasterFixLine")
 const { ReminderLine } = await import("@/features/maddox/components/game/ReminderLine")
 const { EnemyInitiativeCard, CombatActionCard } = await import("@/features/maddox/components/game/combat/CombatCards")
 const { GameMessageList } = await import("@/features/maddox/components/game/GameMessageList")
 const { reduceGameStream, MADDOX_GAME_STREAM_INITIAL } = await import("@/features/maddox/hooks/useMaddoxGameStream")
-const { reminderBlockReason, masterBannerText } = await import("@/features/maddox/game-view")
+const { talkBlockReason, masterBannerText } = await import("@/features/maddox/game-view")
 
 const d20 = (kept: number, modifier: number, discarded?: number): DiceRollResponse => ({
     rollId: `r-${kept}-${modifier}-${discarded ?? "n"}`,
@@ -54,43 +54,44 @@ const message = (over: Partial<MaddoxGameMessageDto>): MaddoxGameMessageDto => (
     ...over,
 })
 
-describe("DND-25 — Injetar Lembrança", () => {
-    it("popover com os textos exatos, contador e Enviar desabilitado quando vazio ou acima de 500", async () => {
-        const onSend = vi.fn(async () => undefined)
-        render(<InjectReminderButton blockReason={null} sending={false} onSend={onSend} />)
-        fireEvent.click(screen.getByRole("button", { name: /Injetar Lembrança/ }))
-        expect(await screen.findByText("Injetar Lembrança", { selector: "p" })).toBeTruthy()
-        const field = screen.getByTestId("inject-reminder-text") as HTMLTextAreaElement
-        expect(field.placeholder).toBe("Ex.: lembre-se que tenho o talento Alerta e não posso ser surpreendido")
-        const send = screen.getByTestId("inject-reminder-send") as HTMLButtonElement
-        expect(send.textContent).toContain("Enviar")
-        expect(send.disabled).toBe(true)
-        expect(screen.getByTestId("inject-reminder-counter").textContent).toBe("0/500")
-        fireEvent.change(field, { target: { value: "   " } })
-        expect(send.disabled).toBe(true)
-        fireEvent.change(field, { target: { value: "a".repeat(501) } })
-        expect(screen.getByTestId("inject-reminder-counter").textContent).toBe("501/500")
-        expect(send.disabled).toBe(true)
-        fireEvent.change(field, { target: { value: "  lembre-se que tenho o talento Alerta  " } })
-        expect(send.disabled).toBe(false)
-        await act(async () => {
-            fireEvent.click(send)
-        })
-        expect(onSend).toHaveBeenCalledWith("lembre-se que tenho o talento Alerta")
-        await waitFor(() => expect(screen.queryByTestId("inject-reminder-text")).toBeNull())
+describe("DND-25/74 — lembrança e Conversar com o Mestre na conversa da mesa", () => {
+    it("a conversa com o mestre fica desabilitada com o motivo (fora de jogo, entrevista pendente)", () => {
+        expect(talkBlockReason({ status: "paused", me: { memberId: "m1", ready: true } } as never)).toBe("A campanha não está em andamento.")
+        expect(talkBlockReason({ status: "active", me: { memberId: "m1", ready: false } } as never)).toBe("Conclua a entrevista de personagem com o Maddox antes de entrar no jogo.")
+        expect(talkBlockReason({ status: "active", me: { memberId: "m1", ready: true } } as never)).toBeNull()
     })
 
-    it("fica desabilitado com o motivo (fora de jogo, entrevista pendente)", () => {
-        expect(reminderBlockReason({ status: "paused", me: { memberId: "m1", ready: true } } as never)).toBe("A campanha não está em andamento.")
-        expect(reminderBlockReason({ status: "active", me: { memberId: "m1", ready: false } } as never)).toBe("Conclua a entrevista de personagem com o Maddox antes de entrar no jogo.")
-        expect(reminderBlockReason({ status: "active", me: { memberId: "m1", ready: true } } as never)).toBeNull()
-        render(<InjectReminderButton blockReason="A campanha não está em andamento." sending={false} onSend={vi.fn()} />)
-        const button = screen.getByTestId("inject-reminder-button") as HTMLButtonElement
-        expect(button.disabled).toBe(true)
-        expect(button.title).toBe("A campanha não está em andamento.")
+    it("DND-74: a conversa com o mestre é a bolha fora da mesa, com o nome do usuário (não a do personagem nem a linha da lembrança)", () => {
+        render(<GameMessageList messages={[message({ id: "t1", kind: "reminder", phase: "players", memberId: "m2", characterName: "Doran", authorName: "Ana", content: "O que tem no chão?", reminder: { status: "pending", talk: true } })]} myMemberId="m1" maddoxAvatarUrl={null} color="#fff" narrating={false} hasMore={false} loadingMore={false} onLoadMore={() => undefined} />)
+        const talk = screen.getByTestId("game-talk")
+        expect(talk.textContent).toContain("Ana")
+        expect(talk.textContent).not.toContain("Doran")
+        expect(screen.getByTestId("game-talk-label").textContent).toContain("conversa com o mestre · fora da mesa")
+        expect(screen.getByTestId("game-talk-pending").textContent).toContain("Aguardando o mestre")
+        expect(screen.queryByTestId("reminder-line")).toBeNull()
+        expect(screen.queryByTestId("game-question")).toBeNull()
+        expect(screen.queryByTestId("game-talk-failed")).toBeNull()
     })
 
-    it("na conversa da mesa, a mensagem de lembrança vira a linha discreta (não a bolha de declaração)", () => {
+    it("DND-74: a conversa que falhou fica encerrada com o aviso para enviar de novo (sem “Aguardando o mestre”)", () => {
+        render(<GameMessageList messages={[message({ id: "t2", kind: "reminder", phase: "players", memberId: "m1", characterName: "Kael", authorName: "Bruno", content: "Cancele o teste.", reminder: { status: "failed", talk: true } })]} myMemberId="m1" maddoxAvatarUrl={null} color="#fff" narrating={false} hasMore={false} loadingMore={false} onLoadMore={() => undefined} />)
+        expect(screen.getByTestId("game-talk")).toHaveAttribute("data-status", "failed")
+        expect(screen.getByTestId("game-talk-failed").textContent).toContain("O mestre não conseguiu responder: envie de novo")
+        expect(screen.queryByTestId("game-talk-pending")).toBeNull()
+    })
+
+    it("DND-74: a linha de resultado segue o desenho da lembrança injetada, com o que aconteceu com a lembrança", () => {
+        const { rerender } = render(<MasterFixLine message={message({ kind: "master-fix", content: "Teste de Furtividade de Fulano atualizado: CD 15 → 10", masterFix: { kind: "check-update" } })} color="#fff" />)
+        expect(screen.getByTestId("master-fix-line")).toHaveAttribute("data-kind", "check-update")
+        expect(screen.getByTestId("master-fix-line").textContent).toContain("Teste de Furtividade de Fulano atualizado: CD 15 → 10")
+        expect(screen.queryByTestId("master-fix-status")).toBeNull()
+        rerender(<MasterFixLine message={message({ kind: "master-fix", content: "Lembrança injetada: Fulano tem vantagem no teste", masterFix: { kind: "reminder", status: "saved" } })} color="#fff" />)
+        expect(screen.getByTestId("master-fix-status").textContent).toContain("Guardada como memória")
+        rerender(<MasterFixLine message={message({ kind: "master-fix", content: "Teste de Atletismo de Fulano cancelado", masterFix: { kind: "check-cancel" } })} color="#fff" />)
+        expect(screen.getByTestId("master-fix-line")).toHaveAttribute("data-kind", "check-cancel")
+    })
+
+    it("lembrança antiga (sem a conversa) continua como a linha discreta (não a bolha de declaração)", () => {
         render(<GameMessageList messages={[message({ id: "r1", kind: "reminder", phase: "players", memberId: "m2", characterName: "Doran", content: "Falo élfico.", reminder: { status: "pending" } })]} myMemberId="m1" maddoxAvatarUrl={null} color="#fff" narrating={false} hasMore={false} loadingMore={false} onLoadMore={() => undefined} />)
         expect(screen.getByTestId("reminder-line").textContent).toContain("Doran lembrou o Maddox: “Falo élfico.”")
         expect(screen.getByTestId("reminder-status").textContent).toContain("Aguardando o Maddox")

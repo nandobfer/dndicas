@@ -16,7 +16,7 @@ import { partsFromCalc } from "@/features/dice-roller/dice-breakdown"
 import type { DiceRollPreset, DiceRollResponse, DiceTerm } from "@/features/dice-roller/types"
 import { entryDice, entryTotal, type MaddoxCheckEffectEntry } from "../../check-effects"
 import { checkKindLabel, checkModeLabel, checkModifier, checkTitle, signed } from "../../check-modifier"
-import { MADDOX_CHECK_DIE_HIDE_MS, messageAvatarContext } from "../../constants"
+import { MADDOX_CHECK_DIE_HIDE_MS, MADDOX_MASTER_REVIEWING_MESSAGE, messageAvatarContext } from "../../constants"
 import type { MaddoxGameMessageDto } from "../../game-types"
 import { MemberAvatar, RarityChip } from "../campaigns/campaign-visuals"
 
@@ -69,6 +69,8 @@ interface Props {
     replay: DiceRollResponse | null
     /** Rola no servidor (o painel de dados chama no "Rolar"). */
     onRoll: (checkId: string) => Promise<DiceRollResponse>
+    /** DND-74: o mestre está tratando uma conversa (pode alterar ou cancelar este teste): o Rolar espera a resposta. */
+    masterReviewing?: boolean
 }
 
 /**
@@ -76,7 +78,7 @@ interface Props {
  * modificador da ficha e o botão "Rolar" (a rolagem é do servidor). Rolado, todos veem quem rolou, o dado — com a
  * animação repetida em quem estava com a mesa aberta —, o modificador e o total; com a CD visível, sucesso ou falha.
  */
-export function GameCheckCard({ message, mine, color, replay, onRoll }: Props) {
+export function GameCheckCard({ message, mine, color, replay, onRoll, masterReviewing = false }: Props) {
     const check = message.check!
     const name = message.characterName ?? "Personagem"
     const spec = { kind: check.kind, ability: check.ability, skill: check.skill }
@@ -195,8 +197,8 @@ export function GameCheckCard({ message, mine, color, replay, onRoll }: Props) {
                                     onRollSettled={setSettledRoll}
                                     rollButtonLabel="Rolar"
                                     hideRollButton={(!pendingMine && !localRoll) || Boolean(settledRoll)}
-                                    disableRolling={Boolean(localRoll) || !pendingMine || sheetLoading}
-                                    disabledRollingMessage={settledRoll ? null : localRoll ? "Resultado enviado ao Maddox." : sheetLoading ? "Carregando a ficha…" : null}
+                                    disableRolling={Boolean(localRoll) || !pendingMine || sheetLoading || (masterReviewing && !localRoll)}
+                                    disabledRollingMessage={settledRoll ? null : localRoll ? "Resultado enviado ao Maddox." : sheetLoading ? "Carregando a ficha…" : masterReviewing && pendingMine ? MADDOX_MASTER_REVIEWING_MESSAGE : null}
                                     externalResult={pendingMine || localRoll ? null : replay}
                                     rollRequest={async () => {
                                         setFrozenModifier(presetModifier)

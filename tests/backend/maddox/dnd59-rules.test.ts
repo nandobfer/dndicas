@@ -78,16 +78,17 @@ describe("DND-59 — prompt: estado ou silêncio", () => {
         expect(tactical).toContain("Rolagem já feita é definitiva")
     })
 
-    it("o lembrete corrigido na hora tem a tarefa própria (corrigir antes da rolagem e resolver o lembrete)", () => {
-        const text = answer({ reminderRef: "abc123", combatFix: true, question: "lizwan está escondida e ataca com vantagem!" })
-        expect(text).toContain("# Lembrete de Lizwan (turno 7)")
-        expect(text).toContain("[abc123] **Lizwan** lembra: lizwan está escondida e ataca com vantagem!")
+    it("o lembrete (DND-74: a conversa com o mestre) tem a tarefa própria (corrigir antes da rolagem e resolver o lembrete)", () => {
+        const text = answer({ talk: true, reminderRef: "abc123", combatFix: true, question: "lizwan está escondida e ataca com vantagem!" })
+        expect(text).toContain("# Conversa com o mestre (turno 7) — fora da mesa")
+        expect(text).toContain("[abc123] Jogador de **Lizwan**: lizwan está escondida e ataca com vantagem!")
         expect(text).toContain("`resolve_reminder`")
+        expect(text).toContain(MADDOX_COMBAT_FIX_TASK_RULES)
         expect(text).toContain(MADDOX_STATE_OR_SILENCE_RULE)
     })
 
     it("DND-69: o lembrete de usar Orientação manda registrar o efeito de teste antes da rolagem", () => {
-        const text = answer({ reminderRef: "abc123", question: 'vou lançar "orientação" em mim mesma' })
+        const text = answer({ talk: true, reminderRef: "abc123", question: 'vou lançar "orientação" em mim mesma' })
         expect(text).toContain("`apply_check_effect`")
         expect(text).toContain("Nunca diga que o efeito vale sem o retorno dela")
     })

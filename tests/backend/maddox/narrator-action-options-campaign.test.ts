@@ -206,7 +206,7 @@ describe("DND-30 — sugestões de ação de ponta a ponta", () => {
         await game.startCampaign(id, owner)
         await waitForCampaignIdle(id)
         script.push([{ text: "Há dois guardas." }])
-        await game.submitGameAction(id, { kind: "question", content: "Quantos guardas há?" }, owner)
+        await (await import("@/features/maddox/server/reminders")).submitTalk(id, { texto: "Quantos guardas há?" }, owner)
         await waitForCampaignIdle(id)
         const answer = calls.at(-1)!
         expect(answer.userText).toContain("Quantos guardas há?")

@@ -2,12 +2,12 @@ import { Types } from "mongoose"
 import { AcaoAuditoria, recordAudit } from "@/lib/db"
 import { loggerFor } from "@/lib/logger"
 import { MADDOX_CAMPAIGN_AUDIT_ENTITY, type MaddoxCampaignMemoryKind } from "../constants"
-import type { MaddoxReminderInput } from "../game-schemas"
+import type { MaddoxTalkInput } from "../game-schemas"
 import type { MaddoxGameStateDto } from "../game-types"
-import { MaddoxCampaignMessageModel, type IMaddoxCampaignMessage } from "../models"
+import { MaddoxCampaignMessageModel, MaddoxCampaignModel, type IMaddoxCampaignMessage } from "../models"
 import { assertMemberCanPlay } from "./campaigns"
-import { assertActive, characterOf, getGameState, loadAsMember, publishGameChanged } from "./game"
-import { isActiveMaddoxJob, jobReminders, setJobReminders, type MaddoxDraftReminder } from "./game-live"
+import { assertActive, characterOf, getGameState, lastTalkTip, loadAsMember, publishGameChanged } from "./game"
+import { isActiveMaddoxJob, isCampaignBusy, jobReminders, setJobReminders, type MaddoxDraftReminder } from "./game-live"
 
 /**
  * Injetar Lembrança (DND-25) — SOMENTE servidor. Um membro pronto envia um texto curto; desde a DND-59 o Maddox o
@@ -16,6 +16,13 @@ import { isActiveMaddoxJob, jobReminders, setJobReminders, type MaddoxDraftRemin
  * geração fica para a seguinte. A decisão do Maddox (guardar como memória da campanha ou usar só naquela narração) fica
  * no job (`resolve_reminder`) e só é aplicada depois de a narração ser gravada; se a geração falhar, as lembranças voltam
  * a esperar. Enviar não conta como declaração e não muda o turno.
+ *
+ * DND-74: a lembrança virou o "Conversar com o Mestre" (`submitTalk`): a mensagem é uma `reminder` com `reminder.talk`,
+ * vale em qualquer fase da campanha, continua a conversa do jogador no turno (`replyToId`) e o resultado aparece como a
+ * linha compacta `master-fix` ("Lembrança injetada: …", "Teste de X atualizado", "Teste de X cancelado"). A conversa só é
+ * tratada pelo job dela (tem as ferramentas de correção): a narração nunca a reivindica. Se a resposta falha (ou o job
+ * morre: `reapStaleTalks`), ela fica `failed` e o jogador envia de novo; ela nunca volta a `pending`. As lembranças
+ * antigas (sem `talk`) seguem como estavam: falha devolve a `pending` e a próxima narração as considera.
  */
 
 const log = loggerFor({ module: "maddox", feature: "reminders" })
@@ -23,14 +30,26 @@ const log = loggerFor({ module: "maddox", feature: "reminders" })
 /** Lembranças por narração (proteção do prompt; as demais ficam para a próxima). */
 const REMINDERS_PER_NARRATION = 20
 
-export async function submitReminder(campaignId: string, input: MaddoxReminderInput, userId: string): Promise<MaddoxGameStateDto> {
+/** Tamanho máximo do resultado de uma lembrança na linha "Lembrança injetada: …". */
+const TALK_RESULT_MAX = 300
+
+/**
+ * "Conversar com o Mestre" (DND-74): conversa fora da mesa, do jogador (não do personagem) com o mestre, em qualquer fase
+ * da campanha em andamento. Não conta como declaração, não muda o turno e não gasta ação no combate tático. O mestre trata
+ * o pedido na hora (`scheduleReminderFix`).
+ */
+export async function submitTalk(campaignId: string, input: MaddoxTalkInput, userId: string): Promise<MaddoxGameStateDto> {
     const { campaign, member } = await loadAsMember(campaignId, userId)
     assertActive(campaign)
     await assertMemberCanPlay(campaignId, userId)
     const character = await characterOf(member)
+    const turnNumber = campaign.turn?.number ?? 0
+    // A nova mensagem continua a conversa do jogador neste turno (o mestre pode ter perguntado de volta).
+    const replyToId = await lastTalkTip(campaign._id, turnNumber, member._id)
     const message = await MaddoxCampaignMessageModel.create({
+        replyToId,
         campaignId: campaign._id,
-        turnNumber: campaign.turn?.number ?? 0,
+        turnNumber,
         phase: campaign.turn?.phase ?? "master",
         kind: "reminder",
         memberId: member._id,
@@ -38,10 +57,10 @@ export async function submitReminder(campaignId: string, input: MaddoxReminderIn
         characterId: character?._id ?? null,
         characterName: character?.name ?? null,
         content: input.texto,
-        reminder: { status: "pending", jobId: null, claimedAt: null, resolvedAt: null, memoryKind: null, memoryTitle: null, visibility: null },
+        reminder: { status: "pending", jobId: null, claimedAt: null, resolvedAt: null, memoryKind: null, memoryTitle: null, visibility: null, talk: true },
     })
-    await recordAudit({ userId, entidade: MADDOX_CAMPAIGN_AUDIT_ENTITY, entidadeId: campaignId, acao: AcaoAuditoria.CRIAR, depois: { reminder: String(message._id), turn: campaign.turn?.number ?? 0, chars: input.texto.length } })
-    log.info({ campaignId, reminderId: String(message._id), memberId: String(member._id), chars: input.texto.length }, "[maddox] lembrança injetada")
+    await recordAudit({ userId, entidade: MADDOX_CAMPAIGN_AUDIT_ENTITY, entidadeId: campaignId, acao: AcaoAuditoria.CRIAR, depois: { talk: String(message._id), turn: turnNumber, phase: campaign.turn?.phase ?? "master", chars: input.texto.length } })
+    log.info({ campaignId, talkId: String(message._id), memberId: String(member._id), phase: campaign.turn?.phase ?? "master", chars: input.texto.length }, "[maddox] conversa com o mestre")
     // DND-59: o lembrete é corrigido na hora (a narração seguinte só pega o que este job não resolveu). Entra na fila antes
     // do aviso à mesa: o card já mostra o Rolar em espera.
     const { scheduleReminderFix } = await import("./game")
@@ -52,10 +71,11 @@ export async function submitReminder(campaignId: string, input: MaddoxReminderIn
 
 /**
  * Começo de uma narração: reivindica as lembranças pendentes (as soltas e as de uma geração que já não roda, ex.: o
- * processo caiu) para o job e as guarda nele. Devolve as que a narração deve considerar.
+ * processo caiu) para o job e as guarda nele. Devolve as que a narração deve considerar. DND-74: a conversa com o mestre
+ * (`reminder.talk`) nunca entra: só o job dela tem as ferramentas de correção para executar o pedido.
  */
 export async function claimReminders(campaignId: Types.ObjectId, jobId: string): Promise<MaddoxDraftReminder[]> {
-    const pending = await MaddoxCampaignMessageModel.find({ campaignId, kind: "reminder", "reminder.status": "pending" })
+    const pending = await MaddoxCampaignMessageModel.find({ campaignId, kind: "reminder", "reminder.status": "pending", "reminder.talk": { $ne: true } })
         .sort({ _id: 1 })
         .limit(REMINDERS_PER_NARRATION * 2)
         .select("_id characterName content reminder")
@@ -68,9 +88,9 @@ export async function claimReminders(campaignId: Types.ObjectId, jobId: string):
             { $set: { "reminder.jobId": jobId, "reminder.claimedAt": new Date() } },
         )
         if (won.modifiedCount === 0) continue
-        claimed.push({ id: String(item._id), characterName: item.characterName ?? "Personagem", text: item.content, memory: null, decided: false })
+        claimed.push(draftOf(item))
     }
-    const already = pending.filter((item) => item.reminder?.jobId === jobId).map((item) => ({ id: String(item._id), characterName: item.characterName ?? "Personagem", text: item.content, memory: null, decided: false }))
+    const already = pending.filter((item) => item.reminder?.jobId === jobId).map(draftOf)
     const all = [...already, ...claimed]
     setJobReminders(String(campaignId), jobId, all)
     if (all.length) log.info({ campaignId: String(campaignId), jobId, reminders: all.length }, "[maddox] lembranças consideradas nesta narração")
@@ -81,27 +101,72 @@ export async function claimReminders(campaignId: Types.ObjectId, jobId: string):
  * DND-59: o job de correção do lembrete reivindica SÓ este lembrete (se ainda pendente e livre). `null` = uma narração
  * já o pegou (ou ele já foi resolvido): o job não faz nada.
  */
-export async function claimReminder(campaignId: Types.ObjectId, jobId: string, reminderId: Types.ObjectId): Promise<{ turnNumber: number; characterName: string; text: string } | null> {
+export async function claimReminder(campaignId: Types.ObjectId, jobId: string, reminderId: Types.ObjectId): Promise<{ turnNumber: number; characterName: string; text: string; talk: boolean } | null> {
     const item = await MaddoxCampaignMessageModel.findOne({ _id: reminderId, campaignId, kind: "reminder", "reminder.status": "pending" }).select("_id turnNumber characterName content reminder").lean<Pick<IMaddoxCampaignMessage, "_id" | "turnNumber" | "characterName" | "content" | "reminder">>()
     if (!item) return null
     const holder = item.reminder?.jobId ?? null
     if (holder && holder !== jobId && isActiveMaddoxJob(String(campaignId), holder)) return null
     const won = await MaddoxCampaignMessageModel.updateOne({ _id: item._id, "reminder.status": "pending", "reminder.jobId": holder }, { $set: { "reminder.jobId": jobId, "reminder.claimedAt": new Date() } })
     if (won.modifiedCount === 0) return null
-    const characterName = item.characterName ?? "Personagem"
-    setJobReminders(String(campaignId), jobId, [{ id: String(item._id), characterName, text: item.content, memory: null, decided: false }])
-    log.info({ campaignId: String(campaignId), jobId, reminderId: String(item._id) }, "[maddox] lembrete reivindicado para a correção na hora")
-    return { turnNumber: item.turnNumber, characterName, text: item.content }
+    const draft = draftOf(item)
+    setJobReminders(String(campaignId), jobId, [draft])
+    log.info({ campaignId: String(campaignId), jobId, reminderId: String(item._id), talk: Boolean(draft.talk) }, "[maddox] lembrete reivindicado para a correção na hora")
+    return { turnNumber: item.turnNumber, characterName: draft.characterName, text: item.content, talk: Boolean(draft.talk) }
 }
 
-/** Geração que falhou: as lembranças dela voltam a esperar a próxima narração. Nunca lança. */
-export async function releaseReminders(campaignId: Types.ObjectId, jobId: string): Promise<void> {
+const draftOf = (item: Pick<IMaddoxCampaignMessage, "_id" | "characterName" | "content" | "reminder">): MaddoxDraftReminder => ({
+    id: String(item._id),
+    characterName: item.characterName ?? "Personagem",
+    text: item.content,
+    memory: null,
+    decided: false,
+    ...(item.reminder?.talk ? { talk: true, result: null } : {}),
+})
+
+/**
+ * Geração que falhou: as lembranças dela voltam a esperar a próxima narração. Nunca lança. DND-74: a conversa com o mestre não
+ * volta a esperar (a narração não teria as ferramentas para executá-la): fica `talkStatus` — `failed` quando a resposta falhou
+ * (o balão pede para enviar de novo) ou `discarded` quando a resposta já foi gravada e só a situação não.
+ */
+export async function releaseReminders(campaignId: Types.ObjectId, jobId: string, talkStatus: "failed" | "discarded" = "failed"): Promise<void> {
     try {
-        await MaddoxCampaignMessageModel.updateMany({ campaignId, kind: "reminder", "reminder.status": "pending", "reminder.jobId": jobId }, { $set: { "reminder.jobId": null, "reminder.claimedAt": null } })
+        await MaddoxCampaignMessageModel.updateMany({ campaignId, kind: "reminder", "reminder.status": "pending", "reminder.jobId": jobId, "reminder.talk": { $ne: true } }, { $set: { "reminder.jobId": null, "reminder.claimedAt": null } })
+        await MaddoxCampaignMessageModel.updateMany({ campaignId, kind: "reminder", "reminder.status": "pending", "reminder.jobId": jobId, "reminder.talk": true }, { $set: { "reminder.status": talkStatus, "reminder.resolvedAt": new Date() } })
     } catch (error) {
         log.warn({ err: error instanceof Error ? error.message : String(error), campaignId: String(campaignId), jobId }, "[maddox] falha ao devolver as lembranças da geração")
     }
     setJobReminders(String(campaignId), jobId, [])
+}
+
+/**
+ * Conversa ainda não reivindicada só é dada como perdida com a fila da campanha ociosa E mais velha que isto: o teto cobre o
+ * intervalo entre gravar a mensagem e enfileirar o job dela (`submitTalk`).
+ */
+const TALK_UNCLAIMED_STALE_MS = 2 * 60 * 1000
+
+/**
+ * DND-74: conversas com o mestre `pending` cujo job morreu ficam `failed` — a narração não as consome e o jogador envia de
+ * novo. Reivindicada (`jobId`): o job dela não está mais ativo (o processo caiu no meio da resposta). Não reivindicada: a fila
+ * da campanha está ociosa (`isCampaignBusy` falso: o job que ia pegá-la não existe mais) e ela passou do teto; com a fila
+ * ocupada (ex.: uma narração longa na frente) ela continua esperando o job dela. Devolve quantas encerrou; nunca lança.
+ */
+export async function reapStaleTalks(campaignId: Types.ObjectId): Promise<number> {
+    try {
+        const pending = await MaddoxCampaignMessageModel.find({ campaignId, kind: "reminder", "reminder.status": "pending", "reminder.talk": true }).select("_id reminder").lean<Pick<IMaddoxCampaignMessage, "_id" | "reminder">[]>()
+        const cutoff = Date.now() - TALK_UNCLAIMED_STALE_MS
+        const idle = !isCampaignBusy(String(campaignId))
+        const stale = pending.filter((item) => (item.reminder?.jobId ? !isActiveMaddoxJob(String(campaignId), item.reminder.jobId) : idle && item._id.getTimestamp().getTime() < cutoff))
+        if (!stale.length) return 0
+        const done = await MaddoxCampaignMessageModel.updateMany(
+            { _id: { $in: stale.map((item) => item._id) }, "reminder.status": "pending" },
+            { $set: { "reminder.status": "failed", "reminder.resolvedAt": new Date() } },
+        )
+        if (done.modifiedCount) log.warn({ campaignId: String(campaignId), talks: done.modifiedCount }, "[maddox] conversas com o mestre sem job ativo encerradas como falha")
+        return done.modifiedCount
+    } catch (error) {
+        log.warn({ err: error instanceof Error ? error.message : String(error), campaignId: String(campaignId) }, "[maddox] falha ao encerrar as conversas sem job")
+        return 0
+    }
 }
 
 /** Ids curtos (do fim do `_id`) que o prompt usa para cada lembrança. */
@@ -114,6 +179,8 @@ export interface ReminderDecision {
     titulo?: string
     texto?: string
     visibility?: "players" | "master"
+    /** DND-74: resultado curto para a linha "Lembrança injetada: …" (só na conversa com o mestre). */
+    resultado?: string
 }
 
 /** Decisão do Maddox sobre uma lembrança (rascunho do job; aplicado depois da narração). Erro em pt-BR para o modelo. */
@@ -129,6 +196,8 @@ export function decideReminder(campaignId: Types.ObjectId, jobId: string | undef
         if (!title || !text) return "Para guardar a lembrança como memória, informe `titulo` e `texto` (o conteúdo consolidado)."
         reminder.memory = { kind: input.tipo ?? "fato", title, text, visibility: input.visibility ?? "players" }
     } else reminder.memory = null
+    const result = input.resultado?.replace(/\s+/g, " ").trim()
+    if (reminder.talk) reminder.result = result ? result.replace(/^lembrança injetada:\s*/i, "").slice(0, TALK_RESULT_MAX) : null
     reminder.decided = true
     return {
         lembranca: reminderRef(reminder.id),
@@ -148,7 +217,8 @@ export async function commitReminders(campaignId: Types.ObjectId, jobId: string,
         await commitRemindersUnsafe(campaignId, jobId, turnNumber)
     } catch (error) {
         log.warn({ err: error instanceof Error ? error.message : String(error), campaignId: String(campaignId), jobId }, "[maddox] falha ao gravar a situação das lembranças; elas voltam a esperar a próxima narração")
-        await releaseReminders(campaignId, jobId)
+        // A resposta já foi gravada: a conversa com o mestre fica encerrada como tratada.
+        await releaseReminders(campaignId, jobId, "discarded")
     }
 }
 
@@ -156,6 +226,7 @@ async function commitRemindersUnsafe(campaignId: Types.ObjectId, jobId: string, 
     const reminders = jobReminders(String(campaignId), jobId)
     if (!reminders.length) return
     setJobReminders(String(campaignId), jobId, [])
+    const phase = reminders.some((item) => item.talk && item.result) ? ((await MaddoxCampaignModel.findById(campaignId).select("turn.phase").lean<{ turn?: { phase?: "master" | "players" } }>())?.turn?.phase ?? "master") : "master"
     for (const reminder of reminders) {
         let saved = false
         if (reminder.memory) {
@@ -167,7 +238,7 @@ async function commitRemindersUnsafe(campaignId: Types.ObjectId, jobId: string, 
                 log.warn({ err: error instanceof Error ? error.message : String(error), campaignId: String(campaignId), reminderId: reminder.id }, "[maddox] não foi possível guardar a lembrança como memória")
             }
         }
-        await MaddoxCampaignMessageModel.updateOne(
+        const updated = await MaddoxCampaignMessageModel.updateOne(
             { _id: new Types.ObjectId(reminder.id), "reminder.status": "pending" },
             {
                 $set: {
@@ -179,6 +250,19 @@ async function commitRemindersUnsafe(campaignId: Types.ObjectId, jobId: string, 
                 },
             },
         )
+        // DND-74: o resultado da lembrança na conversa vira a linha compacta, com o que aconteceu com ela.
+        if (reminder.talk && reminder.result && updated.modifiedCount > 0) {
+            await MaddoxCampaignMessageModel.create({
+                campaignId,
+                turnNumber,
+                phase,
+                kind: "master-fix",
+                characterName: reminder.characterName,
+                content: `Lembrança injetada: ${reminder.result}`,
+                replyToId: new Types.ObjectId(reminder.id),
+                masterFix: { kind: "reminder", status: saved ? "saved" : "discarded" },
+            })
+        }
     }
     log.info({ campaignId: String(campaignId), jobId, saved: reminders.filter((item) => item.memory).length, total: reminders.length }, "[maddox] lembranças avaliadas pelo Maddox")
 }

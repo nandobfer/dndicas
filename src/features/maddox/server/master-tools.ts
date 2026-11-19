@@ -43,6 +43,7 @@ import {
     MADDOX_OPEX_NPC_CONSULTS_PER_NARRATION,
     MADDOX_SHEET_FIX_TOOL_NAMES,
     MADDOX_COMBAT_FIX_TOOL_NAMES,
+    MADDOX_CHECK_FIX_TOOL_NAMES,
     MADDOX_CATALOG_TOOL_NAMES,
     MADDOX_EXPERIENCE_GRANT_MAX,
     MADDOX_PROGRESSION_TOOL_NAMES,
@@ -397,7 +398,7 @@ export const MADDOX_MASTER_TOOLS: readonly MaddoxMasterTool[] = [
     define({
         name: "resolve_reminder",
         description:
-            "Decide uma lembrança injetada por um jogador nesta narração (DND-25): `guardar: true` grava-a como memória da campanha (informe `tipo`, `titulo`, `texto` consolidado e `visibility`: players = os jogadores sabem; master = só o mestre); `guardar: false` = vale só para esta narração. Chame uma vez para cada lembrança listada na tarefa, pelo id entre colchetes.",
+            "Decide uma lembrança injetada por um jogador (DND-25) ou a mensagem do \"Conversar com o Mestre\" (DND-74): `guardar: true` grava-a como memória da campanha (informe `tipo`, `titulo`, `texto` consolidado e `visibility`: players = os jogadores sabem; master = só o mestre); `guardar: false` = vale só para agora. Na conversa com o mestre, quando o pedido for uma lembrança, informe `resultado`: o que fica valendo, em uma frase curta para a linha \"Lembrança injetada: …\" (ex.: \"Fulano tem vantagem no teste por causa da furtividade ativa\"). Chame uma vez para cada lembrança listada na tarefa, pelo id entre colchetes.",
         readOnly: false,
         input: z.object({
             lembranca: z.string().min(1).describe("Id da lembrança (entre colchetes na tarefa)"),
@@ -406,6 +407,7 @@ export const MADDOX_MASTER_TOOLS: readonly MaddoxMasterTool[] = [
             titulo: z.string().optional(),
             texto: z.string().optional(),
             visibility: z.enum(MADDOX_VISIBILITIES).optional(),
+            resultado: z.string().optional().describe("Conversa com o mestre: o que fica valendo, curto (a mesa lê)"),
         }),
         async execute(context, input) {
             const { decideReminder } = await import("./reminders")
@@ -1728,8 +1730,53 @@ export const MADDOX_PROGRESSION_TOOLS: readonly MaddoxMasterTool[] = [
 
 export const MADDOX_PROGRESSION_ANSWER_TOOL_NAMES: readonly string[] = [MADDOX_PROGRESSION_TOOL_NAMES.evaluate, MADDOX_PROGRESSION_TOOL_NAMES.grant]
 
+async function checkFixCall<T>(work: (tools: typeof import("./check-fixes")) => Promise<T>): Promise<T> {
+    const tools = await import("./check-fixes")
+    try {
+        return await work(tools)
+    } catch (error) {
+        if (error instanceof tools.CheckFixError) throw new MaddoxToolError(error.message)
+        throw error
+    }
+}
+
+/** DND-74: correção de um teste de perícia/atributo AINDA PENDENTE pelo "Conversar com o Mestre" (só no job da resposta). */
+export const MADDOX_CHECK_FIX_TOOLS: readonly MaddoxMasterTool[] = [
+    define({
+        name: MADDOX_CHECK_FIX_TOOL_NAMES.update,
+        description:
+            "Conversa com o mestre: altera um teste de perícia/atributo AINDA PENDENTE (o card com o Rolar) — `cd`, `modo` (vantagem/desvantagem/normal), `motivo` e, só o dono da campanha, `novoPersonagem` (quem rola). Identifique pelo `teste` (id entre colchetes na tarefa) ou pelo `personagem`. O card na mesa muda na hora e a mesa vê a linha antes → depois. Teste já rolado NÃO se altera: o resultado fica.",
+        readOnly: false,
+        input: z.object({
+            teste: z.string().optional().describe("Id do teste (entre colchetes na tarefa)"),
+            personagem: z.string().optional().describe("Quem rola hoje (quando ele tem um só teste pendente)"),
+            novoPersonagem: z.string().optional().describe("Só o dono da campanha: o personagem que passa a rolar"),
+            cd: z.number().int().min(MADDOX_CHECK_DC_MIN).max(MADDOX_CHECK_DC_MAX).optional(),
+            modo: z.enum(["normal", "vantagem", "desvantagem"]).optional(),
+            motivo: z.string().optional().describe("Novo motivo público do teste (os jogadores leem)"),
+        }),
+        async execute(context, input) {
+            return checkFixCall((tools) => tools.updatePendingCheck(context.jobId, { ...input, ...(input.motivo !== undefined ? { motivo: clip(input.motivo, MADDOX_TOOL_NAME_MAX * 2) } : {}) }))
+        },
+    }),
+    define({
+        name: MADDOX_CHECK_FIX_TOOL_NAMES.cancel,
+        description:
+            "Conversa com o mestre: CANCELA um teste de perícia/atributo AINDA PENDENTE que não vale mais (o card perde o Rolar, a mesa vê a linha \"Teste de X de Fulano cancelado\" e, sem outro teste pendente, a narração continua sem ele). Identifique pelo `teste` (id entre colchetes na tarefa) ou pelo `personagem`. Nunca diga que o teste não vale sem chamar esta ferramenta. Teste já rolado não se cancela.",
+        readOnly: false,
+        input: z.object({
+            teste: z.string().optional().describe("Id do teste (entre colchetes na tarefa)"),
+            personagem: z.string().optional().describe("Quem rola (quando ele tem um só teste pendente)"),
+            motivo: z.string().min(1).describe("Por que o teste não vale mais, curto (os jogadores leem)"),
+        }),
+        async execute(context, input) {
+            return checkFixCall((tools) => tools.cancelPendingCheck(context.jobId, { ...input, motivo: clip(input.motivo, MADDOX_TOOL_NAME_MAX * 2) }))
+        },
+    }),
+]
+
 /** Todas as ferramentas do narrador (persistência, testes, combate, a vez dos adversários, a imagem da cena e as sugestões de ação). */
-export const MADDOX_NARRATOR_TOOLS: readonly MaddoxMasterTool[] = [...MADDOX_MASTER_TOOLS, ...MADDOX_COMBAT_TOOLS, ...MADDOX_TACTICAL_TOOLS, ...MADDOX_SCENE_IMAGE_TOOLS, ...MADDOX_ACTION_OPTIONS_TOOLS, ...MADDOX_OPEX_NPC_TOOLS, ...MADDOX_SHEET_FIX_TOOLS, ...MADDOX_COMBAT_FIX_TOOLS, ...MADDOX_PROGRESSION_TOOLS]
+export const MADDOX_NARRATOR_TOOLS: readonly MaddoxMasterTool[] = [...MADDOX_MASTER_TOOLS, ...MADDOX_COMBAT_TOOLS, ...MADDOX_TACTICAL_TOOLS, ...MADDOX_SCENE_IMAGE_TOOLS, ...MADDOX_ACTION_OPTIONS_TOOLS, ...MADDOX_OPEX_NPC_TOOLS, ...MADDOX_SHEET_FIX_TOOLS, ...MADDOX_COMBAT_FIX_TOOLS, ...MADDOX_CHECK_FIX_TOOLS, ...MADDOX_PROGRESSION_TOOLS]
 
 /** Ferramentas de progressão oferecidas na geração (DND-56): o modo da campanha e o tipo da geração decidem. */
 export function progressionToolNames(options: { mode: "marco" | "experiencia" | null; answer: boolean }): string[] {
@@ -1768,7 +1815,7 @@ export const MADDOX_CHECK_TOOL_NAME = "request_check"
  * imagem da cena (Maddox 10); `actionOptions: false` tira a das sugestões de ação (DND-30); `opexNpcs: false` tira a consulta
  * aos NPCs Opex (DND-27; respostas a perguntas).
  */
-export async function buildMaddoxAiTools(context: MaddoxToolContext, options: { checks?: boolean; combat?: boolean; tactical?: boolean; sceneImages?: boolean; actionOptions?: boolean; opexNpcs?: boolean; sheetFix?: boolean; combatFix?: boolean; progression?: string[]; rest?: boolean } = {}): Promise<ToolSet> {
+export async function buildMaddoxAiTools(context: MaddoxToolContext, options: { checks?: boolean; combat?: boolean; tactical?: boolean; sceneImages?: boolean; actionOptions?: boolean; opexNpcs?: boolean; sheetFix?: boolean; combatFix?: boolean; checkFix?: boolean; progression?: string[]; rest?: boolean } = {}): Promise<ToolSet> {
     const { dynamicTool } = await import("ai")
     const tools: ToolSet = {}
     const progressionNames = Object.values(MADDOX_PROGRESSION_TOOL_NAMES) as string[]
@@ -1783,6 +1830,7 @@ export async function buildMaddoxAiTools(context: MaddoxToolContext, options: { 
         if (def.name === MADDOX_OPEX_NPC_CONSULT_TOOL_NAME && !options.opexNpcs) continue
         if ((MADDOX_SHEET_FIX_TOOL_NAMES as readonly string[]).includes(def.name) && !options.sheetFix) continue
         if ((MADDOX_COMBAT_FIX_TOOL_NAMES as readonly string[]).includes(def.name) && !options.combatFix) continue
+        if ((Object.values(MADDOX_CHECK_FIX_TOOL_NAMES) as string[]).includes(def.name) && !options.checkFix) continue
         tools[def.name] = dynamicTool({
             description: def.description,
             inputSchema: def.input,

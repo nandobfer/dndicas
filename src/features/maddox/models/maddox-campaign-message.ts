@@ -116,6 +116,21 @@ export interface IMaddoxReminder {
     memoryKind: string | null
     memoryTitle: string | null
     visibility: "players" | "master" | null
+    /** DND-74: mensagem do "Conversar com o Mestre" (conversa fora da mesa). Ausente nas lembranças antigas. */
+    talk?: boolean
+}
+
+/**
+ * Linha compacta de resultado do "Conversar com o Mestre" (`kind: "master-fix"`, DND-74): o texto pronto vem em `content`
+ * ("Teste de Furtividade de Fulano atualizado: CD 15 → 10", "Lembrança injetada: …", "Teste de Atletismo de Fulano
+ * cancelado"). Fica fora da transcrição do narrador, do Opex e da busca do Diário.
+ */
+export interface IMaddoxMasterFix {
+    kind: "reminder" | "check-update" | "check-cancel"
+    /** Lembrança: guardada como memória da campanha ou usada só agora. */
+    status?: "saved" | "discarded"
+    /** Teste alterado ou cancelado. */
+    checkId?: Types.ObjectId
 }
 
 /** Sugestões de ação de um personagem numa narração (DND-30). */
@@ -170,6 +185,8 @@ export interface IMaddoxCampaignMessage {
      * da narração; volta a `null` se a geração falhar); `status` muda depois de a narração ser gravada.
      */
     reminder: IMaddoxReminder | null
+    /** DND-74: linha de resultado do "Conversar com o Mestre" (`kind: "master-fix"`). */
+    masterFix?: IMaddoxMasterFix | null
     /**
      * Sugestões de ação pedidas pelo Maddox na narração (`suggest_actions`, DND-30), por personagem. Cada jogador só recebe
      * a lista do próprio personagem.
@@ -282,6 +299,7 @@ const MaddoxCampaignMessageSchema = new Schema<IMaddoxCampaignMessage>(
         offlineSkip: { type: Boolean, default: false },
         combatTurn: { type: Boolean, default: false },
         reminder: { type: Schema.Types.Mixed, default: null },
+        masterFix: { type: Schema.Types.Mixed, default: null },
         combatPrep: { type: Schema.Types.Mixed, default: null },
         levelUp: { type: Schema.Types.Mixed, default: null },
         experience: { type: Schema.Types.Mixed, default: null },

@@ -15,7 +15,7 @@ import { apiErrorCode, apiErrorMessage } from "@/lib/api"
 import { MADDOX_RESET_NOTICE_PARAM, MADDOX_RESET_NOTICE_VALUE, MADDOX_RESET_TEXTS, MADDOX_TURN_PHASE_LABELS } from "../../constants"
 import type { MaddoxGameMessageDto, MaddoxGameStateDto } from "../../game-types"
 import type { MaddoxGameActionInput } from "../../game-schemas"
-import { actionOptionsView, combatBannerText, combatRecoveringBannerText, combatTurnRecovering, newestRewindNoticeId, composerBlockReason, masterBannerText, opexActingView, opexBannerText, reminderBlockReason, turnProgress, visibleLiveGenerations } from "../../game-view"
+import { actionOptionsView, combatBannerText, combatRecoveringBannerText, combatTurnRecovering, newestRewindNoticeId, composerBlockReason, masterBannerText, opexActingView, opexBannerText, talkBlockReason, turnProgress, visibleLiveGenerations } from "../../game-view"
 import { useMaddoxOpexTableActions } from "../../hooks/useMaddoxOpex"
 import { OpexFailureBanner } from "./OpexFailureBanner"
 import type { MaddoxCombatActionInput } from "../../combat-schemas"
@@ -27,7 +27,7 @@ import { stalledCombatPreps } from "../../combat-prep-stall"
 import {
     fetchOlderGameMessages,
     useMaddoxGame,
-    useInjectMaddoxReminder,
+    useSendMasterTalk,
     useMaddoxGamePresence,
     useMaddoxGameRealtime,
     useRollMaddoxCheck,
@@ -43,7 +43,7 @@ import { GameMessageList } from "./GameMessageList"
 import { useGameLevelUps } from "./GameLevelUps"
 import { MySheetButton } from "./MySheetButton"
 import { NpcPanel } from "./NpcPanel"
-import { InjectReminderButton } from "./InjectReminderButton"
+import { MasterTalkButton } from "./MasterTalkButton"
 import { SceneImageButton } from "./SceneImageButton"
 import { useRequestMaddoxNpcPortrait, useRequestMaddoxSceneImage } from "../../hooks/useMaddoxSceneImages"
 import { TurnPanel } from "./TurnPanel"
@@ -134,7 +134,8 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
     const prepRestart = useRestartCombatPrep(state.campaignId)
     const combatAdjust = useRequestCombatAdjustment(state.campaignId)
     const combatReact = useDecideReaction(state.campaignId)
-    const [asking, setAsking] = useState(false)
+    // DND-74: o "Conversar com o Mestre" (canto do chat) também abre pelo "Perguntar ao mestre" da barra do combate.
+    const [talkOpen, setTalkOpen] = useState(false)
     const levelUps = useGameLevelUps(state.campaignId, state.me.levelUps)
     const [combatInvalid, setCombatInvalid] = useState<string | null>(null)
     const tactical = state.combat?.tactical ?? null
@@ -146,7 +147,7 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
     const opexActions = useMaddoxOpexTableActions(state.campaignId)
     const rollCheck = useRollMaddoxCheck(state.campaignId)
     const sceneImage = useRequestMaddoxSceneImage(state.campaignId)
-    const reminder = useInjectMaddoxReminder(state.campaignId)
+    const talk = useSendMasterTalk(state.campaignId)
     const portrait = useRequestMaddoxNpcPortrait(state.campaignId)
     const rest = useMaddoxRest(state.campaignId)
     const replays = useMemo(() => new Map(stream.rolled.map((item) => [item.messageId, item.roll])), [stream.rolled])
@@ -216,8 +217,8 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
     // DND-62: combate em andamento sem vez aberta — aviso de retomada (o servidor reabre a vez na leitura da mesa).
     const recoveringCombatTurn = combatTurnRecovering(state)
     const combatBusy = combatAct.isPending || combatEnd.isPending || combatCancel.isPending
-    // Em combate tático o campo de texto só pergunta ao mestre (a vez é pelos botões).
-    const questionBlock = state.status !== "active" ? "A campanha não está em andamento." : !state.me.ready ? "Conclua a entrevista de personagem com o Maddox para entrar no jogo." : state.turn.phase !== "players" ? "Perguntas ao mestre ficam para a vez de um personagem." : null
+    // DND-74: a conversa com o mestre vale em qualquer fase (inclusive com testes pendentes e no combate tático).
+    const talkBlock = talkBlockReason(state)
 
     // Sugestões de ação (DND-30): o clique declara o texto, como o envio pelo campo.
     const optionsView = actionOptionsView(state, messages)
@@ -250,7 +251,7 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
                 actions={
                     <>
                         <SceneImageButton control={state.sceneImages} busy={sceneImage.isPending} onRequest={() => sceneImage.mutate()} />
-                        <InjectReminderButton blockReason={reminderBlockReason(state)} sending={reminder.isPending} onSend={(text) => reminder.mutateAsync(text)} />
+
                         <JournalSearchDialog campaignId={state.campaignId} color={color} />
                         <JournalLinkButton campaignId={state.campaignId} />
                         <MySheetButton sheet={state.me.sheet} />
@@ -304,6 +305,8 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
                         onLoadMore={() => void loadMore()}
                         replays={replays}
                         onRollCheck={async (checkId) => (await rollCheck.mutateAsync(checkId)).roll}
+                        masterReviewing={Boolean(state.turn.masterReviewing)}
+                        talk={talkBlock === null ? <MasterTalkButton blockReason={talkBlock} sending={talk.isPending} onSend={(text) => talk.mutateAsync(text)} open={talkOpen} onOpenChange={setTalkOpen} /> : null}
                         rest={{
                             isOwner: state.me.isOwner,
                             busy: rest.busy,
@@ -348,7 +351,7 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
                                     invalidReason={combatInvalid}
                                     onAct={onCombatAct}
                                     onEndTurn={(movimento) => combatEnd.mutate(movimento.trim() ? { movimento: movimento.trim() } : {})}
-                                    onAsk={() => setAsking((value) => !value)}
+                                    onAsk={() => setTalkOpen(true)}
                                     onAdjust={async (input) => {
                                         try {
                                             await combatAdjust.mutateAsync(input)
@@ -367,10 +370,10 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
                                             <CombatPrepStalledNotice stalled={stalledPreps} now={prepClock} isOwner={state.me.isOwner} restarting={prepRestart.isPending} skipping={prepSkip.isPending} onRestart={(prepId) => prepRestart.mutate(prepId)} onSkip={(prepId) => prepSkip.mutate(prepId)} />
                                         </div>
                                     )}
-                                    <CombatWaitBar combat={tactical} isOwner={state.me.isOwner} recovering={recoveringCombatTurn} canAsk={questionBlock === null} onAsk={() => setAsking((value) => !value)} />
+                                    <CombatWaitBar combat={tactical} isOwner={state.me.isOwner} recovering={recoveringCombatTurn} canAsk={talkBlock === null} onAsk={() => setTalkOpen(true)} />
                                 </>
                             )}
-                            {asking && <GameComposer blockedReason={questionBlock} declared busy={send.isPending} onSend={onSend} invalidReason={null} focusKey={focusKey} />}
+
                         </>
                     ) : (
                         <GameComposer blockedReason={composerBlockReason(state)} declared={state.me.declared} busy={send.isPending} onSend={onSend} invalidReason={invalidReason} focusKey={focusKey} />

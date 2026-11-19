@@ -47,7 +47,7 @@ import { readCheckEffectEntries } from "../check-effects"
 import { isHiddenPlayerAction, type PlayerActionsViewer } from "../player-actions-visibility"
 import { assertMemberCanPlay, isMemberReadyToPlay, loadMembership } from "./campaigns"
 import { getMaddoxMaster, type MaddoxMasterDeclaration } from "./game-master"
-import { beginLive, enqueueMaddoxJob, hasPendingReview, isActiveMaddoxJob, isCampaignBusy, maddoxJobSignal, takeDraftActionOptions, takeDraftChecks, takeDraftCombat, takeDraftImages, takeDraftOpexNpcFailures, takeDraftRest } from "./game-live"
+import { beginLive, enqueueMaddoxJob, hasPendingReview, isActiveMaddoxJob, isCampaignBusy, jobReminders, maddoxJobSignal, takeDraftActionOptions, takeDraftChecks, takeDraftCombat, takeDraftImages, takeDraftOpexNpcFailures, takeDraftRest } from "./game-live"
 import { onlineUserIds } from "./game-presence"
 import { isOpexMember, isOpexUserId, realUserIds } from "./opex-members"
 import { hasLevels } from "./progression-mode"
@@ -790,7 +790,7 @@ export async function startCampaign(campaignId: string, userId: string): Promise
     return getGameState(campaignId, userId)
 }
 
-/** Declaração, "Não fazer nada" ou pergunta ao mestre (esta não encerra o turno). */
+/** Declaração ou "Não fazer nada". Falar com o mestre é o "Conversar com o Mestre" (DND-74, `submitTalk`). */
 export async function submitGameAction(campaignId: string, input: MaddoxGameActionInput, userId: string): Promise<MaddoxGameStateDto> {
     const loaded = await loadAsMember(campaignId, userId)
     assertActive(loaded.campaign)
@@ -798,42 +798,20 @@ export async function submitGameAction(campaignId: string, input: MaddoxGameActi
     assertPlayersTurn(loaded.campaign)
     const campaign = await fillEmptyTurn(loaded.campaign)
     const member = loaded.member
-    // Combate tático (Maddox 7): a vez é de um personagem só; perguntas ao mestre continuam livres para quem está pronto.
+    // Combate tático (Maddox 7): a vez é de um personagem só.
     const inCombatTurn = Boolean(campaign.turn.combatActor)
-    if (inCombatTurn && input.kind !== "question") {
+    if (inCombatTurn) {
         if (String(campaign.turn.combatActor!.memberId) !== String(member._id)) throw new DomainError(409, "Não é a vez do seu personagem no combate.", "NOT_YOUR_COMBAT_TURN")
         if (input.kind === "declaration") throw new DomainError(409, "No combate, use os botões de Ação e Ação bônus (ou \"Outra ação\" para texto livre).", "COMBAT_USE_ACTIONS")
         const { endCombatTurn } = await import("./tactical-actions")
         return endCombatTurn(campaignId, {}, userId)
     }
     if (!inCombatTurn && !idSet(campaign.turn.eligibleMemberIds).has(String(member._id))) throw new DomainError(409, "Você entra no jogo a partir do próximo turno.", "NEXT_TURN")
-    // Personagens Opex agindo (DND-26): os humanos já fecharam a vez deles; só perguntas continuam livres.
-    if (!inCombatTurn && input.kind !== "question" && campaign.turn.opexActor && String(campaign.turn.opexActor.memberId) !== String(member._id)) {
+    // Personagens Opex agindo (DND-26): os humanos já fecharam a vez deles.
+    if (!inCombatTurn && campaign.turn.opexActor && String(campaign.turn.opexActor.memberId) !== String(member._id)) {
         throw new DomainError(409, "Os Personagens Opex estão agindo. Aguarde a narração do Maddox.", "OPEX_TURN")
     }
     const character = await characterOf(member)
-
-    if (input.kind === "question") {
-        const turnNumber = campaign.turn.number
-        // DND-51: a nova pergunta continua a conversa do jogador neste turno (a réplica responde à última resposta do
-        // Maddox a ele), para o mestre perguntar de volta e concluir a correção com a resposta.
-        const replyToId = await lastAnswerTo(campaign._id, turnNumber, member._id)
-        const question = await MaddoxCampaignMessageModel.create({
-            replyToId,
-            campaignId: campaign._id,
-            turnNumber,
-            phase: "players",
-            kind: "question",
-            memberId: member._id,
-            userId,
-            characterId: character?._id ?? null,
-            characterName: character?.name ?? null,
-            content: input.content,
-        })
-        await publishGameChanged(campaign._id)
-        void scheduleAnswer(campaign._id, turnNumber, question._id, character?.name ?? "Personagem", input.content)
-        return getGameState(campaignId, userId)
-    }
 
     if (input.kind === "declaration" && MADDOX_DECLARATION_VALIDATION_RIGORS.includes(campaign.rigor)) {
         // Já declarou (ou clique duplo): responde ALREADY_DECLARED sem pagar uma validação por IA que seria descartada.
@@ -849,28 +827,37 @@ export async function submitGameAction(campaignId: string, input: MaddoxGameActi
     return getGameState(campaignId, userId)
 }
 
-/** Última resposta do Maddox a uma pergunta do membro neste turno (`null` = conversa nova). */
-async function lastAnswerTo(campaignId: Types.ObjectId, turnNumber: number, memberId: Types.ObjectId): Promise<Types.ObjectId | null> {
-    const questions = await MaddoxCampaignMessageModel.find({ campaignId, turnNumber, kind: "question", memberId }).select("_id").lean<{ _id: Types.ObjectId }[]>()
-    if (!questions.length) return null
-    const answer = await MaddoxCampaignMessageModel.findOne({ campaignId, turnNumber, kind: "answer", error: null, replyToId: { $in: questions.map((item) => item._id) } })
+/**
+ * Ponta da conversa do membro com o mestre neste turno (`null` = conversa nova): a última resposta do Maddox a uma
+ * conversa dele ou, quando o mestre só corrigiu sem balão (DND-74), a última mensagem de conversa dele.
+ */
+export async function lastTalkTip(campaignId: Types.ObjectId, turnNumber: number, memberId: Types.ObjectId): Promise<Types.ObjectId | null> {
+    const talks = await MaddoxCampaignMessageModel.find({ campaignId, turnNumber, memberId, $or: [{ kind: "question" }, { kind: "reminder", "reminder.talk": true }] })
+        .select("_id")
+        .lean<{ _id: Types.ObjectId }[]>()
+    if (!talks.length) return null
+    const answer = await MaddoxCampaignMessageModel.findOne({ campaignId, turnNumber, kind: "answer", error: null, replyToId: { $in: talks.map((item) => item._id) } })
         .sort({ _id: -1 })
         .select("_id")
         .lean<{ _id: Types.ObjectId }>()
-    return answer?._id ?? null
+    const lastTalk = talks.reduce((latest, item) => (String(item._id) > String(latest._id) ? item : latest))
+    if (!answer || String(lastTalk._id) > String(answer._id)) return lastTalk._id
+    return answer._id
 }
 
 /**
  * Gera e grava a resposta do mestre a uma pergunta, transmitindo a todos; falha grava a resposta com `error`. Roda DENTRO
  * de um job da fila da campanha (a resposta de uma pergunta do Personagem Opex, DND-26, roda no job do próprio Opex).
  */
-export async function answerQuestion(campaignId: Types.ObjectId, jobId: string, turnNumber: number, questionId: Types.ObjectId, characterName: string, question: string, options: { reminder?: boolean } = {}): Promise<{ content: string; error: string | null }> {
+export async function answerQuestion(campaignId: Types.ObjectId, jobId: string, turnNumber: number, questionId: Types.ObjectId, characterName: string, question: string, options: { reminder?: boolean; talk?: boolean } = {}): Promise<{ content: string; error: string | null }> {
     const live = beginLive(String(campaignId), { kind: "answer", turnNumber, replyToId: String(questionId) })
+    // DND-74: ids gerados daqui em diante são maiores (processo único): as linhas de resultado gravadas por este job.
+    const since = new Types.ObjectId()
     let content = ""
     let error: string | null = null
     try {
         const master = await getMaddoxMaster()
-        content = await withGenerationTimeout((signal) => master.answer({ campaignId: String(campaignId), jobId, turnNumber, questionId: String(questionId), characterName, question, reminderId: options.reminder ? String(questionId) : null, signal }, live), maddoxJobSignal(String(campaignId), jobId))
+        content = await withGenerationTimeout((signal) => master.answer({ campaignId: String(campaignId), jobId, turnNumber, questionId: String(questionId), characterName, question, reminderId: options.reminder ? String(questionId) : null, talk: Boolean(options.talk), signal }, live), maddoxJobSignal(String(campaignId), jobId))
         if (!isActiveMaddoxJob(String(campaignId), jobId)) throw new GenerationInterruptedError()
     } catch (failure) {
         // Reinício da campanha (DND-50): a resposta não é gravada (a pergunta também some na limpeza).
@@ -879,6 +866,19 @@ export async function answerQuestion(campaignId: Types.ObjectId, jobId: string, 
             return { content: "", error: MADDOX_ANSWER_FAILED_MESSAGE }
         }
         log.warn({ err: failure instanceof Error ? failure.message : String(failure), campaignId: String(campaignId), turnNumber }, "[maddox] Falha ao responder a pergunta")
+        error = MADDOX_ANSWER_FAILED_MESSAGE
+    }
+    // DND-74: na conversa com o mestre, um pedido resolvido por correção dispensa o balão (só a linha de resultado); sem
+    // texto e sem nada gravado, é falha (a conversa volta a esperar a próxima narração).
+    if (!error && options.talk && !content.trim()) {
+        if (await talkActed(campaignId, jobId, since)) {
+            live.end({ messageId: null, error: null })
+            await (await import("./level-ups")).commitProgression(campaignId, jobId, turnNumber)
+            await (await import("./reminders")).commitReminders(campaignId, jobId, turnNumber)
+            await publishGameChanged(campaignId)
+            return { content: "", error: null }
+        }
+        log.warn({ campaignId: String(campaignId), jobId, talkId: String(questionId) }, "[maddox] conversa com o mestre sem resposta e sem correção gravada")
         error = MADDOX_ANSWER_FAILED_MESSAGE
     }
     let stored = content
@@ -897,6 +897,8 @@ export async function answerQuestion(campaignId: Types.ObjectId, jobId: string, 
         }
     } catch (failure) {
         live.end({ messageId: null, error: MADDOX_ANSWER_FAILED_MESSAGE })
+        // DND-74: a conversa nunca fica "Aguardando o mestre" depois de o job dela morrer (nunca lança).
+        if (options.reminder) await (await import("./reminders")).releaseReminders(campaignId, jobId)
         throw failure
     }
     await publishGameChanged(campaignId)
@@ -911,27 +913,25 @@ export async function answerQuestion(campaignId: Types.ObjectId, jobId: string, 
 export function scheduleReminderFix(campaignId: Types.ObjectId, reminderId: Types.ObjectId): Promise<void> {
     return enqueueMaddoxJob(
         String(campaignId),
-        "correção do lembrete",
+        "conversa com o mestre",
         async ({ jobId }) => {
             const { claimReminder } = await import("./reminders")
             const claimed = await claimReminder(campaignId, jobId, reminderId)
             if (!claimed) return
-            await answerQuestion(campaignId, jobId, claimed.turnNumber, reminderId, claimed.characterName, claimed.text, { reminder: true })
+            await answerQuestion(campaignId, jobId, claimed.turnNumber, reminderId, claimed.characterName, claimed.text, { reminder: true, talk: claimed.talk })
         },
         { kind: "reminder", turnNumber: 0, round: 0 },
     )
 }
 
-/** Responde a pergunta na fila da campanha, transmitindo a todos; falha grava a resposta com `error`. */
-function scheduleAnswer(campaignId: Types.ObjectId, turnNumber: number, questionId: Types.ObjectId, characterName: string, question: string): Promise<void> {
-    return enqueueMaddoxJob(
-        String(campaignId),
-        `resposta do turno ${turnNumber}`,
-        async ({ jobId }) => {
-            await answerQuestion(campaignId, jobId, turnNumber, questionId, characterName, question)
-        },
-        { kind: "answer", turnNumber, round: 0 },
-    )
+
+/** Linhas de resultado que uma correção grava na mesa (DND-74: dispensam o balão de resposta da conversa). */
+export const TALK_RESULT_KINDS = ["master-fix", "sheet-change", "combat-fix", "hit-points", "experience", "level-up"] as const
+
+/** O job da conversa gravou alguma correção (linha de resultado) ou decidiu a lembrança com um resultado. */
+export async function talkActed(campaignId: Types.ObjectId, jobId: string, since: Types.ObjectId): Promise<boolean> {
+    if (jobReminders(String(campaignId), jobId).some((item) => item.decided && item.result)) return true
+    return Boolean(await MaddoxCampaignMessageModel.exists({ campaignId, _id: { $gt: since }, kind: { $in: [...TALK_RESULT_KINDS] } }))
 }
 
 /** Membro da campanha (404 para quem não participa): acesso ao stream da mesa. */
@@ -974,6 +974,8 @@ export async function skipPlayer(campaignId: string, input: MaddoxSkipPlayerInpu
 export async function checkTurn(campaignId: string, userId: string): Promise<MaddoxGameStateDto> {
     const { campaign } = await loadAsMember(campaignId, userId)
     if (campaign.status === "active") {
+        // DND-74: conversa com o mestre cujo job morreu (processo reiniciado) fica encerrada como falha.
+        if (await (await import("./reminders")).reapStaleTalks(campaign._id)) await publishGameChanged(campaign._id)
         await fillEmptyTurn(campaign)
         if (campaign.turn?.combatActor) {
             const { evaluateCombatAbsence } = await import("./tactical-actions")
@@ -1048,6 +1050,8 @@ async function messagesDto(all: MessageDoc[], viewer: MessagesViewer): Promise<M
                     message.skippedBy,
                     message.check?.rolledBy && message.check.rolledBy !== message.userId ? message.check.rolledBy : null,
                     message.combatRoll?.rolledBy && message.combatRoll.rolledBy !== message.userId ? message.combatRoll.rolledBy : null,
+                    // DND-74: a conversa com o mestre mostra o nome do usuário (não do personagem).
+                    message.kind === "reminder" && message.reminder?.talk ? message.userId : null,
                 ])
                 .filter((id): id is string => Boolean(id) && Types.ObjectId.isValid(id!)),
         ),
@@ -1102,7 +1106,9 @@ async function messagesDto(all: MessageDoc[], viewer: MessagesViewer): Promise<M
                     : null,
             combatReaction: message.combatReaction && tacticalDto ? tacticalDto.combatReactionDto(message.combatReaction, String(message.memberId) === viewer.memberId) : null,
             offlineSkip: Boolean(message.offlineSkip),
-            ...(message.kind === "reminder" ? { reminder: { status: message.reminder?.status ?? "pending" } } : {}),
+            ...(message.kind === "reminder" ? { reminder: { status: message.reminder?.status ?? "pending", ...(message.reminder?.talk ? { talk: true } : {}) } } : {}),
+            ...(message.kind === "reminder" && message.reminder?.talk ? { authorName: (message.userId && userById.get(message.userId)) || character?.name || message.characterName || "Jogador" } : {}),
+            ...(message.kind === "master-fix" ? { masterFix: message.masterFix ? { kind: message.masterFix.kind, ...(message.masterFix.status ? { status: message.masterFix.status } : {}) } : null } : {}),
             ...(message.kind === "narration" ? { actionOptions: actionOptionsFor(message, viewer) } : {}),
             // O motivo bruto do provedor só vai ao dono; para os demais o campo nem é serializado (DND-27).
             ...opexNpcFailuresDto(message, viewer, knownFailureNpcs),

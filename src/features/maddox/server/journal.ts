@@ -20,7 +20,6 @@ import type {
     MaddoxJournalSearchDto,
     MaddoxJournalSearchGroup,
     MaddoxJournalSearchImageHit,
-    MaddoxJournalSearchMessageHit,
     MaddoxJournalStateDto,
     MaddoxJournalSummaryDto,
     MaddoxJournalChapterDto,
@@ -334,11 +333,12 @@ export async function searchJournal(campaignId: string, input: unknown, userId: 
             .then(({ searchCampaignMemories }) => searchCampaignMemories(String(campaign._id), { query: q, scope: "players", reader: "app", limit: take }))
             .then((items): { items: MemoryDoc[]; unavailable: boolean } => ({ items, unavailable: false }))
             .catch((): { items: MemoryDoc[]; unavailable: boolean } => ({ items: [], unavailable: true })),
-        MaddoxCampaignMessageModel.find({ campaignId: campaign._id, kind: { $in: MADDOX_JOURNAL_SEARCHABLE_MESSAGES }, error: null, content: match, ...hiddenActions })
+        // DND-74: a conversa com o mestre (`reminder` com `talk`) também entra, com o rótulo próprio.
+        MaddoxCampaignMessageModel.find({ campaignId: campaign._id, $or: [{ kind: { $in: MADDOX_JOURNAL_SEARCHABLE_MESSAGES } }, { kind: "reminder", "reminder.talk": true }], error: null, content: match, ...hiddenActions })
             .sort({ _id: -1 })
             .limit(take)
             .select("kind turnNumber characterName content createdAt")
-            .lean<{ _id: Types.ObjectId; kind: MaddoxJournalSearchMessageHit["kind"]; turnNumber: number; characterName: string | null; content: string; createdAt: Date }[]>(),
+            .lean<{ _id: Types.ObjectId; kind: (typeof MADDOX_JOURNAL_SEARCHABLE_MESSAGES)[number] | "reminder"; turnNumber: number; characterName: string | null; content: string; createdAt: Date }[]>(),
         partyMembers(campaign._id),
         visibleImagesFilter(campaign._id, "todas").then((filter) =>
             MaddoxSceneImageModel.find({ ...filter, caption: match })
@@ -386,7 +386,7 @@ export async function searchJournal(campaignId: string, input: unknown, userId: 
         messages: group(
             messages.map((message) => ({
                 id: String(message._id),
-                kind: message.kind,
+                kind: message.kind === "reminder" ? ("talk" as const) : message.kind,
                 turnNumber: message.turnNumber,
                 characterName: message.kind === "narration" || message.kind === "answer" ? null : (message.characterName ?? null),
                 excerpt: excerptAround(message.content, q),

@@ -1277,6 +1277,11 @@ mudança, só log.
 
 ## Injetar Lembrança (DND-25)
 
+> **Desde a DND-74** o botão "Injetar Lembrança" e a rota `POST …/game/reminders` não existem mais: a lembrança virou o
+> **"Conversar com o Mestre"** (seção própria abaixo), que reaproveita todo este ciclo (mensagem `kind: "reminder"`, job
+> `scheduleReminderFix`, `claimReminders` como reserva, `resolve_reminder`, `commitReminders`). As lembranças antigas (sem
+> `reminder.talk`) seguem com a linha "{Personagem} lembrou o Maddox". O texto abaixo descreve o ciclo como foi criado.
+
 Todos os graus. Código: `server/reminders.ts`, `POST …/game/reminders` `{ texto }` (Zod `maddoxReminderSchema`: 1 a
 `MADDOX_REMINDER_MAX_CHARS` = 500, sem outros campos; `maddox.play`), `components/game/InjectReminderButton.tsx` (ao lado de "Gerar
 imagem da cena", `GlassPopover` com "Injetar Lembrança", o placeholder `MADDOX_REMINDER_PLACEHOLDER`, contador "N/500" e "Enviar"
@@ -1291,7 +1296,8 @@ desabilitado vazio ou acima do limite; botão desabilitado com o motivo de `remi
   reivindica SÓ aquele lembrete (`claimReminder`) e gera uma resposta curta (`answerQuestion` com `{ reminder: true }`, tarefa "# Lembrete
   de X", resposta `kind: "answer"` com `replyToId` = lembrete) com as ferramentas do "Pergunte ao mestre" (ficha, PV e, no combate
   tático, as de correção do combate) e `resolve_reminder`. Se uma narração pegou o lembrete antes, o job não faz nada; se a correção
-  falha, o lembrete volta a `pending` (`releaseReminders`) e a próxima narração o considera como abaixo.
+  falha, o lembrete volta a `pending` (`releaseReminders`) e a próxima narração o considera como abaixo. **DND-74:** isso vale só
+  para as lembranças antigas; a conversa com o mestre (`reminder.talk`) que falha fica `failed` e não volta à narração.
 - **Consumo (fallback):** no começo de cada **narração** (não nas respostas a perguntas) `claimReminders` reivindica as pendentes para o job
   (`reminder.jobId`; também as de um job que já não roda) — a enviada durante a geração fica para a seguinte; no combate tático cada
   bloco é uma narração. A tarefa ganha "## Lembranças dos jogadores (considere nesta narração)" com `[id curto] **Personagem**: texto` e
@@ -1415,7 +1421,7 @@ antigo card do cenário:
 | Situação | Card |
 | --- | --- |
 | Cenário não concluído | Card "Cenário" com a entrevista (dono) ou a espera (jogadores), como antes; o resumo do Diário não é buscado |
-| Cenário pronto, sem situação registrada | `TableTutorialCard` "Como funciona a mesa": ciclo do turno em 3 etapas (o Maddox narra → cada jogador declara → o Maddox resolve), réplica do campo com os botões reais (`AskMasterButton`, `PassTurnButton`, `DeclareButton` de `game/composer-buttons.tsx`), "Injetar Lembrança", "Diário" (`JournalLinkButton`) e, só para o dono, "Gerar imagem da cena"; "Ver mais dicas" animado com as regras do turno e os atalhos (Enter declara, Shift+Enter quebra a linha) |
+| Cenário pronto, sem situação registrada | `TableTutorialCard` "Como funciona a mesa": ciclo do turno em 3 etapas (o Maddox narra → cada jogador declara → o Maddox resolve), réplica do campo com os botões reais (`PassTurnButton`, `DeclareButton` de `game/composer-buttons.tsx`), "Conversar com o Mestre" (`MasterTalkIconButton`, DND-74, conversa fora da mesa), "Diário" (`JournalLinkButton`) e, só para o dono, "Gerar imagem da cena"; "Ver mais dicas" animado com as regras do turno e os atalhos (Enter declara, Shift+Enter quebra a linha) |
 | Situação registrada (algum campo público ou `updatedTurn`, `hasJournalState`) | `JournalStateCard` com o conteúdo longo recolhível (`collapsible`) |
 
 - A fonte é a mesma do Diário (`useMaddoxJournalSummary(campaignId, enabled)` → `GET …/journal`, só os campos públicos); a
@@ -2068,8 +2074,9 @@ regra "estado ou silêncio" (`MADDOX_STATE_OR_SILENCE_RULE`):
   `spellcasting-attribute` é escolha do jogador, seja qual for a fonte citada. Sem o trecho, a alteração é recusada com
   `faltaEscolhaDoJogador` e a orientação de perguntar. Vale também na preparação do combate e no "Pedir ajuste". Magia nomeada
   pela regra ("Você sabe Rajada de Veneno") não é escolha.
-- **Ida e volta**: uma nova pergunta do mesmo jogador no mesmo turno responde automaticamente à última resposta do Maddox a ele
-  (`replyToId`, `lastAnswerTo` em `game.ts`). A tarefa da resposta leva a conversa (`questionThread`, até 12 mensagens). Nada disso
+- **Ida e volta**: desde a DND-74 a pergunta é o "Conversar com o Mestre" (o campo da mesa só declara). Uma nova mensagem do mesmo
+  jogador no mesmo turno continua a conversa: responde à última resposta do Maddox a ele ou, se o mestre só corrigiu, à última
+  mensagem dele (`replyToId`, `lastTalkTip` em `game.ts`; respostas com erro não contam). A tarefa da resposta leva a conversa (`questionThread`, até 12 mensagens). Nada disso
   gasta a Ação, fecha o turno ou repete o cabeçalho do turno (perguntas e respostas não abrem divisor).
 
 **Preparação do combate pergunta.** A resposta da revisão pode trazer `question: { text }`. Se o Maddox propõe uma escolha do
@@ -2101,7 +2108,8 @@ quem corrige quem, a leitura e a conversa), `player-choice.test.ts` (parte pura 
 
 ## Borda premium e narração escrita uma vez (DND-52)
 
-**Botão.** `AskMasterButton` (`components/game/composer-buttons.tsx`) tem o tratamento dos botões premium de IA, igual ao
+**Botão.** `MasterTalkIconButton` (`components/game/composer-buttons.tsx`; era o `AskMasterButton` do campo da mesa e, desde a
+DND-74, é o gatilho do "Conversar com o Mestre", com aria-label "Conversar com o Mestre" e as props do gatilho do popover) tem o tratamento dos botões premium de IA, igual ao
 "Entender com IA" (`EntityAIUnderstandButton`): `motion.button` com o anel gradiente `from-blue-500/20 via-purple-500/20
 to-blue-500/20 bg-[length:200%_auto] animate-gradient` em `p-[1.5px]`, miolo em vidro escuro (`bg-black/40 backdrop-blur-[4px]`,
 `group-hover:bg-slate-900/40`), ícone `HelpCircle` (mantido por decisão do dono) `text-blue-400` → `group-hover:text-white`,
@@ -2517,6 +2525,77 @@ Moeda é **campo da ficha** (`sheet.coins`), nunca item do inventário nem texto
   `applySheetChanges` e antes do limite de equipamento no Pergunte ao mestre; recompensa `tipo: "item"` com nome de moeda no
   `end_combat` é recusada ("use `tipo: moedas`"). A regra `MADDOX_COINS_RULE` entra nos graus com ficha. Itens de moeda
   antigos não são convertidos (decisão do dono).
+
+## Conversar com o Mestre (DND-74)
+
+Uma única porta para falar com o mestre, **fora da mesa** (o jogador fala, não o personagem): unifica o "Perguntar ao mestre" do
+campo da mesa e o "Injetar Lembrança". Também é a correção da DND-72 (#329): o mestre altera e cancela o teste pendente de verdade.
+
+- **Tela:** `components/game/MasterTalkButton.tsx` (botão premium `MasterTalkIconButton` de `composer-buttons.tsx`, aria-label
+  `MADDOX_TALK_TITLE` = "Conversar com o Mestre"; `GlassPopover` com o título, o subtítulo `MADDOX_TALK_SUBTITLE` ("Fora da mesa: você
+  fala com o mestre, não como o personagem."), `Textarea` de 6 linhas com `MADDOX_TALK_PLACEHOLDER`, contador "N/500", Enter envia e
+  Shift+Enter quebra a linha). Fica **sobreposto no canto superior direito da área das mensagens** (`GameMessageList` prop `talk`,
+  `data-testid="master-talk-slot"`, `absolute right-3 top-3 z-10` com fundo próprio; a rolagem ganha `pr-14` para nunca cobrir as
+  mensagens), fora do cabeçalho e do campo de texto, e só aparece com `talkBlockReason(state) === null` (campanha `active` e personagem
+  pronto), em **qualquer fase** (inclusive turno do mestre com testes pendentes e combate tático). O "Perguntar ao mestre" das barras do
+  combate (`CombatActionBar`/`CombatWaitBar`) abre o mesmo popover (`open`/`onOpenChange` controlados em `GamePage`). O diário (só
+  leitura) não tem o botão.
+- **Campo da mesa:** só declara (`GameComposer` sem o botão de pergunta; `maddoxGameActionSchema` aceita só `declaration` e `pass`:
+  `question` responde 400). Depois de declarar, o campo fica bloqueado com "Você já declarou neste turno" e a dica aponta para o
+  "Conversar com o Mestre". O `kind: "question"` continua só no histórico e nas perguntas dos Personagens Opex (`opex-table.ts`).
+- **Envio:** `POST …/game/talk` `{ texto }` (`maddoxTalkSchema`, 1 a 500, `maddox.play`) → `submitTalk` (`server/reminders.ts`):
+  membro, campanha `active`, `assertMemberCanPlay`; grava `kind: "reminder"` com `reminder.talk: true` e `replyToId` = ponta da
+  conversa do membro no turno (`lastTalkTip` em `server/game.ts`: a última resposta do Maddox a uma conversa dele ou, se o mestre só
+  corrigiu, a última conversa), audita (`CRIAR`, `{ talk, turn, phase, chars }`) e enfileira `scheduleReminderFix` (disparar e
+  esquecer). Não é declaração, não muda o turno e não gasta ação, ação bônus nem movimento.
+- **DTO:** a conversa vem com `reminder.talk` e `authorName` (nome do **usuário**, de `User`; o do dono aparece igual ao dos
+  jogadores). A tela desenha a bolha `TalkMessage` (selo "conversa com o mestre · fora da mesa", borda tracejada, "Aguardando o
+  mestre" enquanto pendente). A busca do Diário inclui as conversas como `kind: "talk"` (rótulo `MADDOX_TALK_LABEL` = "Conversa com o
+  mestre").
+- **O mestre executa:** o job chama `answerQuestion(..., { reminder: true, talk: true })`; a tarefa "# Conversa com o mestre (turno N) —
+  fora da mesa" (`narratorTaskText`, ramo `talk`) traz a conversa até aqui (`questionThread` também segue as conversas), o pedido com o
+  id curto, as declarações do turno, **"Testes deste turno"** (`talkChecks` em `server/check-fixes.ts`: pendentes da rodada que espera a
+  rolagem com o id, os rolados marcados "JÁ ROLADO … o resultado fica") e as regras fixas `MADDOX_TALK_TASK_RULES` (pergunta → balão
+  curto sem pedir rolagem; correção → executa e o texto é opcional; lembrança → registra o efeito e `resolve_reminder` com `resultado`;
+  regra não permite → uma frase), mais `MADDOX_SHEET_FIX_TASK_RULES`, `MADDOX_COMBAT_FIX_TASK_RULES` (combate tático) e
+  `MADDOX_STATE_OR_SILENCE_RULE`. Ferramentas: todas as de correção de hoje + `MADDOX_CHECK_FIX_TOOL_NAMES` (`checkFix` só na
+  conversa com o mestre e nos graus com testes, `MADDOX_CHECK_RIGORS`; nunca nas perguntas do Personagem Opex; também no MCP). A
+  regra de registrar Orientação/dado extra com `apply_check_effect` (DND-69) fica nesta tarefa (a antiga "# Lembrete de X" saiu).
+- **Balão opcional:** o narrador devolve texto vazio sem erro na conversa; `answerQuestion` então confere `talkActed` (linha
+  `master-fix`/`sheet-change`/`combat-fix`/`hit-points`/`experience`/`level-up` gravada pelo job — ids maiores que o `ObjectId` criado no
+  começo do job — ou lembrança decidida com `resultado`). Com correção: sem balão, só a linha. Sem nada: é falha (balão de erro
+  "Pergunte de novo").
+- **Falha encerra a conversa (estado `failed`):** a conversa nunca volta a `pending` — `claimReminders` ignora `reminder.talk` (a
+  narração não tem as ferramentas para executar o pedido). `releaseReminders(campaignId, jobId, talkStatus)` grava `talkStatus` na
+  conversa: `failed` quando a resposta falhou (inclusive se gravar a resposta lançar) e `discarded` quando a resposta foi gravada e só
+  a situação não (`commitReminders`). Se o processo cai no meio, `reapStaleTalks` (chamado em `checkTurn`) encerra como `failed` a
+  conversa `pending` cujo job não está mais ativo (`isActiveMaddoxJob`) ou que nenhum job reivindicou, mas só com a fila da campanha
+  ociosa (`isCampaignBusy` falso) e a mensagem com mais de 2 min — com uma narração longa na frente, a conversa continua esperando o
+  job dela. A bolha mostra "O mestre não conseguiu
+  responder: envie de novo" (`MADDOX_REMINDER_STATUS_LABELS.failed`); o jogador envia de novo.
+- **Linha de resultado** `kind: "master-fix"` (`masterFix { kind: "reminder" | "check-update" | "check-cancel", status?, checkId? }`,
+  `components/game/MasterFixLine.tsx`, no desenho da `ReminderLine`): "Lembrança injetada: …" (criada por `commitReminders` quando a
+  conversa foi decidida com `resultado`; com "Guardada como memória" ou "Vale para agora" abaixo), "Teste de Furtividade de Fulano
+  atualizado: CD 15 → 10", "Teste de Atletismo de Fulano cancelado". Fica fora da transcrição do narrador e do Opex e da busca do
+  Diário. As linhas de ficha e de combate de antes continuam valendo.
+- **Teste pendente** (`server/check-fixes.ts`, só dentro do job da resposta, `questionRun`): `update_check { teste?, personagem?,
+  novoPersonagem?, cd?, modo?, motivo? }` e `cancel_check { teste?, personagem?, motivo }`. Valem só para o teste `pending` da rodada que o
+  turno do mestre aguarda (`isLive`); teste rolado é recusado ("o resultado fica"). Quem pediu corrige só o teste do próprio
+  personagem; o dono corrige qualquer um e só ele troca quem rola (refaz `memberId`/`userId`/`characterId`/`check.sheetId` e a prévia dos
+  efeitos de teste; um teste pendente por personagem na rodada). Gravação condicional (`check.status: "pending"`), auditoria
+  (`ATUALIZAR`, `{ checkFix, check, talkId, antes, depois }` ou `{ reason }`), linha `master-fix` e aviso à mesa. O cancelamento grava
+  `status: "cancelled"` + `cancelReason` (o card mostra "Teste de X cancelado (motivo)" sem o Rolar) e chama `advanceAfterChecks`, que só
+  agenda a continuação (o job não espera outro job): a narração segue sem o teste, que entra cancelado nos resultados.
+- **Rolar espera a revisão:** `rollCheck` responde 409 `MASTER_REVIEWING` enquanto há conversa/resposta na fila (`hasPendingReview`); o
+  `GameCheckCard` e o "rolar no lugar" do `TurnPanel` ficam desabilitados com `MADDOX_MASTER_REVIEWING_MESSAGE` (`turn.masterReviewing`).
+- **Tutorial da mesa:** o campo de demonstração tem só "Não fazer nada" e "Declarar"; o card "Conversar com o Mestre" explica a conversa
+  fora da mesa (`tutorial-demo-talk`).
+
+Sem permissão nova (`maddox.play` cobre). Testes: bloco "DND-74" de `reminders.test.ts` (fora da mesa, qualquer fase, resultado sem
+balão, falha sem texto, réplica), `game-checks.test.ts` (alterar, cancelar e liberar o turno, Rolar travado na revisão, rolado não se
+reescreve, permissões), `narrator-prompt.test.ts`, `journal.test.ts`, `game-routes.test.ts`, `game.test.ts` (as antigas perguntas pelo
+`submitTalk`) e, na tela, `master-talk-button.test.tsx`, `maddox-game.test.tsx`, `maddox-dnd25-combat.test.tsx` e
+`maddox-campaign-story-card.test.tsx`.
 
 ## Testes
 

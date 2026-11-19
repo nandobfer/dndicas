@@ -187,6 +187,13 @@ export interface MaddoxDraftReminder {
     text: string
     memory: { kind: string; title: string; text: string; visibility: "players" | "master" } | null
     decided: boolean
+    /**
+     * DND-74: resultado curto da lembrança para a linha "Lembrança injetada: …" (só no "Conversar com o Mestre"; `null` =
+     * sem linha).
+     */
+    result?: string | null
+    /** DND-74: é uma conversa com o mestre (a linha de resultado e o balão opcional valem só para ela). */
+    talk?: boolean
 }
 
 const log = loggerFor({ module: "maddox", feature: "game-live" })

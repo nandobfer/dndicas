@@ -3,17 +3,17 @@
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react"
 import { Textarea } from "@/components/ui/opex/textarea"
 import { cn } from "@/lib/utils"
-import { MADDOX_GAME_MESSAGE_MAX } from "../../constants"
+import { MADDOX_GAME_MESSAGE_MAX, MADDOX_TALK_TITLE } from "../../constants"
 import type { MaddoxGameActionInput } from "../../game-schemas"
 import { focusComposer } from "../composer-focus"
-import { AskMasterButton, DeclareButton, PassTurnButton } from "./composer-buttons"
+import { DeclareButton, PassTurnButton } from "./composer-buttons"
 
 const MAX_HEIGHT = 180
 
 interface Props {
     /** Motivo de o campo estar bloqueado (`null` = posso agir). */
     blockedReason: string | null
-    /** Já declarei neste turno: só posso perguntar ao mestre. */
+    /** Já declarei neste turno: o campo espera o próximo turno (falar com o mestre é o "Conversar com o Mestre"). */
     declared: boolean
     busy: boolean
     onSend: (input: MaddoxGameActionInput) => Promise<boolean>
@@ -24,19 +24,18 @@ interface Props {
 }
 
 /**
- * Campo da mesa, no desenho do campo da entrevista: "Perguntar ao mestre" (não encerra o turno), "Não fazer nada"
- * (atalho para passar a vez) e "Declarar" (intenção, ação ou diálogo) como botões de ícone à direita do texto.
- * Enter declara (também Ctrl/⌘+Enter); Shift+Enter quebra a linha.
+ * Campo da mesa, no desenho do campo da entrevista: só a declaração do personagem (DND-74: falar com o mestre é o
+ * "Conversar com o Mestre", no canto do chat). "Não fazer nada" (atalho para passar a vez) e "Declarar" (intenção, ação ou
+ * diálogo) são botões de ícone à direita do texto. Enter declara (também Ctrl/⌘+Enter); Shift+Enter quebra a linha.
  */
 export function GameComposer({ blockedReason, declared, busy, onSend, invalidReason = null, focusKey = "" }: Props) {
     const [value, setValue] = useState("")
     const textareaRef = useRef<HTMLTextAreaElement>(null)
     const content = value.trim()
-    const blocked = blockedReason !== null
+    const blocked = blockedReason !== null || declared
     const hasText = content.length > 0 && content.length <= MADDOX_GAME_MESSAGE_MAX
-    const canDeclare = !blocked && !busy && !declared && hasText
-    const canAsk = !blocked && !busy && hasText
-    const canPass = !blocked && !busy && !declared
+    const canDeclare = !blocked && !busy && hasText
+    const canPass = !blocked && !busy
 
     useLayoutEffect(() => {
         const element = textareaRef.current
@@ -50,27 +49,27 @@ export function GameComposer({ blockedReason, declared, busy, onSend, invalidRea
         if (!blocked) focusComposer(textareaRef.current)
     }, [focusKey, blocked])
 
-    const send = async (kind: "declaration" | "question") => {
-        if (kind === "declaration" ? !canDeclare : !canAsk) return
+    const declare = async () => {
+        if (!canDeclare) return
         const draft = value
         setValue("")
-        const sent = await onSend({ kind, content })
+        const sent = await onSend({ kind: "declaration", content })
         if (!sent) setValue(draft)
     }
 
     const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
         if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
             event.preventDefault()
-            void send("declaration")
+            void declare()
         }
     }
 
     const submit = (event: FormEvent) => {
         event.preventDefault()
-        void send("declaration")
+        void declare()
     }
 
-    const hint = blockedReason ?? (declared ? "Você já declarou. Aguardando os outros jogadores — ainda dá para perguntar ao mestre." : "Declare o que o seu personagem faz, diz ou pretende. Perguntas ao mestre não encerram o seu turno.")
+    const hint = blockedReason ?? (declared ? `Você já declarou. Aguardando os outros jogadores — para falar com o mestre, use “${MADDOX_TALK_TITLE}”.` : `Declare o que o seu personagem faz, diz ou pretende. Para falar com o mestre fora da mesa, use “${MADDOX_TALK_TITLE}”.`)
 
     return (
         <form onSubmit={submit} className="border-t bg-background/60 px-3 pb-3 pt-2.5" aria-label="Sua vez na mesa">
@@ -81,13 +80,12 @@ export function GameComposer({ blockedReason, declared, busy, onSend, invalidRea
                     value={value}
                     onChange={(event) => setValue(event.target.value)}
                     onKeyDown={onKeyDown}
-                    placeholder={declared ? "Pergunte algo ao mestre…" : "O que o seu personagem faz?"}
+                    placeholder={declared ? "Você já declarou neste turno" : "O que o seu personagem faz?"}
                     disabled={blocked}
                     maxLength={MADDOX_GAME_MESSAGE_MAX}
                     rows={1}
                     className="mb-1 max-h-[180px] min-h-[24px] flex-1 resize-none border-0 bg-transparent p-0 text-sm shadow-none focus-visible:ring-0"
                 />
-                <AskMasterButton onClick={() => void send("question")} disabled={!canAsk} />
                 <PassTurnButton onClick={() => void onSend({ kind: "pass" })} disabled={!canPass} />
                 <DeclareButton disabled={!canDeclare} busy={busy} />
             </div>
