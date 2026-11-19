@@ -10,7 +10,7 @@ import { freshEconomy } from "@/features/maddox/combat-rules"
 vi.mock("@/features/dice-roller/components/dice-roller-panel", () => ({ DiceRollerPanel: () => <div data-testid="dice-panel" /> }))
 
 const { CombatActionBar, CombatWaitBar, combatMenuNotices } = await import("@/features/maddox/components/game/combat/CombatActionBar")
-const { InitiativeTracker } = await import("@/features/maddox/components/game/combat/InitiativeTracker")
+const { renderCombatTable } = await import("../../helpers/maddox-table")
 const { CombatPrepBlockedNotice, CombatPrepCard } = await import("@/features/maddox/components/game/combat/CombatCards")
 const { SheetChangeLine } = await import("@/features/maddox/components/game/SheetChangeLine")
 
@@ -56,12 +56,8 @@ const bar = (props: Partial<Parameters<typeof CombatActionBar>[0]> = {}) => (
 
 describe("DND-41 — a mesa enquanto o mestre prepara o combate", () => {
     it('a barra de espera mostra "O mestre está preparando o combate" e o rastreador mostra o selo de cada personagem', () => {
-        render(
-            <>
-                <CombatWaitBar combat={preparing} canAsk={false} onAsk={vi.fn()} />
-                <InitiativeTracker combat={preparing} title="Emboscada" color="#3B82F6" />
-            </>,
-        )
+        render(<CombatWaitBar combat={preparing} canAsk={false} onAsk={vi.fn()} />)
+        renderCombatTable(preparing, { title: "Emboscada" })
         expect(screen.getByTestId("combat-wait-text")).toHaveTextContent("O mestre está preparando o combate")
         expect(screen.getAllByTestId("initiative-prep").map((seal) => [seal.getAttribute("data-status"), seal.textContent?.trim()])).toEqual([
             ["ready", "Pronto"],
@@ -238,12 +234,8 @@ describe("DND-51 — a preparação pergunta ao jogador e a correção aparece n
     })
 
     it('o selo "Pergunta ao jogador" na ordem e a linha pública da correção da ficha', () => {
-        render(
-            <>
-                <InitiativeTracker combat={{ ...preparing, order: [slot({ actorKey: "pc:nala", name: "Nala", prep: { status: "asking" } })] }} title="Emboscada" color="#3B82F6" />
-                <SheetChangeLine message={{ ...base, kind: "sheet-change", content: "Ficha de Nala corrigida:\n- Atributo de conjuração: nenhum → Sabedoria (Você escolheu Sabedoria.)\n- Magia Rajada de Veneno: não existia → truque" }} />
-            </>,
-        )
+        renderCombatTable({ ...preparing, order: [slot({ actorKey: "pc:nala", name: "Nala", prep: { status: "asking" } })] }, { title: "Emboscada" })
+        render(<SheetChangeLine message={{ ...base, kind: "sheet-change", content: "Ficha de Nala corrigida:\n- Atributo de conjuração: nenhum → Sabedoria (Você escolheu Sabedoria.)\n- Magia Rajada de Veneno: não existia → truque" }} />)
         expect(screen.getByText("Pergunta ao jogador")).toBeInTheDocument()
         expect(screen.getByTestId("sheet-change-line")).toHaveTextContent("Ficha de Nala corrigida:")
         expect(screen.getAllByTestId("sheet-change-item").map((item) => item.textContent)).toEqual(["Atributo de conjuração: nenhum → Sabedoria (Você escolheu Sabedoria.)", "Magia Rajada de Veneno: não existia → truque"])

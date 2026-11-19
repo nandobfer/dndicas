@@ -45,7 +45,7 @@ function FakePanel(props: PanelProps) {
 vi.mock("@/features/dice-roller/components/dice-roller-panel", () => ({ DiceRollerPanel: FakePanel }))
 
 const { CombatActionBar, CombatWaitBar, anchorLeft, COMBAT_MENU_WIDTH } = await import("@/features/maddox/components/game/combat/CombatActionBar")
-const { InitiativeTracker } = await import("@/features/maddox/components/game/combat/InitiativeTracker")
+const { renderCombatTable } = await import("../../helpers/maddox-table")
 const { CombatActionCard, CombatReactionCard, CombatRollCard } = await import("@/features/maddox/components/game/combat/CombatCards")
 
 const option = (over: Partial<CombatOption>): CombatOption => ({ id: "x", category: "weapons", economy: "action", label: "X", detail: "", target: "enemy", multiTarget: false, resolution: "attack", ...over })
@@ -186,18 +186,18 @@ describe("combate tático — vez sem card (DND-62)", () => {
     })
 })
 
-describe("combate tático — rastreador de iniciativa", () => {
+describe("combate tático — ordem de iniciativa no card da mesa (DND-75)", () => {
     it("ordem, quem age, PV do grupo, faixa dos adversários (sem números) e condições", () => {
-        render(<InitiativeTracker combat={combat} title="Cripta" color="#3B82F6" />)
-        const slots = screen.getAllByTestId("initiative-slot")
+        renderCombatTable(combat)
+        const slots = [...screen.getByTestId("table-combat-order").querySelectorAll<HTMLElement>("[data-combat-slot]")]
         expect(slots.map((slot) => slot.querySelector("[data-testid='initiative-value']")!.textContent)).toEqual(["18", "10", "10", "5"])
         expect(slots[0]).toHaveAttribute("data-active", "true")
-        expect(within(slots[0]!).getByTestId("initiative-hp")).toHaveTextContent("30/44")
+        expect(within(slots[0]!).getByTestId("seat-hp")).toHaveTextContent("30/44")
         expect(within(slots[1]!).getByTestId("initiative-band")).toHaveTextContent("Muito ferido")
-        expect(within(slots[1]!).queryByTestId("initiative-hp")).not.toBeInTheDocument()
+        expect(within(slots[1]!).queryByTestId("seat-hp")).not.toBeInTheDocument()
         expect(slots[1]).toHaveTextContent("Caído")
         expect(slots[3]).toHaveTextContent("Morrendo")
-        expect(screen.getByText("Rodada 2")).toBeInTheDocument()
+        expect(screen.getByText("Combate · Rodada 2")).toBeInTheDocument()
     })
 })
 
@@ -208,23 +208,20 @@ describe("combate tático — PV dos adversários pela configuração da campanh
     }
 
     it("com os números (servidor envia hp): barra e atual/máximo no lugar da faixa; 0 PV continua Caído", () => {
-        render(<InitiativeTracker combat={withHp} title="Cripta" color="#3B82F6" />)
-        const slots = screen.getAllByTestId("initiative-slot")
-        expect(within(slots[1]!).getByTestId("initiative-hp")).toHaveTextContent("3/7")
+        renderCombatTable(withHp)
+        const slots = [...screen.getByTestId("table-combat-order").querySelectorAll<HTMLElement>("[data-combat-slot]")]
+        expect(within(slots[1]!).getByTestId("seat-hp")).toHaveTextContent("3/7")
         expect(within(slots[1]!).queryByTestId("initiative-band")).not.toBeInTheDocument()
         expect(within(slots[1]!).queryByTestId("initiative-fallen")).not.toBeInTheDocument()
-        expect(within(slots[2]!).getByTestId("initiative-hp")).toHaveTextContent("0/7")
+        expect(within(slots[2]!).getByTestId("seat-hp")).toHaveTextContent("0/7")
         expect(within(slots[2]!).getByTestId("initiative-fallen")).toHaveTextContent("Caído")
         expect(slots[2]!.textContent).not.toMatch(/CA/)
     })
 
-    it("faixa compacta: PV dos adversários na cor da barra só quando o servidor envia; sem ele, nada", () => {
-        const { rerender } = render(<InitiativeTracker combat={combat} title="Cripta" color="#3B82F6" compact />)
-        expect(screen.queryAllByTestId("initiative-strip-hp")).toHaveLength(0)
-        rerender(<InitiativeTracker combat={withHp} title="Cripta" color="#3B82F6" compact />)
-        const hp = screen.getAllByTestId("initiative-strip-hp")
-        expect(hp.map((item) => item.textContent)).toEqual(["3/7", "0/7"])
-        expect(hp[0]!.style.color.toLowerCase()).toBe(rarityColors.legendary.toLowerCase())
+    it("não existe mais a faixa compacta: a ordem fica só no card da mesa", () => {
+        renderCombatTable(withHp)
+        expect(screen.queryByTestId("initiative-strip")).not.toBeInTheDocument()
+        expect(screen.getAllByTestId("table-combat-order")).toHaveLength(1)
     })
 })
 

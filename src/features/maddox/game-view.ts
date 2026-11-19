@@ -1,5 +1,5 @@
 import { MADDOX_MASTER_RETRY_MS, MADDOX_TURN_PHASE_LABELS } from "./constants"
-import type { MaddoxGameMessageDto, MaddoxGameParticipantDto, MaddoxGameStateDto, MaddoxLiveGenerationDto } from "./game-types"
+import type { MaddoxGameMessageDto, MaddoxGameParticipantDto, MaddoxGameStateDto, MaddoxLiveGenerationDto, MaddoxTacticalCombatDto, MaddoxTacticalSlotDto } from "./game-types"
 
 /** Sem Pusher, a mesa recarrega neste intervalo (os outros jogadores não avisam em tempo real). */
 export const MADDOX_GAME_POLL_MS = 5000
@@ -202,4 +202,35 @@ export function newestRewindNoticeId(messages: readonly Pick<MaddoxGameMessageDt
     let newest = seen
     for (const message of messages) if (message.kind === "rewind" && (message.id.length > newest.length || (message.id.length === newest.length && message.id > newest))) newest = message.id
     return newest
+}
+
+/** DND-75: fase do combate tático no título do card da mesa ("Preparando o combate", "Rolando iniciativa", "Combate · Rodada N"). */
+export function combatPhaseLabel(combat: Pick<MaddoxTacticalCombatDto, "phase" | "round" | "preparation">): string {
+    if (combat.preparation?.active) return "Preparando o combate"
+    if (combat.phase === "initiative") return "Rolando iniciativa"
+    return `Combate · Rodada ${combat.round}`
+}
+
+/** Linha da ordem de iniciativa no card da mesa: o combatente e, quando é personagem de um participante, o assento dele. */
+export interface MaddoxCombatSeatView {
+    slot: MaddoxTacticalSlotDto
+    participant: MaddoxGameParticipantDto | null
+}
+
+export type MaddoxTableSeatsView =
+    | { mode: "table"; seats: MaddoxGameParticipantDto[] }
+    | { mode: "combat"; title: string; label: string; order: MaddoxCombatSeatView[]; outside: MaddoxGameParticipantDto[] }
+
+/**
+ * DND-75: um único card de personagens na mesa. Fora do combate tático, os participantes ("Na mesa (N)"); no combate,
+ * a ordem de iniciativa do servidor (jogadores e combatentes do mestre), cada personagem ligado ao assento pelo
+ * `memberId`, e quem não está na ordem (entrou no meio do combate, sem personagem pronto) em "Fora do combate".
+ */
+export function tableSeatsView(state: Pick<MaddoxGameStateDto, "participants" | "combat">): MaddoxTableSeatsView {
+    const tactical = state.combat?.tactical
+    if (!state.combat || !tactical) return { mode: "table", seats: state.participants }
+    const byMember = new Map(state.participants.map((participant) => [participant.memberId, participant]))
+    const order = tactical.order.map((slot) => ({ slot, participant: slot.kind === "character" && slot.memberId ? (byMember.get(slot.memberId) ?? null) : null }))
+    const seated = new Set(order.flatMap((item) => (item.participant ? [item.participant.memberId] : [])))
+    return { mode: "combat", title: state.combat.title, label: combatPhaseLabel(tactical), order, outside: state.participants.filter((participant) => !seated.has(participant.memberId)) }
 }
