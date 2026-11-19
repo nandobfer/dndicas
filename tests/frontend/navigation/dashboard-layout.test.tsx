@@ -5,10 +5,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import DashboardLayout from "@/app/(dashboard)/layout"
 import { motionConfig } from "@/lib/config/motion-configs"
 
-const nav = vi.hoisted(() => ({ search: "" }))
+const nav = vi.hoisted(() => ({ search: "", pathname: "/" }))
 
 vi.mock("next/navigation", () => ({
     useSearchParams: () => new URLSearchParams(nav.search),
+    usePathname: () => nav.pathname,
 }))
 vi.mock("@/core/hooks/useWarmSearchCache", () => ({ useWarmSearchCache: () => undefined }))
 vi.mock("@/components/ui/glass-background", () => ({ LiquidGlassBackground: () => null }))
@@ -27,6 +28,7 @@ vi.mock("@/features/opex-agent/components/OpexScopeProvider", () => ({
 describe("DashboardLayout", () => {
     beforeEach(() => {
         nav.search = ""
+        nav.pathname = "/"
         window.sessionStorage.clear()
     })
 
@@ -64,6 +66,21 @@ describe("DashboardLayout", () => {
         await waitFor(() => expect(screen.getByText("Outra tela")).toBeInTheDocument())
         expect(screen.queryByTestId("glass-header")).not.toBeInTheDocument()
         expect(screen.queryByTestId("glass-footer")).not.toBeInTheDocument()
+    })
+
+    it("na mesa da campanha Maddox não mostra o rodapé, mas mantém header, botões flutuantes e conteúdo", () => {
+        nav.pathname = "/campanhas/c1/mesa"
+        render(<DashboardLayout><p>Mesa</p></DashboardLayout>)
+        expect(screen.queryByTestId("glass-footer")).not.toBeInTheDocument()
+        expect(screen.getByTestId("glass-header")).toBeInTheDocument()
+        expect(screen.getByTestId("fab-group")).toBeInTheDocument()
+        expect(screen.getByText("Mesa").closest("main")!.parentElement!.className).toContain("pt-16")
+    })
+
+    it.each(["/campanhas", "/campanhas/c1", "/campanhas/c1/diario", "/campanhas/c1/entrevista/personagem"])("em %s o rodapé continua", (pathname) => {
+        nav.pathname = pathname
+        render(<DashboardLayout><p>Conteúdo</p></DashboardLayout>)
+        expect(screen.getByTestId("glass-footer")).toBeInTheDocument()
     })
 
     describe("espaço do topo igual ao lateral", () => {
