@@ -1,6 +1,6 @@
 "use client"
 
-import { useLayoutEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { Check, Flag, HelpCircle, Loader2, MessageSquareWarning, MinusCircle, Sparkles, Swords, Wand2, X } from "lucide-react"
 import { Button } from "@/components/ui/opex/button"
@@ -213,7 +213,12 @@ export function CombatActionMenu({ economy: economySlot, options, combat, busy, 
     const [skill, setSkill] = useState<string | null>(null)
     const [freeText, setFreeText] = useState("")
     const [adjustText, setAdjustText] = useState("")
+    // DND-76: o campo do pedido de ajuste só aparece depois do botão "Pedir ajuste".
+    const [adjustOpen, setAdjustOpen] = useState(false)
+    const adjustRef = useRef<HTMLTextAreaElement>(null)
+    const adjustPanelId = useId()
     const selected = options.find((option) => option.id === selectedId) ?? null
+    const canAdjust = Boolean(onAdjust && selected && selected.id !== "free")
     const rider = selected?.attack?.riders?.find((item) => item.key === "sneak-attack") ?? null
     const lastAdjustment = selected ? [...adjustments].reverse().find((item) => item.optionId === selected.id && item.economy === economy) : undefined
     const adjustmentPending = Boolean(lastAdjustment && lastAdjustment.status === "pending")
@@ -231,7 +236,12 @@ export function CombatActionMenu({ economy: economySlot, options, combat, busy, 
     const levels = selected?.spell?.levels ?? []
     const ready = Boolean(selected && (!needsTarget || targets.length > 0) && (!needsText || freeText.trim()) && (!selected.skills?.length || skill))
 
+    useEffect(() => {
+        if (adjustOpen) adjustRef.current?.focus()
+    }, [adjustOpen])
+
     const pick = (option: CombatOption) => {
+        setAdjustOpen(false)
         setSelectedId(option.id)
         setTargets([])
         setLevel(option.spell?.levels[0] ?? null)
@@ -258,6 +268,7 @@ export function CombatActionMenu({ economy: economySlot, options, combat, busy, 
                     onChange={(value) => {
                         setCategory(value)
                         setSelectedId(null)
+                        setAdjustOpen(false)
                     }}
                 />
             )}
@@ -337,13 +348,14 @@ export function CombatActionMenu({ economy: economySlot, options, combat, busy, 
                             data-testid="combat-free-text"
                         />
                     )}
-                    {onAdjust && selected.id !== "free" && (
-                        <div className="space-y-1.5 rounded-md border border-white/10 bg-white/[0.02] p-2" data-testid="combat-adjust">
+                    {canAdjust && onAdjust && adjustOpen && (
+                        <div id={adjustPanelId} className="space-y-1.5 rounded-md border border-white/10 bg-white/[0.02] p-2" data-testid="combat-adjust">
                             <p className="flex items-center gap-1.5 text-[11px] text-white/60">
                                 <MessageSquareWarning className="h-3.5 w-3.5" aria-hidden /> Algo errado nesta opção? Peça um ajuste ao Maddox (não gasta a ação).
                             </p>
                             <div className="flex items-end gap-2">
                                 <Textarea
+                                    ref={adjustRef}
                                     value={adjustText}
                                     onChange={(event) => setAdjustText(event.target.value.slice(0, MADDOX_COMBAT_ADJUST_TEXT_MAX))}
                                     rows={1}
@@ -358,37 +370,52 @@ export function CombatActionMenu({ economy: economySlot, options, combat, busy, 
                                     disabled={adjustText.trim().length < 3 || adjusting || adjustmentPending}
                                     onClick={async () => {
                                         const done = await onAdjust({ economy, optionId: selected.id, text: adjustText.trim() })
-                                        if (done) setAdjustText("")
+                                        if (done) {
+                                            setAdjustText("")
+                                            setAdjustOpen(false)
+                                        }
                                     }}
                                     data-testid="combat-adjust-send"
                                 >
-                                    {adjusting || adjustmentPending ? <Loader2 className="animate-spin" aria-hidden /> : <Wand2 aria-hidden />} Pedir ajuste
+                                    {adjusting || adjustmentPending ? <Loader2 className="animate-spin" aria-hidden /> : <Wand2 aria-hidden />} Enviar ajuste
                                 </Button>
                             </div>
-                            {lastAdjustment && (
-                                <p
-                                    className="text-[11px]"
-                                    style={{ color: lastAdjustment.status === "accepted" ? rarityColors.uncommon : lastAdjustment.status === "pending" ? undefined : rarityColors.artifact }}
-                                    data-testid="combat-adjust-result"
-                                    data-status={lastAdjustment.status}
-                                >
-                                    {lastAdjustment.status === "pending"
-                                        ? "O Maddox está examinando o pedido…"
-                                        : lastAdjustment.status === "accepted"
-                                          ? `Ajuste aceito: ${lastAdjustment.reason ?? ""}`
-                                          : lastAdjustment.status === "refused"
-                                            ? `Ajuste recusado: ${lastAdjustment.reason ?? ""}`
-                                            : (lastAdjustment.reason ?? "O Maddox não conseguiu examinar o pedido agora. Tente de novo.")}
-                                </p>
-                            )}
                         </div>
+                    )}
+                    {canAdjust && lastAdjustment && (
+                        <p
+                            className="text-[11px]"
+                            style={{ color: lastAdjustment.status === "accepted" ? rarityColors.uncommon : lastAdjustment.status === "pending" ? undefined : rarityColors.artifact }}
+                            data-testid="combat-adjust-result"
+                            data-status={lastAdjustment.status}
+                        >
+                            {lastAdjustment.status === "pending"
+                                ? "O Maddox está examinando o pedido…"
+                                : lastAdjustment.status === "accepted"
+                                  ? `Ajuste aceito: ${lastAdjustment.reason ?? ""}`
+                                  : lastAdjustment.status === "refused"
+                                    ? `Ajuste recusado: ${lastAdjustment.reason ?? ""}`
+                                    : (lastAdjustment.reason ?? "O Maddox não conseguiu examinar o pedido agora. Tente de novo.")}
+                        </p>
                     )}
                     {invalidReason && (
                         <p className="rounded-md border px-2 py-1.5 text-xs" style={{ borderColor: `${rarityColors.artifact}66`, color: rarityColors.artifact }} role="alert" data-testid="combat-invalid-reason">
                             {invalidReason}
                         </p>
                     )}
-                    <div className="flex justify-end">
+                    <div className="flex items-center justify-end gap-2">
+                        {canAdjust && (
+                            <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => setAdjustOpen((value) => !value)}
+                                aria-expanded={adjustOpen}
+                                aria-controls={adjustOpen ? adjustPanelId : undefined}
+                                data-testid="combat-adjust-toggle"
+                            >
+                                <MessageSquareWarning aria-hidden /> Pedir ajuste
+                            </Button>
+                        )}
                         <Button
                             size="sm"
                             disabled={!ready || busy}
