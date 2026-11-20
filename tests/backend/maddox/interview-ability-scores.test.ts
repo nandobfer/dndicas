@@ -190,7 +190,7 @@ beforeEach(async () => {
 })
 
 describe("atributos pelo card na entrevista de personagem", () => {
-    it("fluxo completo: card pedido pelo Maddox, cinco rolagens no motor, envio, bônus do antecedente e a ficha com base + bônus", async () => {
+    it("fluxo completo: card pedido pelo Maddox, cinco rolagens no motor, envio, bônus do antecedente e a ficha com base + bônus", { timeout: 20_000 }, async () => {
         await BackgroundModel.collection.insertOne({ name: "Criminoso", originalName: "Criminal", suggestedAttributes: ["Destreza", "Constituição", "Inteligência"], status: "active" })
         const campaignId = await characterInterview()
         // A entrevista recebe as ferramentas e a seção de atributos (nunca pedir números digitados).

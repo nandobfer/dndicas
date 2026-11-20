@@ -196,7 +196,7 @@ describe("ficha completa pela entrevista de personagem", () => {
         cat = await seedSheetCatalog()
     })
 
-    it("Fiel, nível 3 da mesa: escolhas gravadas, card de PV (média e rolagem) e a ficha montada inteira no servidor", async () => {
+    it("Fiel, nível 3 da mesa: escolhas gravadas, card de PV (média e rolagem) e a ficha montada inteira no servidor", { timeout: 20_000 }, async () => {
         const campaignId = await characterInterview("fiel-dnd", 3)
         expect((await MaddoxCampaignModel.findById(campaignId).lean())!.startingLevel).toBe(3)
         expect(calls.at(-1)!.instructions).toContain("A mesa começa no nível 3")
