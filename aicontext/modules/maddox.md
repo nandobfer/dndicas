@@ -1152,6 +1152,13 @@ aplicável (id errado, valor fora da faixa) vira falha, com a mensagem genérica
 (`modify` sem `light`, `ranged`, `damageType` ou `finesse`) herda esses campos da opção. Falha da IA = mensagem
 genérica para o jogador; o motivo técnico só para o dono da campanha.
 
+**Campo do pedido de ajuste na tela (DND-76).** No painel de Ação/Ação bônus (`CombatActionMenu` em `CombatActionBar.tsx`), o campo
+("Algo errado nesta opção? Peça um ajuste ao Maddox (não gasta a ação).") começa **oculto**: o botão "Pedir ajuste"
+(`combat-adjust-toggle`, `aria-expanded`) fica à esquerda de Confirmar e abre o campo com foco; o envio é "Enviar ajuste"
+(`combat-adjust-send`, mesmo `onAdjust` e mesma rota). Envio aceito pelo servidor fecha o campo; falha o mantém aberto com o texto. A
+linha de status (`combat-adjust-result`: examinando, aceito, recusado) fica sempre visível, com o campo aberto ou fechado. O campo volta
+oculto ao trocar de opção ou categoria, fechar o painel ou alternar Ação/Ação bônus. Sem `onAdjust` ou na "Outra ação", não há botão.
+
 **Ataque furtivo.** Detectado pelo servidor pela classe (Ladino/Rogue) ou pela característica "Ataque Furtivo" (menção ou registro),
 ⌈nível/2⌉d6; a preparação só corrige os dados com fonte confirmada no catálogo (DND-49). Vira `attack.riders` nas opções de arma com
 Acuidade ou à distância (a arremessada só com Acuidade; reações ficam fora). Desde a DND-49 o furtivo é **perguntado depois do acerto**

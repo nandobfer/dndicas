@@ -1480,6 +1480,7 @@ describe("mesa Maddox — preparação do combate (DND-41)", () => {
         fireEvent.click(screen.getByTestId("combat-action-button"))
         const menu = await screen.findByTestId("combat-menu")
         fireEvent.click(within(menu).getByText("Adaga"))
+        fireEvent.click(within(menu).getByTestId("combat-adjust-toggle"))
         fireEvent.change(within(menu).getByTestId("combat-adjust-text"), { target: { value: "a adaga tem acuidade" } })
         await act(async () => fireEvent.click(within(menu).getByTestId("combat-adjust-send")))
         await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns/c1/game/combat/adjustments", { economy: "action", optionId: "weapon:adaga", text: "a adaga tem acuidade" }))
