@@ -10,6 +10,7 @@ export { MaddoxCombatModel, type IMaddoxCombat, type IMaddoxCombatant, type IMad
 export { MaddoxCombatOptionProfileModel, type IMaddoxCombatOptionProfile } from "./maddox-combat-option-profile"
 export { MaddoxSceneImageModel, type IMaddoxSceneImage, type IMaddoxSceneImageCatalogRef } from "./maddox-scene-image"
 export { MaddoxCombatPrepModel, type IMaddoxCombatPrep } from "./maddox-combat-prep"
+export { MaddoxCombatPrepCacheModel, type IMaddoxCombatPrepCache } from "./maddox-combat-prep-cache"
 export { MaddoxCampaignSnapshotModel, type IMaddoxCampaignSnapshot, type IMaddoxSheetSnapshot, type MaddoxMemoryChannelRef } from "./maddox-campaign-snapshot"
 export { MaddoxMemoryRepairModel, type IMaddoxMemoryRepair } from "./maddox-memory-repair"
 export { INCLUDE_DISCARDED, type IMaddoxDiscardMark } from "./discard-filter"

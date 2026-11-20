@@ -105,7 +105,7 @@ export function withPreparation(dto: MaddoxTacticalCombatDto, preps: readonly IM
             const status = prep ? PREP_SLOT[prep.status] : null
             if (!prep || !status) return slot
             const since = combatPrepSince(prep)
-            return { ...slot, prep: { status, prepId: String(prep._id), ...(since ? { since: since.toISOString() } : {}) } }
+            return { ...slot, prep: { status, prepId: String(prep._id), ...(since ? { since: since.toISOString() } : {}), ...(status === "ready" && prep.source?.kind ? { source: prep.source.kind } : {}) } }
         }),
         preparation: {
             active,

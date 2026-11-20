@@ -14,6 +14,7 @@ import { MADDOX_COMBAT_ADJUST_TEXT_MAX, MADDOX_COMBAT_FREE_TEXT_MAX } from "../.
 import type { MaddoxCombatActionInput, MaddoxCombatAdjustmentInput } from "../../../combat-schemas"
 import type { MaddoxCombatAdjustmentDto, MaddoxMyCombatDto, MaddoxTacticalCombatDto } from "../../../game-types"
 import { onlyFreeBonus } from "../../../combat-prep"
+import { adjustedOriginLabel } from "../../../combat-prep-source"
 import { RarityChip } from "../../campaigns/campaign-visuals"
 import { ECONOMY_COLORS, ECONOMY_LABELS } from "./combat-visuals"
 
@@ -289,7 +290,15 @@ export function CombatActionMenu({ economy: economySlot, options, combat, busy, 
                 <div className="space-y-2 border-t border-white/10 pt-2" data-testid="combat-menu-detail">
                     {selected.adjusted && (
                         <p className="flex items-start gap-1.5 text-xs" style={{ color: rarityColors.uncommon }} data-testid="combat-option-adjusted">
-                            <Wand2 className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden /> Ajustado pelo Maddox: {selected.adjusted.reason}
+                            <Wand2 className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+                            <span>
+                                Ajustado pelo Maddox: {selected.adjusted.reason}
+                                {adjustedOriginLabel(selected.adjusted) && (
+                                    <span className="ml-1.5 inline-block align-middle" data-testid="combat-option-adjusted-origin" data-origin={selected.adjusted.origin}>
+                                        <RarityChip color={selected.adjusted.origin === "cache" ? rarityColors.common : rarityColors.uncommon}>{adjustedOriginLabel(selected.adjusted)}</RarityChip>
+                                    </span>
+                                )}
+                            </span>
                         </p>
                     )}
                     {rider && (

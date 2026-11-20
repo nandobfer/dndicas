@@ -156,6 +156,8 @@ async function seedPlayedTable(id: string, characterId: string) {
     const combatId = new mongoose.Types.ObjectId()
     await db.collection("maddox_combats").insertOne({ _id: combatId, campaignId, title: "Emboscada", status: "active", startedTurn: 2, combatants: [] })
     await db.collection("maddox_combat_preps").insertOne({ campaignId, combatId, actorKey: "pc:1", characterId: new mongoose.Types.ObjectId(characterId), memberId: new mongoose.Types.ObjectId(), userId: "u", status: "ready" })
+    // DND-78: cache da preparação do combate (sai junto no reinício).
+    await db.collection("maddox_combat_prep_caches").insertOne({ campaignId, characterId: new mongoose.Types.ObjectId(characterId), sheetId: new mongoose.Types.ObjectId(), fingerprint: {}, preparedAt: new Date() })
     await db.collection("maddox_scene_images").insertOne({ campaignId, turnNumber: 2, source: "manual", slot: "manual", status: "done", counts: true, url: "https://img/cena.png", key: "maddox/cena.png", createdAt: new Date(), updatedAt: new Date(), discardedBy: null })
     await db.collection("maddox_memory_repairs").insertOne({ _id: `${id}:m_1` as never, campaignId, memoryId: "m_1", ref: { kind: "campaign" }, window: { after: new Date(), upTo: new Date() }, attempts: 0 })
     await db.collection("engramind_pending_writes").insertOne({ _id: `${id}:k` as never, campaignId: id, key: "k", channel: "c", body: {}, createdAt: new Date(), updatedAt: new Date() })
@@ -216,7 +218,7 @@ describe("reinício completo", () => {
 
         const db = mongoose.connection.db!
         expect(await allMessages(id)).toHaveLength(0)
-        for (const name of ["maddox_npcs", "maddox_combats", "maddox_combat_preps", "maddox_memory_repairs"]) expect(await db.collection(name).countDocuments({ campaignId: new mongoose.Types.ObjectId(id) })).toBe(0)
+        for (const name of ["maddox_npcs", "maddox_combats", "maddox_combat_preps", "maddox_combat_prep_caches", "maddox_memory_repairs"]) expect(await db.collection(name).countDocuments({ campaignId: new mongoose.Types.ObjectId(id) })).toBe(0)
         expect(await db.collection("engramind_pending_writes").countDocuments({ campaignId: id })).toBe(0)
         expect(await MaddoxCampaignSnapshotModel.countDocuments({ campaignId: id, kind: { $ne: "start" } })).toBe(0)
         // Imagem: some da tela e do arquivo, mas o registro segue no teto diário.

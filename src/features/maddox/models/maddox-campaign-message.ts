@@ -15,7 +15,7 @@ import {
     type MaddoxReminderStatus,
     type MaddoxTurnPhase,
 } from "../constants"
-import type { CombatPrepChange, IMaddoxCombatAction, IMaddoxCombatReaction, IMaddoxCombatRoll } from "../combat-types"
+import type { CombatPrepChange, CombatPrepSource, IMaddoxCombatAction, IMaddoxCombatReaction, IMaddoxCombatRoll } from "../combat-types"
 import type { MaddoxCheckEffectEntry } from "../check-effects"
 import { applyDiscardFilter, type IMaddoxDiscardMark } from "./discard-filter"
 import type { MaddoxRestType, RestLine, RestMissLine } from "../rest-rules"
@@ -201,7 +201,7 @@ export interface IMaddoxCampaignMessage {
      * Card privado "Sua mesa está pronta" (`kind: "combat-prep"`, DND-41): só o dono do personagem (`memberId`) o recebe.
      * `content` fica vazio (fora da transcrição do narrador e do Diário).
      */
-    combatPrep: { combatId: Types.ObjectId; actorKey: string; characterName: string; changes: CombatPrepChange[]; question?: { prepId: string; text: string; status: "awaiting" | "answered" | "expired"; answer: string | null; deadline: Date; settled?: boolean; halted?: "discarded" | "failed" | null } | null } | null
+    combatPrep: { combatId: Types.ObjectId; actorKey: string; characterName: string; changes: CombatPrepChange[]; source?: CombatPrepSource | null; question?: { prepId: string; text: string; status: "awaiting" | "answered" | "expired"; answer: string | null; deadline: Date; settled?: boolean; halted?: "discarded" | "failed" | null } | null } | null
     /** Descanso (`kind: "rest"`, DND-58). */
     rest?: IMaddoxRest | null
     /** Pedido de troca após o descanso (`kind: "rest-request"`, DND-58): o descanso a que pertence. */

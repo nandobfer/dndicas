@@ -118,7 +118,7 @@ export interface CombatOption {
     /** Reação: o gatilho que a abre. */
     trigger?: MaddoxReactionTrigger
     /** DND-41: a opção foi ajustada pelo Maddox (preparação do combate ou pedido de ajuste). */
-    adjusted?: { reason: string }
+    adjusted?: { reason: string; origin?: "cache" | "now"; preparedAt?: string | null }
     /** DND-41: opção acrescentada pelo Maddox que gasta um item da ficha (quantidade − 1). */
     consumes?: { itemId: string }
 }

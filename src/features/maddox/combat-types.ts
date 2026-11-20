@@ -299,10 +299,20 @@ export interface PreparedCombatOption {
     requires?: { chargeId?: string | null; itemId?: string | null; spellCircle?: number | null; concentration?: boolean } | null
 }
 
+/**
+ * DND-78: origem de cada ajuste da preparação. `preparedAt` (ISO) = quando o Maddox o fez; `fromCache` = veio do cache de
+ * um combate anterior (a ficha não mudou naquela parte); `deps` = partes da ficha de que o acréscimo depende.
+ */
+export interface CombatPrepEntryOrigin {
+    preparedAt?: string | null
+    fromCache?: boolean
+    deps?: string[]
+}
+
 export interface CombatPrepOverlay {
-    modify: { optionId: string; patch: CombatOptionPatch; reason: string }[]
-    remove: { optionId: string; reason: string }[]
-    add: { option: PreparedCombatOption; reason: string }[]
+    modify: ({ optionId: string; patch: CombatOptionPatch; reason: string } & CombatPrepEntryOrigin)[]
+    remove: ({ optionId: string; reason: string } & CombatPrepEntryOrigin)[]
+    add: ({ option: PreparedCombatOption; reason: string } & CombatPrepEntryOrigin)[]
     /** Ids da lista base criados por uma gravação na ficha que já virou uma opção acrescentada (não duplicar). */
     suppress: string[]
 }
@@ -345,6 +355,22 @@ export interface CombatPrepAdjustment {
     /** DND-49: entidades do catálogo lidas ao examinar o pedido e alterações descartadas sem fonte. */
     catalogRefs?: string[]
     droppedWithoutSource?: number
+}
+
+/**
+ * DND-78: de onde veio a preparação desta mesa. `cache` = reaproveitada sem chamar a IA (nada mudou na ficha);
+ * `partial` = só o que mudou foi preparado agora (o resto veio do cache); `full` = a ficha inteira, agora.
+ */
+export interface CombatPrepSource {
+    kind: "cache" | "partial" | "full"
+    /** Quando foi feita a preparação guardada que foi reaproveitada (ISO). */
+    cachedAt?: string | null
+    /** O que mudou na ficha (rótulos legíveis: "Item: Espada longa (novo)"). */
+    changedParts?: string[]
+    /** Quantos ajustes do Maddox vieram do cache. */
+    kept?: number
+    /** Motivo da preparação inteira quando havia cache (o nível mudou, o catálogo mudou, repreparação pedida). */
+    reason?: string | null
 }
 
 export const emptyOverlay = (): CombatPrepOverlay => ({ modify: [], remove: [], add: [], suppress: [] })

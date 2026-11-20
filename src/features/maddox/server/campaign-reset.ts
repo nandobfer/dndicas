@@ -185,6 +185,8 @@ async function cleanup(campaignId: Types.ObjectId, resetId: string): Promise<voi
     await MaddoxNpcModel.deleteMany({ campaignId })
     await MaddoxCombatModel.deleteMany({ campaignId })
     await MaddoxCombatPrepModel.deleteMany({ campaignId })
+    // DND-78: a ficha volta ao começo; o cache da preparação sai junto.
+    await (await import("./combat-prep-cache")).clearCampaignPrepCache(campaignId)
     await MaddoxMemoryRepairModel.deleteMany({ campaignId })
     await MaddoxCampaignSnapshotModel.deleteMany({ campaignId, kind: { $ne: "start" } })
     const { PendingWrite } = await import("@/features/engramind/server/pending-writes")
