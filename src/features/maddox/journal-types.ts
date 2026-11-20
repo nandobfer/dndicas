@@ -119,17 +119,6 @@ export interface MaddoxJournalSearchMemoryHit {
     excerpt: string
 }
 
-export interface MaddoxJournalSearchMessageHit {
-    id: string
-    /** `talk` = conversa com o mestre, fora da mesa (DND-74). */
-    kind: "narration" | "declaration" | "question" | "answer" | "talk"
-    turnNumber: number
-    /** Personagem autor (`null` nas falas do Maddox). */
-    characterName: string | null
-    excerpt: string
-    createdAt: string
-}
-
 export interface MaddoxJournalSearchImageHit {
     id: string
     url: string
@@ -166,7 +155,6 @@ export interface MaddoxJournalSearchDto {
     query: string
     npcs: MaddoxJournalSearchGroup<MaddoxJournalSearchNpcHit>
     memories: MaddoxJournalSearchGroup<MaddoxJournalSearchMemoryHit>
-    messages: MaddoxJournalSearchGroup<MaddoxJournalSearchMessageHit>
     party: MaddoxJournalSearchGroup<MaddoxJournalSearchPartyHit>
     /** Imagens cuja legenda contém o termo (DND-22). */
     images: MaddoxJournalSearchGroup<MaddoxJournalSearchImageHit>

@@ -269,10 +269,6 @@ describe("ir ao turno, andar e retomar", () => {
         expect(other.turn.rewind).toMatchObject({ atTurn: 2, originTurn: 4 })
         expect(publishToChannels).toHaveBeenCalledWith(expect.arrayContaining(seats.map((seat) => `private-maddox-u-${seat.userId}`)), "maddox.game.changed", expect.objectContaining({ campaignId: id, turnNumber: 2, phase: "players" }))
         expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({ entidade: "CampanhaMaddox", depois: { rewind: "goto", turn: 2, origin: 4 } }))
-        // Diário: a busca não acha o que saiu da mesa (a narração do turno 3), mas acha a do 2.
-        const { searchJournal } = await import("@/features/maddox/server/journal")
-        expect((await searchJournal(id, { q: "Narração do turno 3" }, owner)).messages.items).toHaveLength(0)
-        expect((await searchJournal(id, { q: "Narração do turno 2" }, owner)).messages.items.length).toBeGreaterThan(0)
         // Lobby: "Em andamento · Turno 2 · …".
         expect(await campaigns.getCampaignDetail(id, owner)).toMatchObject({ status: "active", turnNumber: 2, turnPhase: "players" })
         // A lista agora: < 4 e diferente de 2; desfazer vai ao 1.

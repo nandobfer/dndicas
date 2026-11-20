@@ -4,7 +4,6 @@ import { join } from "node:path"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { fireEvent, screen, waitFor, within } from "@testing-library/react"
 import { renderWithQueryClient } from "../test-utils"
-import type { MaddoxGameMessageDto } from "@/features/maddox/game-types"
 import type { MaddoxJournalMemoryDto, MaddoxJournalSearchDto, MaddoxJournalSummaryDto } from "@/features/maddox/journal-types"
 
 const get = vi.fn()
@@ -47,33 +46,7 @@ function memory(id: string, kind: MaddoxJournalMemoryDto["kind"], title: string,
     return { id, kind, title, text: `Texto de ${title}.`, tags: [], status: null, turnNumber: 2, updatedAt: "2026-10-31T10:00:00.000Z", ...over }
 }
 
-const message = (id: string, over: Partial<MaddoxGameMessageDto>): MaddoxGameMessageDto => ({
-    id,
-    turnNumber: 1,
-    phase: "players",
-    kind: "declaration",
-    memberId: null,
-    characterName: null,
-    portraitUrl: null,
-    content: "",
-    replyToId: null,
-    skippedByName: null,
-    error: null,
-    check: null,
-    combat: null,
-    createdAt: "2026-10-31T10:00:00.000Z",
-    ...over,
-})
-
-const emptySearch = (query: string): MaddoxJournalSearchDto => ({ query, npcs: { items: [], hasMore: false }, memories: { items: [], hasMore: false }, messages: { items: [], hasMore: false }, party: { items: [], hasMore: false }, images: { items: [], hasMore: false }, state: null })
-
-const pendingCheck = message("k1", {
-    kind: "check",
-    phase: "master",
-    memberId: "m2",
-    characterName: "Lyra",
-    check: { round: 0, status: "pending", kind: "skill", ability: "dexterity", skill: "stealth", dc: null, mode: "normal", reason: "Esgueirar-se", roll: null, modifier: 3, modifierParts: [], rolledByName: null, rolledAt: null, cancelReason: null } as unknown as MaddoxGameMessageDto["check"],
-})
+const emptySearch = (query: string): MaddoxJournalSearchDto => ({ query, npcs: { items: [], hasMore: false }, memories: { items: [], hasMore: false }, party: { items: [], hasMore: false }, images: { items: [], hasMore: false }, state: null })
 
 type Routes = Record<string, (params: Record<string, string>) => unknown>
 let routes: Routes
@@ -81,10 +54,7 @@ let routes: Routes
 function defaultRoutes(): Routes {
     return {
         "/maddox/campaigns/c1/journal": () => summary(),
-        "/maddox/campaigns/c1/game/messages": (params) =>
-            params.before
-                ? { messages: [message("old1", { kind: "narration", phase: "master", content: "Muito tempo atrás." })], hasMore: false }
-                : { messages: [message("n1", { kind: "narration", phase: "master", content: "Uma taverna em **chamas**." }), message("d1", { memberId: "m2", characterName: "Lyra", content: "Corro." }), pendingCheck], hasMore: true },
+        "/maddox/campaigns/c1/journal/chapters": () => ({ items: [{ id: "ch1", title: "A taverna em chamas", summary: "O grupo fugiu do incêndio.", turnNumber: 2, createdAt: "2026-10-31T10:00:00.000Z" }] }),
         "/maddox/campaigns/c1/journal/npcs": () => ({
             items: [
                 { id: "n1", name: "Bartolomeu", portraitUrl: null, status: "active", publicDescription: "Taverneiro gordo.", updatedAt: "2026-10-31T10:00:00.000Z" },
@@ -110,7 +80,6 @@ function defaultRoutes(): Routes {
                 ? {
                       ...emptySearch("javali"),
                       memories: { items: [{ id: "l1", kind: "local", title: "Taverna do Javali", status: null, excerpt: "Uma taverna do javali na estrada." }], hasMore: false },
-                      messages: { items: [{ id: "n1", kind: "narration", turnNumber: 1, characterName: null, excerpt: "O javali assado.", createdAt: "2026-10-31T10:00:00.000Z" }], hasMore: true },
                       state: { excerpt: "Porão da Taverna do Javali." },
                   }
                 : emptySearch(params.q ?? ""),
@@ -154,9 +123,10 @@ describe("Diário da campanha (Maddox 9) — tela", () => {
         expect(screen.getByTestId("journal-setting")).toHaveTextContent("Um reino coberto de brumas.")
 
         const tabs = screen.getAllByRole("tab")
-        expect(tabs.map((tab) => tab.textContent)).toEqual(["Histórico", "Imagens", "NPCs2", "Locais1", "Missões2", "Anotações1", "Capítulos", "Grupo2"])
+        expect(tabs.map((tab) => tab.textContent)).toEqual(["Capítulos", "Imagens", "NPCs2", "Locais1", "Missões2", "Anotações1", "Grupo2"])
+        expect(screen.queryByRole("tab", { name: /Histórico/ })).toBeNull()
         const active = screen.getByRole("tab", { selected: true })
-        expect(active).toHaveTextContent("Histórico")
+        expect(active).toHaveTextContent("Capítulos")
         expect(active.className).toContain("aria-selected:bg-primary")
     })
 
@@ -197,22 +167,18 @@ describe("Diário da campanha (Maddox 9) — tela", () => {
         expect(await screen.findByRole("alert")).toHaveTextContent("a rede de memórias não respondeu")
     })
 
-    it("histórico em modo leitura: mensagens com divisor, minha fala à direita, sem botão de rolar e com 'Carregar anteriores'", async () => {
-        await renderJournal()
-        const history = await screen.findByTestId("journal-history")
-        expect(within(history).getByRole("log", { name: "Histórico da campanha" })).toBeInTheDocument()
-        expect(within(history).getByTestId("maddox-narration")).toHaveTextContent("Uma taverna em chamas.")
-        expect(within(history).getByTestId("game-declaration").className).toContain("flex-row-reverse")
-        expect(within(history).queryAllByRole("button", { name: /Rolar|JOGAR/i })).toEqual([])
-        fireEvent.click(within(history).getByRole("button", { name: "Carregar anteriores" }))
-        expect(await within(history).findByText("Muito tempo atrás.")).toBeInTheDocument()
-        expect(get).toHaveBeenCalledWith("/maddox/campaigns/c1/game/messages", { params: { before: "n1" } })
-    })
+    it("a aba Histórico saiu (DND-77): o link antigo (?aba=historico&msg=) abre Capítulos sem quebrar", async () => {
+        await renderJournal("aba=historico&msg=n1")
+        expect(screen.getByRole("tab", { selected: true })).toHaveTextContent("Capítulos")
+        expect(await screen.findByText("A taverna em chamas")).toBeInTheDocument()
+        expect(screen.queryByTestId("journal-history")).toBeNull()
+        expect(get).not.toHaveBeenCalledWith("/maddox/campaigns/c1/game/messages", expect.anything())
 
-    it("mensagem aberta pela busca (?msg=) carrega as páginas até ela e fica em destaque", async () => {
-        await renderJournal("msg=old1")
-        const history = await screen.findByTestId("journal-history")
-        await waitFor(() => expect(history.querySelector('[data-message-id="old1"]')).toHaveAttribute("data-highlighted", "true"))
+        fireEvent.click(screen.getByRole("tab", { name: /NPCs/ }))
+        expect(replace).toHaveBeenCalledWith("/campanhas/c1/diario?aba=npcs", { scroll: false })
+        replace.mockReset()
+        fireEvent.click(screen.getByRole("tab", { name: /Capítulos/ }))
+        expect(replace).toHaveBeenCalledWith("/campanhas/c1/diario", { scroll: false })
     })
 
     it("NPCs: descrição pública e morto esmaecido com a situação", async () => {
@@ -295,12 +261,6 @@ describe("Diário da campanha (Maddox 9) — tela", () => {
             if (params.cursor) return failLater()
             return { items: [{ id: "n1", name: "NPC 1", portraitUrl: null, status: "active", publicDescription: "", updatedAt: "2026-10-31T10:00:00.000Z" }], nextCursor: "n1" }
         }
-        let historyCalls = 0
-        routes["/maddox/campaigns/c1/game/messages"] = (params) => {
-            historyCalls++
-            if (params.before) return failLater()
-            return { messages: [message("m1", { kind: "narration", phase: "master", content: "Agora." })], hasMore: true }
-        }
         window.location.hash = "#npc-n99"
         try {
             const view = await renderJournal("aba=npcs")
@@ -311,11 +271,6 @@ describe("Diário da campanha (Maddox 9) — tela", () => {
         } finally {
             window.location.hash = ""
         }
-
-        await renderJournal("msg=antiga")
-        expect(await screen.findByText("Não foi possível carregar esta parte do diário.")).toBeInTheDocument()
-        await new Promise((resolve) => setTimeout(resolve, 500))
-        expect(historyCalls).toBe(2)
     })
 
     it("anotação aberta por link além do limite de páginas: avisa para usar 'Carregar mais'", async () => {
@@ -385,10 +340,10 @@ describe("Diário da campanha (Maddox 9) — tela", () => {
         const results = await screen.findByTestId("journal-search-results", {}, { timeout: 2000 })
         expect(within(results).getByTestId("search-group-state")).toHaveTextContent("Porão da Taverna do Javali.")
         expect(within(results).getByTestId("search-group-places")).toHaveTextContent("Locais (1)")
-        expect(within(results).getByTestId("search-group-messages")).toHaveTextContent("Histórico da mesa (1+)")
+        expect(within(results).queryByTestId("search-group-messages")).toBeNull()
         expect(within(results).getAllByText("Javali", { selector: "mark" }).length).toBeGreaterThan(0)
         const hrefs = within(results).getAllByTestId("journal-search-hit").map((hit) => hit.getAttribute("href"))
-        expect(hrefs).toEqual(["/campanhas/c1/diario", "/campanhas/c1/diario?aba=locais#anotacao-l1", "/campanhas/c1/diario?aba=historico&msg=n1"])
+        expect(hrefs).toEqual(["/campanhas/c1/diario", "/campanhas/c1/diario?aba=locais#anotacao-l1"])
 
         fireEvent.change(box, { target: { value: "dragão" } })
         expect(await screen.findByTestId("journal-search-empty", {}, { timeout: 2000 })).toHaveTextContent("Nada encontrado para “dragão”.")
@@ -417,7 +372,7 @@ const journalImage = (id: string, over: Record<string, unknown> = {}) => ({
 })
 
 describe("Diário da campanha — imagens (DND-22)", () => {
-    it("aba Imagens: badge com a contagem, galeria com turno, origem, legenda e links para a narração ou o NPC", async () => {
+    it("aba Imagens: badge com a contagem, galeria com turno, origem, legenda e link para o NPC (sem link para o histórico)", async () => {
         routes["/maddox/campaigns/c1/journal"] = () => summary({ counts: { npcs: 2, party: 2, images: 2, memories: { local: 1, missao: 2, evento: 1, relacao: 0, fato: 0, outro: 0 } } })
         routes["/maddox/campaigns/c1/journal/images"] = () => ({
             items: [
@@ -433,7 +388,8 @@ describe("Diário da campanha — imagens (DND-22)", () => {
         expect(scene).toHaveTextContent("Novo local ou cenário")
         expect(scene).toHaveTextContent("A taverna em chamas")
         expect(within(scene).getByRole("img", { name: "A taverna em chamas" })).toHaveAttribute("src", "https://cdn/i1.png")
-        expect(within(scene).getByTestId("journal-image-message-link")).toHaveAttribute("href", "/campanhas/c1/diario?aba=historico&msg=n1")
+        expect(within(scene).queryByTestId("journal-image-message-link")).toBeNull()
+        expect(within(scene).queryByRole("link")).toBeNull()
         const portrait = screen.getByTestId("journal-image-i2")
         expect(portrait).toHaveTextContent("Retrato de Bartolomeu")
         expect(within(portrait).getByTestId("journal-image-npc-link")).toHaveAttribute("href", "/campanhas/c1/diario?aba=npcs#npc-npc1")
@@ -488,9 +444,11 @@ describe("Diário da campanha — links e controles", () => {
         expect(journalHref("c1", { npcId: "n1" })).toBe("/campanhas/c1/diario?aba=npcs#npc-n1")
         expect(journalHref("c1", { memoryId: "m1", kind: "missao" })).toBe("/campanhas/c1/diario?aba=missoes#anotacao-m1")
         expect(journalHref("c1", { memoryId: "m1", kind: "fato" })).toBe("/campanhas/c1/diario?aba=anotacoes&tipo=fato#anotacao-m1")
-        expect(journalHref("c1", { messageId: "x" })).toBe("/campanhas/c1/diario?aba=historico&msg=x")
+        expect(journalHref("c1", { tab: "capitulos" })).toBe("/campanhas/c1/diario")
         expect(journalHref("c1", { memberId: "m2" })).toBe("/campanhas/c1/diario?aba=grupo#personagem-m2")
-        expect(parseJournalTab("qualquer")).toBe("historico")
+        expect(parseJournalTab("qualquer")).toBe("capitulos")
+        expect(parseJournalTab("historico")).toBe("capitulos")
+        expect(parseJournalTab(null)).toBe("capitulos")
         expect(parseJournalTab("missoes")).toBe("missoes")
     })
 

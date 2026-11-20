@@ -29,8 +29,3 @@ export function isHiddenPlayerAction(message: PlayerActionMessage, viewer: Playe
     if (String(message.memberId) === viewer.memberId) return false
     return !isCombatTurnSummary(message)
 }
-
-/** Filtro Mongo que tira das consultas as declarações ocultas para `memberId` (a mesma regra de `isHiddenPlayerAction`). */
-export const hiddenPlayerActionsFilter = (memberId: Types.ObjectId) => ({
-    $nor: [{ kind: "declaration", memberId: { $nin: [memberId, null] }, combatTurn: { $ne: true }, content: { $not: COMBAT_TURN_SUMMARY_PATTERN } }],
-})

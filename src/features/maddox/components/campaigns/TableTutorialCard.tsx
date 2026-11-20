@@ -165,7 +165,7 @@ export function TableTutorialCard({ campaign, color, footer }: { campaign: Maddo
                                 <MasterTalkIconButton />
                             </DemoFrame>
                         </ToolCard>
-                        <ToolCard variants={item} hover={hover} color={rarityColors.rare} title="Diário" text="Histórico, NPCs, locais, missões e a busca — só o que os jogadores sabem.">
+                        <ToolCard variants={item} hover={hover} color={rarityColors.rare} title="Diário" text="Capítulos, NPCs, locais, missões e a busca — só o que os jogadores sabem.">
                             <DemoFrame testId="tutorial-demo-journal">
                                 <JournalLinkButton campaignId={campaign.id} data-testid="tutorial-journal-link" />
                             </DemoFrame>
