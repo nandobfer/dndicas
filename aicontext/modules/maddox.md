@@ -1736,10 +1736,11 @@ mestre e respostas, narrações, cards e ações do combate tático e o **resumo
 marca são reconhecidos pelo começo do texto (`COMBAT_TURN_SUMMARY_PATTERN`, "Vez de … (rodada do combate)").
 
 **Leitura.** Só na leitura: o banco guarda o texto inteiro e o narrador o recebe completo. `messagesDto` (estado da mesa e
-`GET …/game/messages`, também o histórico do Diário) entrega a mensagem oculta na mesma posição, com `content: ""` e
+`GET …/game/messages`) entrega a mensagem oculta na mesma posição, com `content: ""` e
 `hiddenAction: true` (o texto não sai do servidor); a tela (`GameMessageList`) mostra a linha discreta "Fulano declarou sua ação."
-(`data-testid="game-action-hidden"`, mesmas classes do `game-pass`). A busca do Diário aplica `hiddenPlayerActionsFilter(memberId)`
-na consulta, antes do limite. Vale para todos os membros, inclusive o dono. Desligar devolve os textos a todos.
+(`data-testid="game-action-hidden"`, mesmas classes do `game-pass`). Desde a DND-77 as falas da mesa não entram
+na busca do Diário (e o Diário não tem mais aba Histórico), então nenhuma declaração sai por ali; quem voltar a buscar em mensagens
+precisa reaplicar esta regra na própria consulta, antes do limite. Vale para todos os membros, inclusive o dono. Desligar devolve os textos a todos.
 
 Sem permissão nova: a configuração exige ser o dono e a leitura, `maddox.play` e ser membro.
 

@@ -111,6 +111,28 @@ describe("Janela do diário na mesa (DND-77)", () => {
         noNavigation()
     })
 
+    it("leiaute: as classes da janela prevalecem sobre as do modal base (tela cheia no celular, centralizada e limitada no desktop)", async () => {
+        renderWithQueryClient(<Table />)
+        const dialog = await openWindow()
+        const classes = dialog.className.split(/\s+/)
+        expect(classes).toEqual(expect.arrayContaining(["h-[100dvh]", "max-h-[100dvh]", "max-w-none", "rounded-none", "overflow-hidden", "sm:h-[85vh]", "sm:max-h-[85vh]", "sm:max-w-6xl", "sm:rounded-xl"]))
+        // O merge de classes tira as do modal base que brigariam com as da janela.
+        expect(classes).not.toContain("max-w-4xl")
+        expect(classes).not.toContain("max-h-[90vh]")
+        expect(classes).not.toContain("overflow-y-auto")
+        expect(classes).not.toContain("rounded-xl")
+        // O corpo do modal fica sem o padding base; a rolagem é só a da área interna.
+        const scroll = within(dialog).getByTestId("journal-window-scroll")
+        const body = scroll.parentElement!
+        expect(body.className.split(/\s+/)).toEqual(expect.arrayContaining(["p-0", "flex", "min-h-0", "flex-1", "flex-col"]))
+        expect(body.className.split(/\s+/)).not.toContain("p-6")
+        expect(scroll.className.split(/\s+/)).toEqual(expect.arrayContaining(["min-h-0", "flex-1", "overflow-y-auto", "overscroll-contain"]))
+        // O cabeçalho reserva espaço à direita para o X do modal (absolute right-4 top-4).
+        const title = within(dialog).getByText("Diário — Brumas")
+        expect(title.closest("div")!.className.split(/\s+/)).toContain("pr-12")
+        expect(within(dialog).getByRole("button", { name: "Fechar" })).toBeInTheDocument()
+    })
+
     it("as abas trocam dentro da janela, sem mexer na URL da mesa", async () => {
         renderWithQueryClient(<Table />)
         const dialog = await openWindow()

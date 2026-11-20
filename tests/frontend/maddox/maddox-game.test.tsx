@@ -26,8 +26,8 @@ const acquireChannel = vi.fn(() => channel)
 const releaseChannel = vi.fn()
 
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn(), warning: vi.fn() } }))
-const nav = vi.hoisted(() => ({ replace: vi.fn() }))
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), replace: nav.replace, refresh: vi.fn() }), usePathname: () => "/campanhas/c1/mesa" }))
+const nav = vi.hoisted(() => ({ replace: vi.fn(), push: vi.fn() }))
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: nav.push, replace: nav.replace, refresh: vi.fn() }), usePathname: () => "/campanhas/c1/mesa" }))
 vi.mock("@/core/hooks/useAuth", () => ({ useAuth: () => ({ userId: "u-owner", isSignedIn: true, isLoaded: true, can: () => true }) }))
 const addWindow = vi.fn()
 /**
@@ -1104,6 +1104,48 @@ describe("mesa Maddox — testes pedidos pelo Maddox (Maddox 5)", () => {
         expect(within(dialog).queryByTestId("search-group-messages")).toBeNull()
         fireEvent.click(hits[0]!)
         await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument())
+    })
+
+    it("Diário (DND-77): o botão do cabeçalho abre o diário da campanha numa janela sobre a mesa, sem navegar", async () => {
+        const state = gameState()
+        const journal = {
+            campaignId: "c1",
+            name: "Jornada do Diário",
+            rigor: state.rigor,
+            status: "active",
+            turnNumber: 2,
+            myMemberId: "m2",
+            maddoxAvatarUrl: null,
+            setting: "",
+            openingSituation: "",
+            state: { scene: "", location: "", situation: "", pendingDecision: "", updatedTurn: null },
+            activeQuests: [],
+            counts: { npcs: 0, party: 0, images: 0, chapters: 0, memories: { local: 0, missao: 0, evento: 0, relacao: 0, fato: 0, outro: 0 } },
+            memoriesUnavailable: false,
+        }
+        get.mockImplementation(async (url: string) => {
+            if (url === "/maddox/campaigns/c1/journal") return ok(journal)
+            if (url === "/maddox/campaigns/c1/journal/chapters") return ok({ items: [] })
+            return ok(state)
+        })
+        nav.replace.mockReset()
+        nav.push.mockReset()
+        renderWithQueryClient(<GamePage campaignId="c1" />)
+        await screen.findByTestId("game-page")
+        expect(screen.queryByRole("dialog")).toBeNull()
+
+        fireEvent.click(screen.getByTestId("journal-link"))
+        const dialog = await screen.findByRole("dialog")
+        expect(await within(dialog).findByText("Diário — Jornada do Diário")).toBeInTheDocument()
+        expect(within(dialog).getByRole("tab", { selected: true })).toHaveTextContent("Capítulos")
+        expect(get).toHaveBeenCalledWith("/maddox/campaigns/c1/journal")
+        expect(screen.getByTestId("game-page")).toBeInTheDocument()
+        expect(nav.replace).not.toHaveBeenCalled()
+        expect(nav.push).not.toHaveBeenCalled()
+
+        fireEvent.keyDown(dialog, { key: "Escape" })
+        await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull())
+        expect(screen.getByTestId("game-page")).toBeInTheDocument()
     })
 
     it("regras puras: situação 'Rolando teste', faixa com vários nomes e sem recarga periódica esperando rolagens", () => {
