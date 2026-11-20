@@ -1183,6 +1183,67 @@ Alteração de regra simulada na resposta mockada precisa de fonte: no mock, cha
 Testes que abrem combate tático mockam `@/features/maddox/server/combat-prep-ai` com `combatPrepAiModule`
 (`tests/helpers/combat-prep-mock.ts`, padrão "sem mudanças") e esperam `waitForCombatPreps()` (o `settleCampaign` já espera).
 
+## Cache da preparação da mesa de combate (DND-78)
+
+A preparação de cada ficha (DND-41) fica guardada e é **reaproveitada** no combate seguinte quando nada relevante mudou na
+ficha; se algo mudou, o Maddox prepara **só o que mudou**. Sem permissão nova (`maddox.play`; repreparar = dono da campanha).
+
+**Modelo `maddox_combat_prep_caches`** (`models/maddox-combat-prep-cache.ts`, único por `campaignId + characterId`): `sheetId`,
+`fingerprint { context, core, parts, names }`, `catalog [{ ref: "Tipo:id", hash }]`, `overlay`, `riders`, `preparedAt`,
+`sourcePrepId`/`sourceCombatId` e `invalidatedAt`/`invalidatedBy`. Nunca vale para outra campanha, outro personagem ou outra ficha.
+
+**Impressão digital** (parte pura em `combat-prep-cache.ts`; servidor em `server/combat-prep-cache.ts`, `snapshotOf`/`readPrepSnapshot`):
+- `core` = base da ficha (nível, classe/subclasse, espécie, origem, atributos, salvaguardas, perícias, proficiências com armas,
+  treino com armaduras, maestrias, conjuração e overrides, **total** de espaços, CA base/Defesa sem Armadura, textos de características).
+  Mudou = **ficha inteira** (decisão do dono).
+- `parts` = uma por ataque (`attack:<id>`), item (`item:<id>`), característica (`trait:<id>`), talento (`feat:<id>`), magia
+  (`spell:<id>`) e recurso com cargas (`charge:<id>`, só o total).
+- Fora: PV, cargas e espaços **usados**, moedas, quantidade exata (só "tem ou não"), bônus de CA temporários, exaustão e `updatedAt`.
+- `context` = `MADDOX_COMBAT_PREP_CACHE_VERSION` + `combatPrepInstructions` + grau da campanha: mudou = ficha inteira. **Suba a
+  constante** ao mudar o contrato da resposta, o prompt da revisão ou `interpretPrep`.
+- Catálogo **por entidade usada** (decisão do dono): hash do conteúdo de cada entidade citada pela ficha (`references` encontradas)
+  ou lida pelo Maddox na preparação (`reads.refs`), relido na abertura (`catalogHashes` → `catalogDocsByIds`). Mudou = ficha inteira.
+  Leitura do catálogo que **falha** também = ficha inteira (`catalogStillMatches`), e a gravação do cache não acontece: "ausente"
+  só vale para entidade que saiu do catálogo, nunca para leitura que falhou.
+- Os rótulos do que mudou (card e prompt) usam o nome limpo (`plainText`); o hash usa o dado cru.
+
+**Decisão** (`decidePrepCache` + `prepPlan` em `runCombatPrep`, depois da conferência de quem está a 0 PV, que sempre roda):
+- `hit` → sem IA: `ready` com o overlay e os riders do cache, `source { kind: "cache", cachedAt, kept }`, auditoria `cache-hit`.
+- `partial` → poda o overlay guardado (`pruneOverlay`: sai o que depende de partes alteradas/removidas, por `optionDeps` — `weapon:`/
+  `offhand:`/`cleave:`/`item:` → `item:<id>`, `spell:`, `ability:trait|feat:` — e `deps` dos acréscimos). Só remoções = sem IA.
+  Senão `reviewCombatSheet` recebe `scope { parts, kept }` (seção "Preparação parcial") e `interpretPrep(…, scope)` recusa, com
+  `OUT_OF_SCOPE_REFUSAL`, correção da ficha da base ou de parte que não mudou (`sheetChangePart`; criações passam), alteração/remoção
+  de opção fora do escopo e acréscimo ligado a recurso/item que não mudou (acréscimo sem dependência fica ligado às partes que
+  mudaram). Mescla com `mergeOverlay`. `source { kind: "partial", changedParts, kept }`, auditoria `cache-partial`.
+- `full` → o fluxo de sempre; `source { kind: "full", reason }` (`PREP_FULL_REASONS`: base, contexto, outra ficha, catálogo,
+  repreparação pedida), auditoria `cache-full` quando havia cache.
+- Pergunta ao jogador (DND-51), conflito de ficha, `jobId` (DND-75) e proteção contra apagar campos seguem iguais.
+
+**Gravação do cache** (`savePrepCache`): ao terminar `ready` (inclusive do cache), com a impressão lida **depois** das correções
+que o Maddox gravou; se a ficha mudar nesse meio-tempo (`readSheetStamp` antes/depois), não grava. Falha só vai ao log. Cada
+entrada do overlay leva `preparedAt` e, quando reaproveitada, `fromCache`. Pedido de ajuste aceito atualiza o cache
+(`refreshPrepCacheOverlay`): a impressão e o catálogo só são regravados se a ficha lida logo antes do ajuste e o catálogo ainda
+batem com o cache; senão só o overlay e os riders mudam (a mudança da ficha ou do catálogo é preparada no próximo combate).
+"Repreparar ficha" pedido durante a preparação não é desfeito: a gravação só troca o cache se `invalidatedAt` ainda é o lido
+no veredito (`readInvalidatedAt`). A disponibilidade da IA é conferida antes da checagem de 0 PV (que gasta a marca
+`downedCheckedAt`), como antes da DND-78. "Seguir sem preparação", falha e descarte não gravam. Reiniciar a campanha apaga o cache
+(`clearCampaignPrepCache`); voltar a um turno não mexe nele (a impressão protege).
+
+**Repreparar ficha** (`POST …/game/combat/prep-cache/[characterId]/invalidate`, `invalidateCombatPrepCache`): só o dono
+(403 `OWNER_ONLY`), grava `invalidatedAt`, auditoria `decision: "reprepare"`; **só vale para o próximo combate** (decisão do dono:
+a mesa atual não trava). O participante leva `prepCache { characterId, preparedAt, invalidated }` só para o dono.
+
+**Tela.** `CombatPrepCard` mostra a origem (`prepSourceSummary` em `combat-prep-source.ts`): "Mesa reaproveitada da preparação de
+dd/mm hh:mm: nada mudou na ficha", "Preparada agora só o que mudou na ficha:" com a lista, ou "Preparada agora (ficha inteira)" com o
+motivo. O selo "Pronto" da ordem tem o tooltip da origem (`slot.prep.source`). No `CombatActionMenu`, o "Ajustado pelo Maddox"
+ganha o chip "do cache (dd/mm)" ou "preparado agora" (`option.adjusted.origin`). No card "Na mesa", o dono vê "Repreparar a ficha
+… no próximo combate" (`TurnPanel`, com confirmação; bloqueado quando já agendado). Hook `useInvalidateCombatPrepCache`.
+
+**Testes.** `tests/backend/maddox/combat-prep-cache.test.ts` (parte pura e escopo do `interpretPrep`), bloco DND-78 de
+`tests/backend/maddox/tactical-combat.test.ts` (acerto, parcial, só remoção, base/catálogo, isolamento, repreparar, seguir sem
+preparação, ajuste aceito; ficha mudando entre os carimbos, catálogo falhando, repreparar durante o job, ajuste sobre ficha ou
+catálogo alterados e provedor indisponível com 0 PV — ganchos `cacheHooks` sobre `readSheetStamp` e `catalogDocsByIds`), `campaign-reset.test.ts` e `tests/frontend/maddox/maddox-combat-prep-cache.test.tsx`.
+
 ## Catálogo como fonte, maestrias, furtivo depois do acerto, Esconder-se e PV (DND-49)
 
 Em todos os graus com combate tático (`MADDOX_TACTICAL_COMBAT_RIGORS`). Sem permissão nova (`maddox.play` e ser membro cobrem a rota do

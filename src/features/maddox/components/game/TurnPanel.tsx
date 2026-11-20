@@ -2,7 +2,7 @@
 
 import { MADDOX_MASTER_REVIEWING_MESSAGE } from "../../constants"
 import { useState } from "react"
-import { Dices, SkipForward, Swords, Users } from "lucide-react"
+import { Dices, RotateCcw, SkipForward, Swords, Users } from "lucide-react"
 import { Button } from "@/components/ui/opex/button"
 import { IconAction } from "@/components/ui/opex/icon-action"
 import { ConfirmDialog } from "@/components/ui/opex/confirm-dialog"
@@ -22,14 +22,18 @@ interface Props {
     /** Dono rola o teste pendente no lugar do jogador ausente (Maddox 5). */
     rollingFor?: boolean
     onRollFor?: (checkId: string, characterName: string) => void
+    /** DND-78: dono pede "Repreparar ficha" (o próximo combate prepara a ficha inteira). */
+    reprepping?: boolean
+    onReprepare?: (characterId: string, characterName: string) => void
 }
 
 /**
  * Card único de personagens da mesa: participantes com presença, situação no turno e "Pular" (dono) para quem está
  * sendo aguardado. No combate tático (DND-75) o mesmo card vira a ordem de iniciativa, com os combatentes do mestre.
  */
-export function TurnPanel({ state, presence, color, skipping, onSkip, rollingFor = false, onRollFor }: Props) {
+export function TurnPanel({ state, presence, color, skipping, onSkip, rollingFor = false, onRollFor, reprepping = false, onReprepare }: Props) {
     const [confirming, setConfirming] = useState<MaddoxGameParticipantDto | null>(null)
+    const [confirmingReprep, setConfirmingReprep] = useState<MaddoxGameParticipantDto | null>(null)
     const [confirmingRoll, setConfirmingRoll] = useState<{ checkId: string; characterName: string } | null>(null)
     const canRollFor = state.me.isOwner && state.me.ready && state.status === "active" && state.turn.phase === "master" && state.turn.awaitingChecks
     const canSkip = state.me.isOwner && state.me.ready && state.status === "active" && state.turn.phase === "players"
@@ -38,7 +42,18 @@ export function TurnPanel({ state, presence, color, skipping, onSkip, rollingFor
     const actionsFor = (participant: MaddoxGameParticipantDto) => {
         const rolls = canRollFor && participant.memberId !== state.me.memberId ? state.turn.pendingChecks.filter((check) => check.memberId === participant.memberId) : []
         const skippable = canSkip && participant.eligible && !participant.declared
-        if (rolls.length === 0 && !skippable) return null
+        // DND-78: o dono vê a preparação guardada do personagem e pode pedir a repreparação no próximo combate.
+        const cache = state.me.isOwner && onReprepare ? (participant.prepCache ?? null) : null
+        const reprep = cache ? (
+            <IconAction
+                icon={RotateCcw}
+                label={`Repreparar a ficha de ${participant.characterName ?? participant.name} no próximo combate`}
+                disabledReason={cache.invalidated ? "Repreparação já agendada para o próximo combate." : undefined}
+                busy={reprepping}
+                onClick={() => setConfirmingReprep(participant)}
+            />
+        ) : null
+        if (rolls.length === 0 && !skippable && !reprep) return null
         return (
             <>
                 {rolls.map((check) => (
@@ -47,6 +62,7 @@ export function TurnPanel({ state, presence, color, skipping, onSkip, rollingFor
                     </Button>
                 ))}
                 {skippable && <IconAction icon={SkipForward} label={`Pular a vez de ${participant.characterName ?? participant.name}`} busy={skipping} onClick={() => setConfirming(participant)} />}
+                {reprep}
             </>
         )
     }
@@ -112,6 +128,19 @@ export function TurnPanel({ state, presence, color, skipping, onSkip, rollingFor
                 onConfirm={() => {
                     if (confirming) onSkip(confirming.memberId)
                     setConfirming(null)
+                }}
+            />
+            <ConfirmDialog
+                open={confirmingReprep !== null}
+                onOpenChange={(open) => !open && setConfirmingReprep(null)}
+                title={`Repreparar a ficha de ${confirmingReprep?.characterName ?? confirmingReprep?.name ?? "personagem"}?`}
+                description="A preparação guardada deixa de valer: no próximo combate, o Maddox prepara a ficha inteira de novo. O combate atual não muda."
+                confirmLabel="Repreparar no próximo combate"
+                pending={reprepping}
+                onConfirm={() => {
+                    const cache = confirmingReprep?.prepCache
+                    if (confirmingReprep && cache) onReprepare?.(cache.characterId, confirmingReprep.characterName ?? confirmingReprep.name)
+                    setConfirmingReprep(null)
                 }}
             />
             <ConfirmDialog

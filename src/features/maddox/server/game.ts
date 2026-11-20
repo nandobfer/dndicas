@@ -1112,7 +1112,7 @@ async function messagesDto(all: MessageDoc[], viewer: MessagesViewer): Promise<M
             ...(message.kind === "narration" ? { actionOptions: actionOptionsFor(message, viewer) } : {}),
             // O motivo bruto do provedor só vai ao dono; para os demais o campo nem é serializado (DND-27).
             ...opexNpcFailuresDto(message, viewer, knownFailureNpcs),
-            ...(message.kind === "combat-prep" && message.combatPrep ? { combatPrep: { characterName: message.combatPrep.characterName, changes: message.combatPrep.changes ?? [], question: message.combatPrep.question ? { ...message.combatPrep.question, deadline: new Date(message.combatPrep.question.deadline).toISOString(), settled: message.combatPrep.question.settled !== false, halted: message.combatPrep.question.halted ?? null } : null } } : {}),
+            ...(message.kind === "combat-prep" && message.combatPrep ? { combatPrep: { characterName: message.combatPrep.characterName, changes: message.combatPrep.changes ?? [], source: message.combatPrep.source ?? null, question: message.combatPrep.question ? { ...message.combatPrep.question, deadline: new Date(message.combatPrep.question.deadline).toISOString(), settled: message.combatPrep.question.settled !== false, halted: message.combatPrep.question.halted ?? null } : null } } : {}),
             ...(message.kind === "rest" && rests?.has(String(message._id)) ? { rest: rests.get(String(message._id))! } : {}),
             ...(message.kind === "rest-request" && message.restId ? { restId: String(message.restId) } : {}),
             ...(message.kind === "rewind" && message.rewindNotice ? { rewindNotice: { event: message.rewindNotice.event, turnNumber: message.rewindNotice.turnNumber, originTurn: message.rewindNotice.originTurn } } : {}),
@@ -1295,12 +1295,15 @@ export async function getGameState(campaignId: string, userId: string): Promise<
         log.warn({ err: error instanceof Error ? error.message : String(error), campaignId: String(campaign._id) }, `[maddox] ${what} da mesa indisponível`)
         return null
     }
-    const [armorClasses, hitPoints] = withSheets
+    const viewerOwnsCampaign = campaign.ownerId === userId
+    const [armorClasses, hitPoints, prepCaches] = withSheets
         ? await Promise.all([
               import("./armor-class-bonuses").then((module) => module.loadArmorClassSummaries(seatSheetIds)).catch(seatLoadFailed("CA")),
               import("./seat-hit-points").then((module) => module.loadHitPointsSummaries(seatSheetIds)).catch(seatLoadFailed("PV")),
+              // DND-78: o dono vê, por personagem, se há preparação de combate guardada (e pode pedir "Repreparar ficha").
+              viewerOwnsCampaign ? import("./combat-prep-cache").then((module) => module.loadPrepCacheStatus(campaign._id)).catch(seatLoadFailed("cache da preparação")) : Promise.resolve(null),
           ])
-        : [null, null]
+        : [null, null, null]
     const participantHitPoints = (character: CharacterDoc | null): MaddoxGameParticipantDto["hp"] => (character?.sheetId && hitPoints ? hitPoints.get(String(character.sheetId)) : undefined)
     const participantArmorClass = (character: CharacterDoc | null): MaddoxGameParticipantDto["armorClass"] => {
         const calc = character?.sheetId && armorClasses ? armorClasses.get(String(character.sheetId)) : undefined
@@ -1329,6 +1332,10 @@ export async function getGameState(campaignId: string, userId: string): Promise<
             ...(() => {
                 const hp = participantHitPoints(character)
                 return hp ? { hp } : {}
+            })(),
+            ...(() => {
+                const cache = character && prepCaches ? prepCaches.get(String(character._id)) : undefined
+                return cache ? { prepCache: { characterId: String(character!._id), ...cache } } : {}
             })(),
         }))
         .sort((a, b) => (a.role === "owner" ? 0 : a.opex ? 2 : 1) - (b.role === "owner" ? 0 : b.opex ? 2 : 1))

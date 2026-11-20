@@ -9,9 +9,9 @@ import { plainText, type CombatOption, type CombatOptions } from "../combat-opti
 import { detectSneakAttack, riderLabel } from "../combat-prep"
 import { combatAddSchema, combatModifySchema, combatPrepResponseSchema, combatRemoveSchema, combatSheetChangeSchema, parseList, requiresCatalogSource, sneakAttackSchema, type CombatSheetChange } from "../combat-prep-schemas"
 import { abilityModifier } from "../combat-rules"
-import { emptyOverlay, type CombatOptionPatch, type CombatPrepChange, type CombatPrepOverlay, type CombatPrepRider, type PreparedCombatOption, type TacticalCharacterState } from "../combat-types"
+import { emptyOverlay, type CombatOptionPatch, type CombatPrepChange, type CombatPrepOverlay, type CombatPrepRider, type CombatPrepSource, type PreparedCombatOption, type TacticalCharacterState } from "../combat-types"
 import { MADDOX_CAMPAIGN_AUDIT_ENTITY, MADDOX_COMBAT_PREP_ANSWER_TIMEOUT_MS, MADDOX_COMBAT_PREP_BLOCKING_STATUSES, MADDOX_COMBAT_PREP_CONFLICT_RETRIES, MADDOX_COMBAT_PREP_EXPIRED_NOTICE, MADDOX_COMBAT_PREP_HARD_LIMIT_ERROR, MADDOX_COMBAT_PREP_HARD_LIMIT_MS, MADDOX_COMBAT_PREP_STALE_MS, MADDOX_COMBAT_PREP_TRAIT_TEXT_MAX } from "../constants"
-import { MaddoxCampaignMessageModel, MaddoxCampaignModel, MaddoxCombatPrepModel, type IMaddoxCampaign, type IMaddoxCombatPrep } from "../models"
+import { MaddoxCampaignMessageModel, MaddoxCampaignModel, MaddoxCombatPrepModel, type IMaddoxCampaign, type IMaddoxCombatPrep, type IMaddoxCombatPrepCache } from "../models"
 import { masteryKeyFromName, masteryLabel, masteryLimit, type MaddoxMasteryKey } from "../weapon-mastery"
 import { MADDOX_HIT_POINT_OPERATIONS } from "../hit-points-ops"
 import { isCombatPrepStalled } from "../combat-prep-stall"
@@ -19,6 +19,8 @@ import { catalogReadText, checkCatalogSource, createCatalogReadLog, type Catalog
 import { catalogReferencesText, itemMastery, mentionCandidates, resolveCatalogReferences, type CatalogReference, type CatalogReferenceCandidate } from "./catalog-references"
 import { describeSheetChange } from "./combat-sheet-writes"
 import { coinsText, type SheetCoins } from "../coin-rules"
+import { addedOptionDeps, changedPartLabels, optionDeps, overlaySize, prepFingerprint, pruneOverlay, sheetChangePart, type PrepCacheDecision, type PrepFingerprint, type PrepSheetSnapshot } from "../combat-prep-cache"
+import { snapshotOf } from "./combat-prep-cache"
 
 /**
  * Preparação da mesa de combate (DND-41) — SOMENTE servidor. Ao abrir o combate tático, cada personagem (inclusive os
@@ -177,6 +179,8 @@ export interface PrepSheetContext {
     references: CatalogReference[]
     /** DND-49: maestrias — itens de catálogo da ficha com a maestria deles, as já registradas e a base do limite. */
     mastery: MasteryContext
+    /** DND-78: retrato da ficha para a impressão digital do cache da preparação. */
+    snapshot: PrepSheetSnapshot
 }
 
 export interface MasteryContext {
@@ -296,6 +300,7 @@ export async function loadPrepSheet(state: TacticalCharacterState, campaignId?: 
         itemIds: new Set(items.map((item) => String(item._id))),
         references,
         mastery,
+        snapshot: snapshotOf(sheet, { attacks, traits, feats, spells, items }),
     }
 }
 
@@ -387,13 +392,15 @@ const repeatsMasteryAttack = (item: { label: string; detail?: string; reason: st
 export const CATALOG_REFUSAL_PREFIX = "Não confirmada no catálogo do DnDicas"
 const FIXED_OPTION_REFUSAL = "esta opção segue a regra fixa do servidor e não é alterada na preparação"
 const MASTERY_ATTACK_REFUSAL = "os ataques das maestrias (Ágil, Trespassar) são resolvidos pelo servidor"
+/** DND-78: na preparação parcial, o Maddox só mexe no que mudou na ficha; o resto veio do cache. */
+export const OUT_OF_SCOPE_REFUSAL = "fora do que mudou na ficha desde a última preparação (o resto continua como foi preparado)"
 
 /**
  * Confere a resposta da IA contra a lista base, a ficha e as consultas ao catálogo desta execução (DND-49): ids
  * desconhecidos e valores fora da faixa são descartados; alterações de regra sem fonte confirmada (`source` lido e com o
  * trecho no texto) são recusadas e aparecem no card com o motivo.
  */
-export function interpretPrep(raw: unknown, context: Pick<PrepSheetContext, "options" | "chargeIds" | "itemIds"> & { mastery?: MasteryContext }, reads: CatalogReadLog = createCatalogReadLog()): PrepInterpretation {
+export function interpretPrep(raw: unknown, context: Pick<PrepSheetContext, "options" | "chargeIds" | "itemIds"> & { mastery?: MasteryContext }, reads: CatalogReadLog = createCatalogReadLog(), scope?: ReadonlySet<string>): PrepInterpretation {
     const response = combatPrepResponseSchema.parse(raw ?? {})
     const all = [...context.options.action, ...context.options.bonus, ...context.options.reactions]
     const byId = new Map(all.map((option) => [option.id, option]))
@@ -413,8 +420,15 @@ export function interpretPrep(raw: unknown, context: Pick<PrepSheetContext, "opt
 
     const sheetChanges: CombatSheetChange[] = []
     const masteries = new Set(context.mastery?.current ?? [])
+    // DND-78: na preparação parcial, só passa o que mexe numa parte da ficha que mudou (o resto veio do cache).
+    const outOfScope = (deps: readonly string[]) => Boolean(scope) && !deps.some((dep) => scope!.has(dep))
     for (const change of sheetParsed.valid) {
         const label = describeSheetChange(change)
+        const part = sheetChangePart(change)
+        if (scope && part !== "new" && !scope.has(part)) {
+            refuse({ area: "ficha", label, before: "—", after: "proposta pelo Maddox", reason: change.reason }, OUT_OF_SCOPE_REFUSAL, false)
+            continue
+        }
         if (requiresCatalogSource("sheet", change)) {
             const problem = sourceProblem(change.source)
             if (problem) {
@@ -454,6 +468,10 @@ export function interpretPrep(raw: unknown, context: Pick<PrepSheetContext, "opt
         }
         if (isFixedServerOption(item.optionId)) {
             refuse({ area: "opcao", label: option.label, before: option.detail, after: item.detail ?? option.detail, reason: item.reason }, FIXED_OPTION_REFUSAL, false)
+            continue
+        }
+        if (outOfScope(optionDeps(item.optionId))) {
+            refuse({ area: "opcao", label: option.label, before: option.detail, after: item.detail ?? option.detail, reason: item.reason }, OUT_OF_SCOPE_REFUSAL, false)
             continue
         }
         if (requiresCatalogSource("modify", item)) {
@@ -496,6 +514,10 @@ export function interpretPrep(raw: unknown, context: Pick<PrepSheetContext, "opt
             refuse({ area: "opcao", label: option.label, before: option.detail, after: "removida", reason: item.reason }, FIXED_OPTION_REFUSAL, false)
             continue
         }
+        if (outOfScope(optionDeps(item.optionId))) {
+            refuse({ area: "opcao", label: option.label, before: option.detail, after: "removida", reason: item.reason }, OUT_OF_SCOPE_REFUSAL, false)
+            continue
+        }
         overlay.remove.push({ optionId: item.optionId, reason: item.reason })
         optionChanges.push({ area: "opcao", label: option.label, before: option.detail, after: "removida", reason: item.reason, applied: true })
     }
@@ -512,6 +534,12 @@ export function interpretPrep(raw: unknown, context: Pick<PrepSheetContext, "opt
         const proposed = `${ECONOMY_TEXT[item.economy]}${item.detail ? ` · ${item.detail}` : ""}`
         if (repeatsMasteryAttack(item)) {
             refuse({ area: "opcao", label: item.label, before: "não existia", after: proposed, reason: item.reason }, MASTERY_ATTACK_REFUSAL, false)
+            continue
+        }
+        const deps = addedOptionDeps({ requires: { chargeId: item.chargeId ?? null, itemId: item.itemId ?? null } })
+        // Sem recurso ou item que a libere, a opção acrescentada na parcial fica ligada às partes que mudaram.
+        if (deps[0] !== "core" && outOfScope(deps)) {
+            refuse({ area: "opcao", label: item.label, before: "não existia", after: proposed, reason: item.reason }, OUT_OF_SCOPE_REFUSAL, false)
             continue
         }
         if (requiresCatalogSource("add", item)) {
@@ -538,7 +566,7 @@ export function interpretPrep(raw: unknown, context: Pick<PrepSheetContext, "opt
             ...(item.trigger ? { trigger: item.trigger } : {}),
             requires: { chargeId: item.chargeId ?? null, itemId: item.itemId ?? null, spellCircle: item.spellCircle ?? null, concentration: item.concentration ?? false },
         }
-        overlay.add.push({ option, reason: item.reason })
+        overlay.add.push({ option, reason: item.reason, ...(scope ? { deps: deps[0] === "core" ? [...scope] : deps } : {}) })
         if (item.fromChange) links.set(item.fromChange, id)
         optionChanges.push({ area: "opcao", label: item.label, before: "não existia", after: `${ECONOMY_TEXT[item.economy]}${option.detail ? ` · ${option.detail}` : ""}`, reason: item.reason, applied: true })
     }
@@ -638,6 +666,74 @@ async function haltQuestionCards(cards: readonly Pick<PrepDoc, "_id" | "campaign
     for (const campaignId of new Set(cards.map((card) => String(card.campaignId)))) await publishGameChanged(new Types.ObjectId(campaignId))
 }
 
+// ── Cache da preparação (DND-78) ──────────────────────────────────────────────
+
+interface PrepPlan {
+    decision: PrepCacheDecision
+    source: CombatPrepSource
+    /** Overlay do cache que continua valendo (acerto ou parcial); `null` = ficha inteira. */
+    kept: CombatPrepOverlay | null
+    /** Partes da ficha que o Maddox revisa agora (só na parcial). */
+    scope: Set<string> | null
+    scopeText: string[]
+    /** Nada a preparar com a IA (acerto, ou parcial em que só saíram partes da ficha). */
+    reuseOnly: boolean
+}
+
+/** O que a preparação faz com o veredito do cache: reaproveita, prepara só o que mudou ou a ficha inteira. */
+function prepPlan(decision: PrepCacheDecision, cache: IMaddoxCombatPrepCache | null, current: PrepFingerprint): PrepPlan {
+    const cachedAt = cache ? new Date(cache.preparedAt).toISOString() : null
+    if (decision.kind === "full" || !cache) {
+        const reason = decision.kind === "full" ? decision.reason : null
+        return { decision, source: { kind: "full", reason }, kept: null, scope: null, scopeText: [], reuseOnly: false }
+    }
+    if (decision.kind === "hit") {
+        const kept = pruneOverlay(cache.overlay ?? emptyOverlay(), new Set())
+        return { decision, source: { kind: "cache", cachedAt, kept: overlaySize(kept) }, kept, scope: null, scopeText: [], reuseOnly: true }
+    }
+    const stale = new Set([...decision.changed, ...decision.removed])
+    const kept = pruneOverlay(cache.overlay ?? emptyOverlay(), stale)
+    const changedParts = changedPartLabels(decision, cache.fingerprint, current)
+    const touched = [...decision.added, ...decision.changed]
+    const source: CombatPrepSource = { kind: "partial", cachedAt, changedParts, kept: overlaySize(kept) }
+    if (!touched.length) return { decision, source, kept, scope: null, scopeText: [], reuseOnly: true }
+    const scopeText = touched.map((key) => `- ${current.names[key] ?? key} [${key}]${decision.added.includes(key) ? " (novo)" : " (alterado)"}`)
+    return { decision, source, kept, scope: new Set(touched), scopeText, reuseOnly: false }
+}
+
+/** Ajustes mantidos do cache, para o Maddox não repetir nem desfazer na parcial. */
+function keptText(overlay: CombatPrepOverlay): string {
+    const lines = [
+        ...overlay.modify.map((entry) => `- altera id="${entry.optionId}": ${entry.reason}`),
+        ...overlay.remove.map((entry) => `- remove id="${entry.optionId}": ${entry.reason}`),
+        ...overlay.add.map((entry) => `- acrescenta "${entry.option.label}" (id="${entry.option.id}"): ${entry.reason}`),
+    ]
+    return lines.join("\n") || "(nenhum)"
+}
+
+/** Marca quando cada ajuste novo foi feito e de que partes da ficha o acréscimo depende. */
+function stampOverlay(overlay: CombatPrepOverlay, preparedAt: Date): CombatPrepOverlay {
+    const at = preparedAt.toISOString()
+    return {
+        modify: overlay.modify.map((entry) => ({ ...entry, preparedAt: at })),
+        remove: overlay.remove.map((entry) => ({ ...entry, preparedAt: at })),
+        add: overlay.add.map((entry) => ({ ...entry, preparedAt: at, deps: entry.deps?.length ? entry.deps : addedOptionDeps(entry.option) })),
+        suppress: overlay.suppress,
+    }
+}
+
+/** Auditoria da origem da preparação (do cache, parcial ou inteira com cache invalidado). */
+async function auditPrepSource(campaign: Pick<IMaddoxCampaign, "_id" | "ownerId">, prep: Pick<PrepDoc, "_id" | "characterName">, source: CombatPrepSource) {
+    const decision = source.kind === "cache" ? "cache-hit" : source.kind === "partial" ? "cache-partial" : "cache-full"
+    await recordAudit({
+        userId: campaign.ownerId,
+        entidade: MADDOX_CAMPAIGN_AUDIT_ENTITY,
+        entidadeId: String(campaign._id),
+        acao: AcaoAuditoria.ATUALIZAR,
+        depois: { combatPrep: String(prep._id), character: prep.characterName, decision, by: "maddox", ...(source.changedParts?.length ? { changedParts: source.changedParts } : {}), ...(source.reason ? { reason: source.reason } : {}), kept: source.kept ?? 0 },
+    })
+}
+
 async function runCombatPrep(campaignId: Types.ObjectId, prepId: Types.ObjectId, jobId: string): Promise<void> {
     const claimed = await MaddoxCombatPrepModel.findOneAndUpdate({ _id: prepId, status: "pending" }, { $set: { status: "running", startedAt: new Date(), jobId, error: null }, $inc: { attempts: 1 } }, { returnDocument: "after" }).lean<PrepDoc>()
     if (!claimed) {
@@ -659,18 +755,58 @@ async function runCombatPrep(campaignId: Types.ObjectId, prepId: Types.ObjectId,
             return
         }
         const [{ loadMaddoxSettings, maddoxAvailability }, ai, { readSheetStamp }] = await Promise.all([import("./settings"), import("./combat-prep-ai"), import("./combat-sheet-writes")])
+        // A IA precisa estar disponível antes da checagem de 0 PV (que gasta a marca "uma vez por preparação").
         const { settings } = await loadMaddoxSettings()
         const status = await maddoxAvailability(settings, campaign.rigor)
         if (!status.available) throw new Error(status.reason ?? 'O "Agente Maddox" não está configurado.')
         // DND-49 (decisão do dono D3): quem está a 0 PV é conferido pela história antes da revisão da ficha, no mesmo job.
         await checkDownedCharacter(campaign, claimed, active.state)
+        const cacheModule = await import("./combat-prep-cache")
+        const cacheContext = await cacheModule.prepCacheContext(campaign.rigor)
         for (let attempt = 0; ; attempt += 1) {
             const context = await loadPrepSheet(active.state, campaignId)
             if (!context) throw new Error("A ficha do personagem não foi encontrada.")
+            // DND-78: a preparação guardada vale se nada mudou; senão, só o que mudou (ou a ficha inteira, com o motivo).
+            const fingerprint = prepFingerprint(context.snapshot, cacheContext)
+            const verdict = await cacheModule.decidePrepCache({ campaignId, characterId: claimed.characterId, sheetId: active.state.sheetId!, fingerprint })
+            const plan = prepPlan(verdict.decision, verdict.cache, fingerprint)
+            const preparedAt = new Date()
+            const cacheRefs = [...context.references.filter((reference) => reference.found && reference.id).map((reference) => `${reference.type}:${reference.id}`), ...(plan.kept ? (verdict.cache?.catalog ?? []).map((entry) => entry.ref) : [])]
+            if (plan.reuseOnly) {
+                // Nada a preparar com a IA: a mesa sai do cache (inteira ou sem as partes que saíram da ficha).
+                if (controller.signal.aborted || !(await MaddoxCombatPrepModel.exists({ _id: prepId, status: "running", jobId }))) throw new Error(SUPERSEDED_MESSAGE)
+                const overlay = plan.kept!
+                const riders = verdict.cache!.riders ?? []
+                const saved = await MaddoxCombatPrepModel.findOneAndUpdate(
+                    { _id: prepId, status: "running", jobId },
+                    { $set: { status: "ready", overlay, riders, changes: [], catalogRefs: [], droppedWithoutSource: 0, source: plan.source, finishedAt: preparedAt, jobId: null, error: null } },
+                    { returnDocument: "after" },
+                ).lean<PrepDoc>()
+                if (saved) {
+                    await postPrepCard(saved)
+                    await cacheModule.savePrepCache({ campaign, characterId: claimed.characterId, sheetId: active.state.sheetId!, characterName: claimed.characterName, overlay, riders, catalogRefs: cacheRefs, prepId, combatId: claimed.combatId, preparedAt: plan.decision.kind === "hit" ? verdict.cache!.preparedAt : preparedAt, readInvalidatedAt: verdict.cache ? (verdict.cache.invalidatedAt ?? null) : undefined })
+                    await auditPrepSource(campaign, saved, plan.source)
+                }
+                log.info({ campaignId: String(campaignId), prepId: String(prepId), character: claimed.characterName, source: plan.source.kind, kept: plan.source.kept ?? 0 }, "[maddox] mesa do personagem reaproveitada do cache")
+                break
+            }
             const reads = createCatalogReadLog()
             const question = claimed.question
-            const raw = await untilAborted(ai.reviewCombatSheet({ campaign, characterName: claimed.characterName, sheetText: context.sheetText, optionsText: context.optionsText, sneakAttack: context.sneakAttack, reads, jobId, ...(question ? { question: { text: question.text, answer: question.answer } } : {}) }), controller.signal)
-            const interpretation = interpretPrep(raw, context, reads)
+            const raw = await untilAborted(
+                ai.reviewCombatSheet({
+                    campaign,
+                    characterName: claimed.characterName,
+                    sheetText: context.sheetText,
+                    optionsText: context.optionsText,
+                    sneakAttack: context.sneakAttack,
+                    reads,
+                    jobId,
+                    ...(question ? { question: { text: question.text, answer: question.answer } } : {}),
+                    ...(plan.scope ? { scope: { parts: plan.scopeText, kept: keptText(plan.kept!) } } : {}),
+                }),
+                controller.signal,
+            )
+            const interpretation = interpretPrep(raw, context, reads, plan.scope ?? undefined)
             // DND-51: a escolha do jogador (atributo de conjuração de uma lista, magia escolhida) nunca é do Maddox.
             const { screenPlayerChoices, refusalsOf, choiceSheetOf } = await import("./sheet-choice-rules")
             const { interviewPlayerTexts } = await import("./question-runs")
@@ -699,18 +835,25 @@ async function runCombatPrep(campaignId: Types.ObjectId, prepId: Types.ObjectId,
             // DND-75: só a execução dona do registro grava na ficha (reiniciada, pulada ou vencida pelo vigia, não grava nada).
             if (controller.signal.aborted || !(await MaddoxCombatPrepModel.exists({ _id: prepId, status: "running", jobId }))) throw new Error(SUPERSEDED_MESSAGE)
             const written = await applyInterpretation(interpretation, { sheetId: active.state.sheetId!, campaign, characterName: claimed.characterName, origin: "combat-prep" })
-            const rider = riderOf(context.sneakAttack, interpretation.rider)
+            // Na parcial, o ataque furtivo guardado continua valendo se o Maddox não o reviu agora.
+            const rider = plan.kept && !interpretation.rider ? { riders: verdict.cache!.riders ?? riderOf(context.sneakAttack, undefined).riders, change: null } : riderOf(context.sneakAttack, interpretation.rider)
             const changes = orderedChanges(interpretation, [...written.changes, ...interpretation.optionChanges, ...(rider.change ? [rider.change] : [])])
-            const overlay = { ...interpretation.overlay, suppress: written.suppress }
+            const fresh = stampOverlay({ ...interpretation.overlay, suppress: written.suppress }, preparedAt)
+            const overlay = plan.kept ? mergeOverlay(plan.kept, fresh) : fresh
+            const source = plan.kept ? { ...plan.source, kept: [...overlay.modify, ...overlay.remove, ...overlay.add].filter((entry) => entry.fromCache).length } : plan.source
             const saved = await MaddoxCombatPrepModel.findOneAndUpdate(
                 { _id: prepId, status: "running", jobId },
-                { $set: { status: "ready", overlay, riders: rider.riders, changes, catalogRefs: reads.refs, droppedWithoutSource: interpretation.droppedWithoutSource, finishedAt: new Date(), jobId: null, error: null } },
+                { $set: { status: "ready", overlay, riders: rider.riders, changes, catalogRefs: reads.refs, droppedWithoutSource: interpretation.droppedWithoutSource, source, finishedAt: new Date(), jobId: null, error: null } },
                 { returnDocument: "after" },
             ).lean<PrepDoc>()
-            if (saved) await postPrepCard(saved)
+            if (saved) {
+                await postPrepCard(saved)
+                await cacheModule.savePrepCache({ campaign, characterId: claimed.characterId, sheetId: active.state.sheetId!, characterName: claimed.characterName, overlay, riders: rider.riders, catalogRefs: [...cacheRefs, ...reads.refs], prepId, combatId: claimed.combatId, preparedAt, readInvalidatedAt: verdict.cache ? (verdict.cache.invalidatedAt ?? null) : undefined })
+                if (verdict.cache || plan.kept) await auditPrepSource(campaign, saved, source)
+            }
             if (interpretation.dropped) log.warn({ campaignId: String(campaignId), prepId: String(prepId), dropped: interpretation.dropped, droppedWithoutSource: interpretation.droppedWithoutSource }, "[maddox] itens da preparação descartados na validação")
             log.info(
-                { campaignId: String(campaignId), prepId: String(prepId), character: claimed.characterName, changes: changes.length, refs: reads.refs, refsCount: reads.refs.length, catalogFailures: reads.failures, droppedWithoutSource: interpretation.droppedWithoutSource },
+                { campaignId: String(campaignId), prepId: String(prepId), character: claimed.characterName, source: source.kind, changes: changes.length, refs: reads.refs, refsCount: reads.refs.length, catalogFailures: reads.failures, droppedWithoutSource: interpretation.droppedWithoutSource },
                 "[maddox] mesa do personagem preparada",
             )
             break
@@ -776,7 +919,7 @@ async function checkDownedCharacter(campaign: IMaddoxCampaign, prep: PrepDoc, st
 async function postPrepCard(prep: PrepDoc) {
     if (prep.messageId) {
         // DND-51: o card da pergunta vira o card da mesa pronta (a pergunta fica respondida ou vencida).
-        await MaddoxCampaignMessageModel.updateOne({ _id: prep.messageId }, { $set: { "combatPrep.changes": prep.changes, "combatPrep.question": questionCard(prep) } })
+        await MaddoxCampaignMessageModel.updateOne({ _id: prep.messageId }, { $set: { "combatPrep.changes": prep.changes, "combatPrep.source": prep.source ?? null, "combatPrep.question": questionCard(prep) } })
         return
     }
     const message = await MaddoxCampaignMessageModel.create({
@@ -790,7 +933,7 @@ async function postPrepCard(prep: PrepDoc) {
         characterName: prep.characterName,
         content: "",
         segment: prep.waitRound,
-        combatPrep: { combatId: prep.combatId, actorKey: prep.actorKey, characterName: prep.characterName, changes: prep.changes, question: questionCard(prep) },
+        combatPrep: { combatId: prep.combatId, actorKey: prep.actorKey, characterName: prep.characterName, changes: prep.changes, source: prep.source ?? null, question: questionCard(prep) },
     })
     await MaddoxCombatPrepModel.updateOne({ _id: prep._id }, { $set: { messageId: message._id } })
 }

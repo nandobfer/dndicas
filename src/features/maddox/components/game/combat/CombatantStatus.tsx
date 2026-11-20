@@ -6,6 +6,7 @@ import { SimpleGlassTooltip, GlassTooltipProvider } from "@/components/ui/glass-
 import { cn } from "@/core/utils"
 import { rarityColors } from "@/lib/config/colors"
 import { prepElapsedLabel, serverClockOffset } from "../../../combat-prep-stall"
+import { prepSourceSealLabel } from "../../../combat-prep-source"
 import { HP_BAND_LABELS } from "../../../combat-rules"
 import type { MaddoxCombatPrepSlotDto, MaddoxTacticalSlotDto } from "../../../game-types"
 import { RarityChip } from "../../campaigns/campaign-visuals"
@@ -53,18 +54,21 @@ export function PrepSeal({ prep }: { prep: MaddoxCombatPrepSlotDto }) {
     const now = useNow(30_000, timed)
     const Icon = prep.status === "ready" ? Check : prep.status === "failed" ? AlertTriangle : prep.status === "preparing" ? Loader2 : Clock
     const elapsed = timed ? prepElapsedLabel(prep.since, now) : null
+    // DND-78: "Pronto" diz se a mesa veio do cache ou foi preparada agora.
+    const origin = prep.status === "ready" ? prepSourceSealLabel(prep.source) : null
     const seal = (
-        <span data-testid="initiative-prep" data-status={prep.status} tabIndex={timed ? 0 : undefined}>
+        <span data-testid="initiative-prep" data-status={prep.status} data-source={prep.source ?? undefined} tabIndex={timed || origin ? 0 : undefined}>
             <RarityChip color={PREP_COLORS[prep.status]}>
                 <Icon className={cn("h-3 w-3", prep.status === "preparing" && "animate-spin")} aria-hidden /> {PREP_LABELS[prep.status]}
                 {elapsed && <span data-testid="initiative-prep-elapsed"> · {elapsed}</span>}
             </RarityChip>
         </span>
     )
-    if (!timed || !prep.since) return seal
+    const tooltip = timed && prep.since ? `Preparando desde ${sinceTime(prep.since)}` : origin
+    if (!tooltip) return seal
     return (
         <GlassTooltipProvider>
-            <SimpleGlassTooltip content={`Preparando desde ${sinceTime(prep.since)}`}>{seal}</SimpleGlassTooltip>
+            <SimpleGlassTooltip content={tooltip}>{seal}</SimpleGlassTooltip>
         </GlassTooltipProvider>
     )
 }

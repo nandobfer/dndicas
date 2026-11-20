@@ -19,7 +19,7 @@ import { actionOptionsView, combatBannerText, combatRecoveringBannerText, combat
 import { useMaddoxOpexTableActions } from "../../hooks/useMaddoxOpex"
 import { OpexFailureBanner } from "./OpexFailureBanner"
 import type { MaddoxCombatActionInput } from "../../combat-schemas"
-import { useCancelCombatAction, useChooseSneakAttack, useDecideReaction, useEndCombatTurn, useRequestCombatAdjustment, useAnswerCombatPrep, useRestartCombatPrep, useRetryCombatPrep, useRollCombatStep, useSkipCombatPrep, useSubmitCombatAction } from "../../hooks/useMaddoxCombat"
+import { useCancelCombatAction, useChooseSneakAttack, useDecideReaction, useEndCombatTurn, useRequestCombatAdjustment, useAnswerCombatPrep, useInvalidateCombatPrepCache, useRestartCombatPrep, useRetryCombatPrep, useRollCombatStep, useSkipCombatPrep, useSubmitCombatAction } from "../../hooks/useMaddoxCombat"
 import { CombatActionBar, CombatWaitBar } from "./combat/CombatActionBar"
 import { CombatPrepBlockedNotice, CombatPrepStalledNotice } from "./combat/CombatCards"
 import { useNow, useServerClockOffset } from "./combat/CombatantStatus"
@@ -132,6 +132,7 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
     const prepAnswer = useAnswerCombatPrep(state.campaignId)
     const prepSkip = useSkipCombatPrep(state.campaignId)
     const prepRestart = useRestartCombatPrep(state.campaignId)
+    const prepReprepare = useInvalidateCombatPrepCache(state.campaignId)
     const combatAdjust = useRequestCombatAdjustment(state.campaignId)
     const combatReact = useDecideReaction(state.campaignId)
     // DND-74: o "Conversar com o Mestre" (canto do chat) também abre pelo "Perguntar ao mestre" da barra do combate.
@@ -397,6 +398,8 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
                         onSkip={(memberId) => skip.mutate(memberId)}
                         rollingFor={rollCheck.isPending}
                         onRollFor={(checkId, characterName) => rollCheck.mutate(checkId, { onSuccess: () => toast.success(`Teste rolado no lugar de ${characterName}`) })}
+                        reprepping={prepReprepare.isPending}
+                        onReprepare={(characterId, characterName) => prepReprepare.mutate(characterId, { onSuccess: () => toast.success(`A ficha de ${characterName} será preparada do zero no próximo combate`) })}
                     />
                     <NpcPanel
                         npcs={state.npcs}

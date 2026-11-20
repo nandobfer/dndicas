@@ -71,6 +71,10 @@ export const useRetryCombatPrep = (campaignId: string) =>
     useCombatMutation<string, MaddoxGameStateDto>(campaignId, async (prepId) => unwrapApi((await api.post<ApiResponse<MaddoxGameStateDto>>(`${combatPath(campaignId)}/preps/${prepId}/retry`, {})).data), "Não foi possível tentar de novo")
 
 /** DND-75: o dono reinicia a preparação parada ("Preparando…"/"Aguardando" além do aviso). */
+/** DND-78: "Repreparar ficha" — o dono invalida a preparação guardada; o próximo combate prepara a ficha inteira. */
+export const useInvalidateCombatPrepCache = (campaignId: string) =>
+    useCombatMutation<string, MaddoxGameStateDto>(campaignId, async (characterId) => unwrapApi((await api.post<ApiResponse<MaddoxGameStateDto>>(`${combatPath(campaignId)}/prep-cache/${characterId}/invalidate`, {})).data), "Não foi possível pedir a repreparação da ficha")
+
 export const useRestartCombatPrep = (campaignId: string) =>
     useCombatMutation<string, MaddoxGameStateDto>(campaignId, async (prepId) => unwrapApi((await api.post<ApiResponse<MaddoxGameStateDto>>(`${combatPath(campaignId)}/preps/${prepId}/restart`, {})).data), "Não foi possível reiniciar a preparação")
 

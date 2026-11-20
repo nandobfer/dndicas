@@ -1,5 +1,5 @@
 import mongoose, { Schema, type Model, type Types } from "mongoose"
-import type { CombatPrepAdjustment, CombatPrepChange, CombatPrepOverlay, CombatPrepQuestion, CombatPrepRider, CombatPrepStatus } from "../combat-types"
+import type { CombatPrepAdjustment, CombatPrepChange, CombatPrepOverlay, CombatPrepQuestion, CombatPrepRider, CombatPrepSource, CombatPrepStatus } from "../combat-types"
 
 /**
  * Preparação da mesa de combate (DND-41) — `maddox_combat_preps`. Um documento por personagem em cada combate tático
@@ -41,6 +41,8 @@ export interface IMaddoxCombatPrep {
     messageId: Types.ObjectId | null
     /** DND-51: pergunta ao jogador (a preparação para em `awaiting-player` até a resposta ou o prazo). */
     question: CombatPrepQuestion | null
+    /** DND-78: de onde veio a preparação pronta (cache, só o que mudou, ou a ficha inteira). */
+    source: CombatPrepSource | null
     createdAt: Date
     updatedAt: Date
 }
@@ -72,6 +74,7 @@ const PrepSchema = new Schema<IMaddoxCombatPrep>(
         downedCheckedAt: { type: Date, default: null },
         messageId: { type: Schema.Types.ObjectId, default: null },
         question: { type: Schema.Types.Mixed, default: null },
+        source: { type: Schema.Types.Mixed, default: null },
     },
     { collection: "maddox_combat_preps", timestamps: true, versionKey: false, minimize: false },
 )

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { motion } from "framer-motion"
-import { AlertTriangle, ArrowRight, Ban, ClipboardCheck, Crosshair, Heart, HeartPulse, ListOrdered, Loader2, MessageCircleQuestion, RefreshCw, Send, ShieldAlert, SkipForward, Skull, Swords, Timer, X } from "lucide-react"
+import { AlertTriangle, ArrowRight, Ban, ClipboardCheck, Crosshair, Heart, HeartPulse, History, ListOrdered, Loader2, MessageCircleQuestion, RefreshCw, Send, ShieldAlert, SkipForward, Skull, Sparkles, Swords, Timer, X } from "lucide-react"
 import { Button } from "@/components/ui/opex/button"
 import { ConfirmDialog } from "@/components/ui/opex/confirm-dialog"
 import { Textarea } from "@/components/ui/opex/textarea"
@@ -19,6 +19,7 @@ import type { MaddoxCombatPreparationDto, MaddoxGameCombatEventDto, MaddoxGameMe
 import { MemberAvatar, OpexChip, RarityChip } from "../../campaigns/campaign-visuals"
 import { COMBAT_COLOR } from "../GameCombatCard"
 import { prepElapsedLabel, type StalledCombatPrep } from "../../../combat-prep-stall"
+import { prepSourceSummary } from "../../../combat-prep-source"
 import { ReplayDie } from "./ReplayDie"
 import { ECONOMY_COLORS, ECONOMY_LABELS, HP_BAND_COLORS, attackFumbled } from "./combat-visuals"
 import { useHeldRoll, type HeldRoll } from "./use-held-roll"
@@ -488,6 +489,8 @@ export function CombatPrepCard({ message, busy = false, onAnswer }: { message: M
     const prep = message.combatPrep!
     const changes = prep.changes
     const question = prep.question ?? null
+    // DND-78: de onde veio a mesa (cache, só o que mudou, ou a ficha inteira).
+    const origin = prepSourceSummary(prep.source)
     // DND-51: a preparação parou com uma pergunta ao jogador; o card traz o campo de resposta até ela chegar.
     // Revisão DND-51 (F10): a preparação parou sem concluir — estado final, sem spinner nem campo de resposta.
     if (question?.halted) {
@@ -532,10 +535,30 @@ export function CombatPrepCard({ message, busy = false, onAnswer }: { message: M
                         {question.answer ? <p className="whitespace-pre-wrap break-words text-white/90">Sua resposta: {question.answer}</p> : <p className="text-white/60">Sem resposta no prazo.</p>}
                     </div>
                 )}
+                {origin && (
+                    <div className="space-y-1 rounded-lg border border-white/10 px-2.5 py-1.5 text-xs" data-testid="combat-prep-source" data-source={prep.source!.kind}>
+                        <p className="flex items-center gap-1.5 text-white/85">
+                            {prep.source!.kind === "cache" ? <History className="h-3.5 w-3.5 shrink-0" aria-hidden /> : <Sparkles className="h-3.5 w-3.5 shrink-0" aria-hidden />}
+                            {origin.title}
+                        </p>
+                        {origin.items.length > 0 && (
+                            <ul className="list-disc space-y-0.5 pl-5 text-white/75" data-testid="combat-prep-source-parts">
+                                {origin.items.map((item) => (
+                                    <li key={item} className="break-words">
+                                        {item}
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
+                        {origin.detail && <p className="text-white/60">{origin.detail}</p>}
+                    </div>
+                )}
                 {changes.length === 0 ? (
-                    <p className="text-sm text-white/75" data-testid="combat-prep-no-changes">
-                        Nenhuma mudança: a ficha já estava pronta para o combate.
-                    </p>
+                    prep.source?.kind === "cache" ? null : (
+                        <p className="text-sm text-white/75" data-testid="combat-prep-no-changes">
+                            {prep.source?.kind === "partial" ? "Nenhuma mudança nova: o que mudou na ficha já estava certo." : "Nenhuma mudança: a ficha já estava pronta para o combate."}
+                        </p>
+                    )
                 ) : (
                     <ul className="space-y-1.5" data-testid="combat-prep-changes">
                         {changes.map((change, index) =>

@@ -60,6 +60,31 @@ vi.mock("@/features/maddox/server/combat-sheet", async (importOriginal) => {
         consumeSheetItem: async (...args: Parameters<typeof actual.consumeSheetItem>) => (await before(), actual.consumeSheetItem(...args)),
     }
 })
+/** DND-78: ganchos do cache — mexer na ficha logo depois de um carimbo e fazer a leitura do catálogo falhar. */
+const cacheHooks = { afterStamp: null as null | (() => Promise<void>), catalogFails: false }
+vi.mock("@/features/maddox/server/combat-sheet-writes", async (importOriginal) => {
+    const actual = await importOriginal<typeof import("@/features/maddox/server/combat-sheet-writes")>()
+    return {
+        ...actual,
+        readSheetStamp: async (...args: Parameters<typeof actual.readSheetStamp>) => {
+            const stamp = await actual.readSheetStamp(...args)
+            const hook = cacheHooks.afterStamp
+            cacheHooks.afterStamp = null
+            if (hook) await hook()
+            return stamp
+        },
+    }
+})
+vi.mock("@/features/maddox/server/catalog-references", async (importOriginal) => {
+    const actual = await importOriginal<typeof import("@/features/maddox/server/catalog-references")>()
+    return {
+        ...actual,
+        catalogDocsByIds: async (...args: Parameters<typeof actual.catalogDocsByIds>) => {
+            if (cacheHooks.catalogFails) throw new Error("catálogo fora do ar")
+            return actual.catalogDocsByIds(...args)
+        },
+    }
+})
 vi.mock("@/features/maddox/server/tactical-options", async (importOriginal) => {
     const actual = await importOriginal<typeof import("@/features/maddox/server/tactical-options")>()
     return {
@@ -272,6 +297,8 @@ beforeEach(async () => {
     toolLog.length = 0
     hooks.beforeSpend = null
     hooks.patchOptions = null
+    cacheHooks.afterStamp = null
+    cacheHooks.catalogFails = false
     combatPrepAi.reset()
     vi.mocked(recordAudit).mockClear()
 })
@@ -2469,4 +2496,266 @@ describe("DND-75 — preparação presa: retomada automática, vigia e ações d
         expect((await MaddoxCombatPrepModel.findById(expired.running._id).lean())!.status).toBe("failed")
         expect(await dexterityOf(expired.kael.sheetId)).toBe(12)
     }, 20_000)
+})
+
+const { MaddoxCombatPrepCacheModel } = await import("@/features/maddox/models")
+const prepCache = await import("@/features/maddox/server/combat-prep-cache")
+
+/** DND-78: encerra o combate atual e abre outro na mesma campanha (a preparação de cada ficha roda de novo). */
+async function nextCombat(id: string, turn = 5) {
+    await combatPrep.waitForCombatPreps()
+    await settleCampaign(id)
+    await MaddoxCombatModel.updateMany({ campaignId: id, status: "active" }, { $set: { status: "ended" } })
+    const draft = { name: "Bandido", side: "inimigo" as const, quantity: 1, description: "", condition: "", registerNpc: false, stats: monsterStatsFromCustom({ ca: 12, pv: 7, iniciativa: 1, acoes: [{ nome: "Faca", tipo: "ataque", bonus: 3, dano: "1d4" }] }) }
+    const plan = (await tactical.createTacticalCombat({ _id: new mongoose.Types.ObjectId(id) }, turn, 0, { title: `Combate ${turn}`, location: "Estrada", surprise: null, combatants: [draft] }, async () => null))!
+    await MaddoxCampaignMessageModel.insertMany(plan.initiativeMessages)
+    await combatPrep.waitForCombatPreps()
+    return (await MaddoxCombatModel.findOne({ campaignId: id, status: "active" }).lean())!
+}
+
+const prepOf = async (combatId: mongoose.Types.ObjectId, name: string) => (await MaddoxCombatPrepModel.findOne({ combatId, characterName: name }).lean())!
+const reviewedNames = () => combatPrepAi.review.mock.calls.map(([input]) => input.characterName)
+const auditDecisions = () => vi.mocked(recordAudit).mock.calls.map(([input]) => (input.depois as { decision?: string } | undefined)?.decision).filter(Boolean)
+const swordOf = async (sheetId: string) => (await CharacterItem.findOne({ sheetId: new mongoose.Types.ObjectId(sheetId), name: "<p>Espada</p>" }).lean())!
+
+/** Primeiro combate: a revisão da Kael corrige o ataque da espada (fonte no catálogo); a Lyra fica como está. */
+async function preparedOnce() {
+    combatPrepAi.review.mockImplementation(async (input) => {
+        if (input.characterName !== "Kael") return { sheetChanges: [], modify: [], remove: [], add: [] }
+        const weapon = /id="(weapon:[^":]+)"/.exec(input.optionsText)![1]
+        readRule(input)
+        return { modify: [{ optionId: weapon, attack: { bonus: 7, damage: "1d8+3", damageType: "cortante" }, reason: "Estilo de luta Duelismo.", source: RULE }] }
+    })
+    const scene = await initiativeScene()
+    const first = (await MaddoxCombatModel.findOne({ campaignId: scene.id, status: "active" }).lean())!
+    expect(reviewedNames()).toEqual(["Kael", "Lyra"])
+    combatPrepAi.review.mockClear()
+    vi.mocked(recordAudit).mockClear()
+    return { ...scene, first }
+}
+
+describe("DND-78 — cache da preparação da mesa de combate", () => {
+    it("ficha igual: o próximo combate reaproveita a preparação sem chamar a IA, com auditoria e o card dizendo que veio do cache", async () => {
+        const { id, kael, lyra } = await preparedOnce()
+        const caches = await MaddoxCombatPrepCacheModel.find({ campaignId: id }).lean()
+        expect(caches.map((cache) => cache.characterName).sort()).toEqual(["Kael", "Lyra"])
+        // PV e moedas mudam no jogo: não contam para o cache.
+        await CharacterSheet.collection.updateOne({ _id: new mongoose.Types.ObjectId(kael.sheetId) }, { $set: { hpCurrent: 5, "coins.gp": 30 } })
+        const second = await nextCombat(id)
+        expect(combatPrepAi.review).not.toHaveBeenCalled()
+        const prep = await prepOf(second._id, "Kael")
+        expect(prep).toMatchObject({ status: "ready", source: { kind: "cache", kept: 1 } })
+        expect(prep.overlay.modify).toEqual([expect.objectContaining({ reason: "Estilo de luta Duelismo.", fromCache: true })])
+        expect((await prepOf(second._id, "Lyra")).source).toMatchObject({ kind: "cache", kept: 0 })
+        expect(auditDecisions().filter((decision) => decision === "cache-hit")).toHaveLength(2)
+        const card = (await MaddoxCampaignMessageModel.findOne({ campaignId: id, kind: "combat-prep", "combatPrep.combatId": second._id, characterName: "Kael" }).lean())!
+        expect(card.combatPrep!.source).toMatchObject({ kind: "cache" })
+        // A opção do turno vem do cache, com a origem para o popover.
+        const { loadCharacterOptions } = await import("@/features/maddox/server/tactical-options")
+        const state = second.tactical!.characters.find((item) => item.actorKey === kael.actorKey)!
+        const views = await loadCharacterOptions([state], new mongoose.Types.ObjectId(id), second._id)
+        const sword = views.get(kael.actorKey)!.options.action.find((option) => option.adjusted)!
+        expect(sword.adjusted).toMatchObject({ reason: "Estilo de luta Duelismo.", origin: "cache" })
+        expect(lyra).toBeTruthy()
+    })
+
+    it("arma nova: só a parte nova vai ao Maddox (o resto do cache continua), e mudança fora do escopo é recusada", async () => {
+        const { id, kael } = await preparedOnce()
+        const bow = new mongoose.Types.ObjectId()
+        await ItemModel.collection.insertOne({ _id: bow, name: "Arco", type: "arma", status: "active", damageDice: { quantidade: 1, tipo: "d6" }, damageType: "perfurante", properties: [] })
+        const bowItem = new mongoose.Types.ObjectId()
+        await CharacterItem.collection.insertOne({ _id: bowItem, sheetId: new mongoose.Types.ObjectId(kael.sheetId), catalogItemId: bow, name: "<p>Arco</p>", quantity: 1, equipped: true, catalogItemType: "arma", notes: "" })
+        const sword = await swordOf(kael.sheetId)
+        combatPrepAi.review.mockImplementation(async (input) => {
+            readRule(input)
+            return {
+                modify: [
+                    { optionId: `weapon:${sword._id}`, attack: { bonus: 1, damage: "1d8", damageType: "cortante" }, reason: "Fora do escopo.", source: RULE },
+                    { optionId: `weapon:${bowItem}`, attack: { bonus: 4, damage: "1d6+2", damageType: "perfurante", ranged: true }, reason: "Arco novo.", source: RULE },
+                ],
+            }
+        })
+        const second = await nextCombat(id)
+        expect(reviewedNames()).toEqual(["Kael"])
+        const input = combatPrepAi.review.mock.calls[0]![0]
+        expect(input.scope!.parts).toEqual([`- Item: Arco [item:${bowItem}] (novo)`])
+        expect(input.scope!.kept).toContain("Estilo de luta Duelismo.")
+        const prep = await prepOf(second._id, "Kael")
+        expect(prep.source).toMatchObject({ kind: "partial", kept: 1, changedParts: ["Item: Arco (novo)"] })
+        expect(prep.overlay.modify.map((entry) => [entry.optionId, entry.reason, Boolean(entry.fromCache)])).toEqual([
+            [`weapon:${sword._id}`, "Estilo de luta Duelismo.", true],
+            [`weapon:${bowItem}`, "Arco novo.", false],
+        ])
+        expect(prep.changes).toEqual(expect.arrayContaining([expect.objectContaining({ reason: "Fora do escopo.", applied: false, refused: expect.stringContaining("fora do que mudou na ficha") })]))
+        expect(auditDecisions()).toContain("cache-partial")
+        expect((await prepOf(second._id, "Lyra")).source).toMatchObject({ kind: "cache" })
+    })
+
+    it("só saiu algo da ficha: sem IA, o ajuste da parte removida sai e o resto continua", async () => {
+        const { id, kael } = await preparedOnce()
+        const sword = await swordOf(kael.sheetId)
+        await CharacterItem.collection.deleteOne({ _id: sword._id })
+        const second = await nextCombat(id)
+        expect(combatPrepAi.review).not.toHaveBeenCalled()
+        const prep = await prepOf(second._id, "Kael")
+        expect(prep).toMatchObject({ status: "ready", source: { kind: "partial", kept: 0 } })
+        expect(prep.source!.changedParts).toEqual(["Item: Espada (removido)"])
+        expect(prep.overlay.modify).toEqual([])
+    })
+
+    it("mudou o nível ou a entidade do catálogo usada: a ficha inteira, com o motivo; entidade que a ficha não usa não conta", async () => {
+        const { id, kael } = await preparedOnce()
+        await CharacterSheet.collection.updateOne({ _id: new mongoose.Types.ObjectId(kael.sheetId) }, { $set: { level: 4 } })
+        const second = await nextCombat(id)
+        expect(reviewedNames()).toEqual(["Kael"])
+        expect((await prepOf(second._id, "Kael")).source).toEqual({ kind: "full", reason: "a base da ficha mudou (nível, classe, espécie, atributos, proficiências ou conjuração)" })
+        combatPrepAi.review.mockClear()
+        // Outra entidade do catálogo, que nenhuma ficha cita: o cache vale.
+        await ItemModel.collection.insertOne({ name: "Machado", type: "arma", status: "active" })
+        await nextCombat(id, 7)
+        expect(combatPrepAi.review).not.toHaveBeenCalled()
+        // A espada do catálogo (citada pelas duas fichas) muda: as duas fichas são preparadas inteiras.
+        await ItemModel.collection.updateOne({ name: "Espada" }, { $set: { damageDice: { quantidade: 1, tipo: "d10" } } })
+        const fourth = await nextCombat(id, 9)
+        expect(reviewedNames().sort()).toEqual(["Kael", "Lyra"])
+        expect((await prepOf(fourth._id, "Lyra")).source).toEqual({ kind: "full", reason: "o catálogo do DnDicas mudou" })
+    })
+
+    it("não serve cache de outra ficha nem de outra campanha", async () => {
+        const { id, kael, lyra } = await preparedOnce()
+        await MaddoxCombatPrepCacheModel.updateOne({ campaignId: id, characterId: kael.characterId }, { $set: { sheetId: new mongoose.Types.ObjectId() } })
+        await MaddoxCombatPrepCacheModel.updateOne({ campaignId: id, characterId: lyra.characterId }, { $set: { campaignId: new mongoose.Types.ObjectId() } })
+        const second = await nextCombat(id)
+        expect(reviewedNames().sort()).toEqual(["Kael", "Lyra"])
+        expect((await prepOf(second._id, "Kael")).source).toEqual({ kind: "full", reason: "a ficha do personagem é outra" })
+        expect((await prepOf(second._id, "Lyra")).source).toEqual({ kind: "full", reason: null })
+    })
+
+    it('"Repreparar ficha": só o dono; o combate atual não muda e o próximo prepara a ficha inteira', async () => {
+        const { id, kael, lyra, first } = await preparedOnce()
+        await expect(prepCache.invalidateCombatPrepCache(id, lyra.characterId, lyra.userId)).rejects.toMatchObject({ code: "OWNER_ONLY" })
+        const before = await prepOf(first._id, "Lyra")
+        const state = await prepCache.invalidateCombatPrepCache(id, lyra.characterId, kael.userId)
+        expect(state.participants.find((participant) => participant.characterName === "Lyra")!.prepCache).toMatchObject({ characterId: lyra.characterId, invalidated: true })
+        expect((await game.getGameState(id, lyra.userId)).participants.every((participant) => participant.prepCache === undefined)).toBe(true)
+        expect(auditDecisions()).toContain("reprepare")
+        expect(await prepOf(first._id, "Lyra")).toMatchObject({ status: before.status, overlay: before.overlay })
+        const second = await nextCombat(id)
+        expect(reviewedNames()).toEqual(["Lyra"])
+        expect((await prepOf(second._id, "Lyra")).source).toEqual({ kind: "full", reason: "o dono da campanha pediu a repreparação da ficha" })
+        expect((await MaddoxCombatPrepCacheModel.findOne({ campaignId: id, characterId: lyra.characterId }).lean())!.invalidatedAt).toBeNull()
+    })
+
+    it('"Seguir sem preparação" não grava cache; o pedido de ajuste aceito entra no cache', async () => {
+        combatPrepAi.review.mockImplementation(async (input) => {
+            if (input.characterName === "Kael") throw new Error("fora do ar")
+            return { sheetChanges: [], modify: [], remove: [], add: [] }
+        })
+        const { id, kael, lyra, cardOf } = await initiativeScene()
+        await rollInitiatives(id, { kael, lyra }, cardOf)
+        await settleCampaign(id)
+        const failed = (await prepsOf(id)).find((prep) => prep.characterName === "Kael")!
+        await combatPrep.skipCombatPrep(id, String(failed._id), kael.userId)
+        expect(await MaddoxCombatPrepCacheModel.exists({ campaignId: id, characterId: kael.characterId })).toBeNull()
+        expect(await MaddoxCombatPrepCacheModel.exists({ campaignId: id, characterId: lyra.characterId })).toBeTruthy()
+    })
+
+    it("pedido de ajuste aceito atualiza o cache do personagem", async () => {
+        const { id, kael, combatId } = await scene()
+        const prep = await readyPrep(id, combatId, kael)
+        const campaign = (await MaddoxCampaignModel.findById(id).lean())!
+        await prepCache.savePrepCache({ campaign, characterId: kael.characterId, sheetId: kael.sheetId, characterName: "Kael", overlay: { modify: [], remove: [], add: [], suppress: [] }, riders: [], catalogRefs: [], prepId: prep._id, combatId })
+        const sword = (await game.getGameState(id, kael.userId)).me.combat!.options!.action.find((option) => option.category === "weapons" && option.id !== "unarmed")!
+        combatPrepAi.adjust.mockImplementation(async (input) => (readRule(input), { decision: "accept", reason: "Acuidade.", modify: [{ optionId: sword.id, attack: { bonus: 6, damage: "1d8+3", damageType: "cortante", finesse: true }, reason: "A espada tem acuidade.", source: RULE }] }))
+        await adjustments.requestCombatAdjustment(id, { economy: "action", optionId: sword.id, text: "a espada tem acuidade" }, kael.userId)
+        await combatPrep.waitForCombatPreps()
+        const cache = (await MaddoxCombatPrepCacheModel.findOne({ campaignId: id, characterId: kael.characterId }).lean())!
+        expect(cache.overlay.modify).toEqual([expect.objectContaining({ optionId: sword.id, reason: "A espada tem acuidade." })])
+    })
+
+    it("a ficha muda entre os dois carimbos da gravação: o cache não é gravado", async () => {
+        const { id, kael, combatId } = await scene()
+        const campaign = (await MaddoxCampaignModel.findById(id).lean())!
+        cacheHooks.afterStamp = async () => {
+            await CharacterItem.collection.insertOne({ sheetId: new mongoose.Types.ObjectId(kael.sheetId), catalogItemId: null, name: "<p>Corda</p>", quantity: 1, equipped: false, notes: "" })
+        }
+        await prepCache.savePrepCache({ campaign, characterId: kael.characterId, sheetId: kael.sheetId, characterName: "Kael", overlay: { modify: [], remove: [], add: [], suppress: [] }, riders: [], catalogRefs: [], prepId: null, combatId })
+        expect(await MaddoxCombatPrepCacheModel.exists({ campaignId: id, characterId: kael.characterId })).toBeNull()
+        await prepCache.savePrepCache({ campaign, characterId: kael.characterId, sheetId: kael.sheetId, characterName: "Kael", overlay: { modify: [], remove: [], add: [], suppress: [] }, riders: [], catalogRefs: [], prepId: null, combatId })
+        expect(await MaddoxCombatPrepCacheModel.exists({ campaignId: id, characterId: kael.characterId })).toBeTruthy()
+    })
+
+    it("a leitura do catálogo falha: a ficha é preparada inteira (nunca acerto indevido) e nenhum cache é gravado com hash de leitura falha", async () => {
+        const { id } = await preparedOnce()
+        const saved = (await MaddoxCombatPrepCacheModel.find({ campaignId: id }).lean()).map((cache) => [cache.characterName, cache.preparedAt.getTime()])
+        cacheHooks.catalogFails = true
+        const second = await nextCombat(id)
+        expect(reviewedNames().sort()).toEqual(["Kael", "Lyra"])
+        expect((await prepOf(second._id, "Kael")).source).toEqual({ kind: "full", reason: "o catálogo do DnDicas mudou" })
+        // A gravação também lê o catálogo: com a falha, o cache antigo continua como estava.
+        expect((await MaddoxCombatPrepCacheModel.find({ campaignId: id }).lean()).map((cache) => [cache.characterName, cache.preparedAt.getTime()])).toEqual(saved)
+    })
+
+    it('"Repreparar ficha" durante a preparação em andamento: a gravação do fim do job não desfaz o pedido', async () => {
+        const { id, kael, lyra } = await preparedOnce()
+        await CharacterSheet.collection.updateOne({ _id: new mongoose.Types.ObjectId(lyra.sheetId) }, { $set: { level: 4 } })
+        combatPrepAi.review.mockImplementation(async (input) => {
+            if (input.characterName === "Lyra") await prepCache.invalidateCombatPrepCache(id, lyra.characterId, kael.userId)
+            return { sheetChanges: [], modify: [], remove: [], add: [] }
+        })
+        await nextCombat(id)
+        expect(reviewedNames()).toEqual(["Lyra"])
+        expect((await MaddoxCombatPrepCacheModel.findOne({ campaignId: id, characterId: lyra.characterId }).lean())!.invalidatedAt).not.toBeNull()
+        combatPrepAi.review.mockClear()
+        const third = await nextCombat(id, 7)
+        expect((await prepOf(third._id, "Lyra")).source).toEqual({ kind: "full", reason: "o dono da campanha pediu a repreparação da ficha" })
+    })
+
+    it.each([
+        ["arma nova equipada", "partial"],
+        ["entidade do catálogo citada pela ficha mudou", "full"],
+    ] as const)("ajuste aceito depois de mudar a ficha ou o catálogo (%s): o cache guarda o overlay mas não absorve a mudança", async (what, kind) => {
+        const { id, kael, combatId } = await scene()
+        const prep = await readyPrep(id, combatId, kael)
+        const campaign = (await MaddoxCampaignModel.findById(id).lean())!
+        const sword = await swordOf(kael.sheetId)
+        await prepCache.savePrepCache({ campaign, characterId: kael.characterId, sheetId: kael.sheetId, characterName: "Kael", overlay: { modify: [], remove: [], add: [], suppress: [] }, riders: [], catalogRefs: [`Item:${sword.catalogItemId}`], prepId: prep._id, combatId })
+        if (kind === "partial") await CharacterItem.collection.insertOne({ sheetId: new mongoose.Types.ObjectId(kael.sheetId), catalogItemId: null, name: "<p>Machadinha</p>", quantity: 1, equipped: true, notes: "" })
+        else await ItemModel.collection.updateOne({ _id: sword.catalogItemId! }, { $set: { damageDice: { quantidade: 1, tipo: "d10" } } })
+        const option = (await game.getGameState(id, kael.userId)).me.combat!.options!.action.find((item) => item.id === `weapon:${sword._id}`)!
+        combatPrepAi.adjust.mockImplementation(async (input) => (readRule(input), { decision: "accept", reason: "Acuidade.", modify: [{ optionId: option.id, attack: { bonus: 6, damage: "1d8+3", damageType: "cortante", finesse: true }, reason: "A espada tem acuidade.", source: RULE }] }))
+        await adjustments.requestCombatAdjustment(id, { economy: "action", optionId: option.id, text: "a espada tem acuidade" }, kael.userId)
+        await combatPrep.waitForCombatPreps()
+        const cache = (await MaddoxCombatPrepCacheModel.findOne({ campaignId: id, characterId: kael.characterId }).lean())!
+        expect(cache.overlay.modify).toEqual([expect.objectContaining({ optionId: option.id, reason: "A espada tem acuidade." })])
+        const snapshot = (await prepCache.readPrepSnapshot(kael.sheetId))!
+        const { prepFingerprint } = await import("@/features/maddox/combat-prep-cache")
+        const verdict = await prepCache.decidePrepCache({ campaignId: id, characterId: kael.characterId, sheetId: kael.sheetId, fingerprint: prepFingerprint(snapshot, await prepCache.prepCacheContext(campaign.rigor)) })
+        expect(verdict.decision.kind).toBe(kind)
+        expect(what).toBeTruthy()
+    })
+
+    it("Maddox sem provedor e personagem a 0 PV: a preparação falha antes da checagem de 0 PV, que roda quando o dono tenta de novo", async () => {
+        const { maddoxAvailability } = await import("@/features/maddox/server/settings")
+        try {
+            const { id, kael } = await initiativeScene(null, {
+                beforeCombat: async ({ id: campaignId }) => {
+                    // A campanha já existe (criá-la exige o Maddox); o provedor sai antes de o combate abrir.
+                    vi.mocked(maddoxAvailability).mockResolvedValue({ available: false, reason: "Sem provedor." } as never)
+                    const character = (await MaddoxCharacterModel.findOne({ campaignId, name: "Kael" }).lean())!
+                    await CharacterSheet.collection.updateOne({ _id: character.sheetId! }, { $set: { hpCurrent: 0 } })
+                },
+            })
+            const failed = (await prepsOf(id)).find((prep) => prep.characterName === "Kael")!
+            expect(failed).toMatchObject({ status: "failed", error: "Sem provedor.", downedCheckedAt: null })
+            expect(combatPrepAi.downed).not.toHaveBeenCalled()
+            vi.mocked(maddoxAvailability).mockResolvedValue({ available: true, reason: null } as never)
+            await combatPrep.retryCombatPrep(id, String(failed._id), kael.userId)
+            await combatPrep.waitForCombatPreps()
+            expect(combatPrepAi.downed).toHaveBeenCalledTimes(1)
+            expect((await MaddoxCombatPrepModel.findById(failed._id).lean())!.status).toBe("ready")
+        } finally {
+            vi.mocked(maddoxAvailability).mockResolvedValue({ available: true, reason: null } as never)
+        }
+    })
 })

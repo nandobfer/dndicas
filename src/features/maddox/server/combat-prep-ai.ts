@@ -202,6 +202,24 @@ export interface ReviewSheetInput {
     jobId: string
     /** DND-51: pergunta já feita ao jogador nesta preparação e a resposta dele (`null` = não respondeu no prazo). */
     question?: { text: string; answer: string | null }
+    /**
+     * DND-78: preparação parcial — a mesa já foi preparada num combate anterior e só estas partes da ficha mudaram
+     * (`parts`, com a chave entre colchetes); `kept` são os ajustes guardados que continuam valendo.
+     */
+    scope?: { parts: string[]; kept: string }
+}
+
+/** DND-78: bloco da preparação parcial (só o que mudou; o servidor recusa o resto). */
+function scopeBlock(scope: ReviewSheetInput["scope"]): string[] {
+    if (!scope) return []
+    return [
+        "## Preparação parcial (só o que mudou)",
+        "A mesa deste personagem já foi preparada num combate anterior. Desde então, só estas partes da ficha mudaram:",
+        scope.parts.join("\n"),
+        "Revise SOMENTE essas partes e as opções ligadas a elas (o id da opção traz o id da parte: weapon:<itemId>, spell:<spellId>, ability:trait:<id>…). Não mexa na base da ficha (atributos, proficiências, conjuração, espaços de magia) nem nas opções das partes que não mudaram: o servidor recusa.",
+        "## Ajustes guardados que continuam valendo (não repita nem desfaça)",
+        scope.kept,
+    ]
 }
 
 /** DND-51: a preparação pode parar com uma pergunta ao jogador quando falta uma escolha dele na ficha. */
@@ -237,6 +255,7 @@ export async function reviewCombatSheet(input: ReviewSheetInput): Promise<unknow
         "## Opções calculadas pelo servidor",
         input.optionsText,
         `## Ataque furtivo detectado pelo servidor: ${input.sneakAttack ? `+${input.sneakAttack}` : "nenhum"}`,
+        ...scopeBlock(input.scope),
         ...questionBlock(input.question),
     ].join("\n\n")
     const text = await withTimeout(MADDOX_COMBAT_PREP_TIMEOUT_MS, "a preparação da ficha", (signal) =>

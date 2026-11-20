@@ -780,6 +780,11 @@ export const MADDOX_SNEAK_ATTACK_CHECK_TIMEOUT_MS = 20_000
 export const MADDOX_COMBAT_PREP_TEXT_CEILING = { reason: 4_000, label: 300, detail: 1_000, name: 300, append: 10_000, description: 30_000 } as const
 /** Trecho de cada característica e talento que vai ao modelo; acima disso (ou com menções) ele só acrescenta, não reescreve. */
 export const MADDOX_COMBAT_PREP_TRAIT_TEXT_MAX = 400
+/**
+ * DND-78: versão do cache da preparação. Suba quando mudar o contrato da resposta, o prompt da revisão ou a conferência
+ * (`interpretPrep`): todo cache gravado com outra versão deixa de valer e a ficha é preparada inteira.
+ */
+export const MADDOX_COMBAT_PREP_CACHE_VERSION = 1
 /** Mensagem dos demais quando a preparação de uma ficha falhou (o motivo só vai ao dono da campanha). */
 /**
  * DND-51: ferramentas de leitura e correção da ficha do "Pergunte ao mestre" (só na resposta a uma pergunta, nos graus

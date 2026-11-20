@@ -51,6 +51,28 @@ async function modelOf(type: string): Promise<Finder | null> {
     return model as unknown as Finder | null
 }
 
+/**
+ * DND-78: documentos ativos do catálogo de um tipo, pelos ids (a impressão digital do cache da preparação). Id que não
+ * existe (ou tipo sem modelo) fica fora do mapa.
+ */
+export async function catalogDocsByIds(type: string, ids: readonly string[]): Promise<Map<string, unknown>> {
+    const found = new Map<string, unknown>()
+    if (type === "Subclasse") {
+        const { getCatalogEntity } = await import("@/features/mcp/server/catalog-entity-service")
+        for (const id of ids) {
+            const entity = await getCatalogEntity({ type: "Subclasse", id }).catch(() => null)
+            if (entity) found.set(id, entity)
+        }
+        return found
+    }
+    const model = await modelOf(type)
+    const valid = ids.filter((id) => /^[a-f0-9]{24}$/i.test(id))
+    if (!model || !valid.length) return found
+    const docs = await model.find({ _id: { $in: valid.map((id) => new Types.ObjectId(id)) }, status: "active" }).select("-__v").lean<{ _id: Types.ObjectId }[]>()
+    for (const doc of docs) found.set(String(doc._id), doc)
+    return found
+}
+
 /** Menções (tipo, id, nome) de um HTML da ficha. */
 export const mentionCandidates = (html: string | null | undefined): CatalogReferenceCandidate[] => parseMentionsFromHtml(html).map((mention) => ({ type: mention.entityType, id: mention.id, name: mention.label }))
 

@@ -5,7 +5,7 @@ import type { AttributeType, SkillName } from "@/features/character-sheets/types
 import type { DiceRollResponse } from "@/features/dice-roller/types"
 import type { CombatEconomy, HpBand } from "./combat-rules"
 import type { CombatOption } from "./combat-options"
-import type { CombatActionStep, CombatPrepChange, IMaddoxCombatReaction } from "./combat-types"
+import type { CombatActionStep, CombatPrepChange, CombatPrepSource, IMaddoxCombatReaction } from "./combat-types"
 import type {
     MaddoxCampaignStatus,
     MaddoxConditionKey,
@@ -287,6 +287,8 @@ export interface MaddoxCombatPrepSlotDto {
     prepId?: string
     /** DND-75: só em "Preparando…": início do job, em ISO (a tela calcula o tempo e o aviso de parada). */
     since?: string | null
+    /** DND-78: só em "Pronto": a mesa veio do cache, foi preparada só no que mudou, ou inteira. */
+    source?: CombatPrepSource["kind"] | null
 }
 
 /** DND-41: estado da preparação da mesa de combate. `failures` (com o motivo) só chega ao dono da campanha. */
@@ -382,6 +384,8 @@ export interface MaddoxCombatAdjustmentDto {
 export interface MaddoxCombatPrepCardDto {
     characterName: string
     changes: CombatPrepChange[]
+    /** DND-78: de onde veio a mesa pronta (cache, só o que mudou, ou a ficha inteira). */
+    source?: CombatPrepSource | null
     /** DND-51: pergunta da preparação ao jogador (`awaiting` = esperando a resposta, com o campo no card). */
     question?: MaddoxCombatPrepQuestionDto | null
 }
@@ -489,6 +493,11 @@ export interface MaddoxGameParticipantDto {
      * máximo; ausente sem ficha.
      */
     hp?: { current: number; max: number; temp: number } | null
+    /**
+     * DND-78: só para o dono da campanha — a preparação de combate guardada deste personagem (`invalidated` = o dono já
+     * pediu "Repreparar ficha": o próximo combate prepara a ficha inteira). Ausente sem cache.
+     */
+    prepCache?: { characterId: string; preparedAt: string; invalidated: boolean } | null
 }
 
 export interface MaddoxGameStateDto {

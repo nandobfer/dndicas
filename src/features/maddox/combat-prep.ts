@@ -1,7 +1,7 @@
 import { availableSlotLevels, plainText, type CombatOption, type CombatOptions, type CombatRider, type OptionSheet } from "./combat-options"
 import { alignModifierParts } from "@/features/dice-roller/dice-breakdown"
 import { parseDiceExpression, type CombatEconomy } from "./combat-rules"
-import type { CombatOptionPatch, CombatPrepOverlay, CombatPrepRider, PreparedCombatOption } from "./combat-types"
+import type { CombatOptionPatch, CombatPrepEntryOrigin, CombatPrepOverlay, CombatPrepRider, PreparedCombatOption } from "./combat-types"
 
 /**
  * Preparação da mesa de combate (DND-41) — parte PURA. O Maddox revisa, uma vez por combate, a lista que o servidor
@@ -53,8 +53,11 @@ export const PREP_ADJUSTMENT_LABEL = "Ajuste da preparação do Maddox"
 
 const damageModifier = (damage: string | null | undefined) => parseDiceExpression(damage)?.modifier ?? 0
 
-function patchOption(option: CombatOption, patch: CombatOptionPatch, reason: string): CombatOption {
-    const next: CombatOption = { ...option, adjusted: { reason } }
+/** DND-78: o ajuste veio do cache (combate anterior) ou foi preparado agora; com a data, quando houver. */
+const adjustedOf = (reason: string, origin: CombatPrepEntryOrigin = {}): NonNullable<CombatOption["adjusted"]> => ({ reason, origin: origin.fromCache ? "cache" : "now", ...(origin.preparedAt ? { preparedAt: origin.preparedAt } : {}) })
+
+function patchOption(option: CombatOption, patch: CombatOptionPatch, reason: string, origin?: CombatPrepEntryOrigin): CombatOption {
+    const next: CombatOption = { ...option, adjusted: adjustedOf(reason, origin) }
     if (patch.label?.trim()) next.label = patch.label.trim()
     if (patch.detail?.trim()) next.detail = patch.detail.trim()
     if (patch.economy) next.economy = patch.economy
@@ -71,7 +74,7 @@ function patchOption(option: CombatOption, patch: CombatOptionPatch, reason: str
 }
 
 /** Opção acrescentada pelo Maddox, se o recurso que a libera estiver disponível neste turno. */
-function preparedOption(prepared: PreparedCombatOption, reason: string, input: ApplyPrepInput): CombatOption | null {
+function preparedOption(prepared: PreparedCombatOption, reason: string, input: ApplyPrepInput, origin?: CombatPrepEntryOrigin): CombatOption | null {
     const requires = prepared.requires ?? null
     const option: CombatOption = {
         id: prepared.id,
@@ -82,7 +85,7 @@ function preparedOption(prepared: PreparedCombatOption, reason: string, input: A
         target: prepared.target,
         multiTarget: prepared.multiTarget,
         resolution: prepared.resolution,
-        adjusted: { reason },
+        adjusted: adjustedOf(reason, origin),
         ...(prepared.attack ? { attack: { ...prepared.attack } } : {}),
         ...(prepared.save ? { save: { ...prepared.save } } : {}),
         ...(prepared.heal ? { heal: { ...prepared.heal } } : {}),
@@ -123,14 +126,14 @@ export function applyCombatPrep(base: CombatOptions, input: ApplyPrepInput): Com
         if (hidden.has(option.id)) continue
         const patch = patches.get(option.id)
         // A mudança de economia só vale entre Ação e Ação bônus (a reação tem janela própria).
-        const next = patch && option.economy !== "reaction" ? patchOption(option, patch.patch, patch.reason) : option
+        const next = patch && option.economy !== "reaction" ? patchOption(option, patch.patch, patch.reason, patch) : option
         if (next.economy !== option.economy && !slotOpen(next, input.economy)) continue
         listOf(result, next.economy).push(next)
     }
     for (const entry of overlay?.add ?? []) {
         if (hidden.has(entry.option.id)) continue
         if ([...result.action, ...result.bonus, ...result.reactions].some((item) => item.id === entry.option.id)) continue
-        const option = preparedOption(entry.option, entry.reason, input)
+        const option = preparedOption(entry.option, entry.reason, input, entry)
         if (option) insertOption(listOf(result, option.economy), option)
     }
     const sneak = (input.riders ?? []).find((rider) => rider.key === "sneak-attack")
