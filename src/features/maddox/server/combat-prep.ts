@@ -755,6 +755,10 @@ async function runCombatPrep(campaignId: Types.ObjectId, prepId: Types.ObjectId,
             return
         }
         const [{ loadMaddoxSettings, maddoxAvailability }, ai, { readSheetStamp }] = await Promise.all([import("./settings"), import("./combat-prep-ai"), import("./combat-sheet-writes")])
+        // A IA precisa estar disponível antes da checagem de 0 PV (que gasta a marca "uma vez por preparação").
+        const { settings } = await loadMaddoxSettings()
+        const status = await maddoxAvailability(settings, campaign.rigor)
+        if (!status.available) throw new Error(status.reason ?? 'O "Agente Maddox" não está configurado.')
         // DND-49 (decisão do dono D3): quem está a 0 PV é conferido pela história antes da revisão da ficha, no mesmo job.
         await checkDownedCharacter(campaign, claimed, active.state)
         const cacheModule = await import("./combat-prep-cache")
@@ -780,15 +784,12 @@ async function runCombatPrep(campaignId: Types.ObjectId, prepId: Types.ObjectId,
                 ).lean<PrepDoc>()
                 if (saved) {
                     await postPrepCard(saved)
-                    await cacheModule.savePrepCache({ campaign, characterId: claimed.characterId, sheetId: active.state.sheetId!, characterName: claimed.characterName, overlay, riders, catalogRefs: cacheRefs, prepId, combatId: claimed.combatId, preparedAt: plan.decision.kind === "hit" ? verdict.cache!.preparedAt : preparedAt })
+                    await cacheModule.savePrepCache({ campaign, characterId: claimed.characterId, sheetId: active.state.sheetId!, characterName: claimed.characterName, overlay, riders, catalogRefs: cacheRefs, prepId, combatId: claimed.combatId, preparedAt: plan.decision.kind === "hit" ? verdict.cache!.preparedAt : preparedAt, readInvalidatedAt: verdict.cache ? (verdict.cache.invalidatedAt ?? null) : undefined })
                     await auditPrepSource(campaign, saved, plan.source)
                 }
                 log.info({ campaignId: String(campaignId), prepId: String(prepId), character: claimed.characterName, source: plan.source.kind, kept: plan.source.kept ?? 0 }, "[maddox] mesa do personagem reaproveitada do cache")
                 break
             }
-            const { settings } = await loadMaddoxSettings()
-            const status = await maddoxAvailability(settings, campaign.rigor)
-            if (!status.available) throw new Error(status.reason ?? 'O "Agente Maddox" não está configurado.')
             const reads = createCatalogReadLog()
             const question = claimed.question
             const raw = await untilAborted(
@@ -847,7 +848,7 @@ async function runCombatPrep(campaignId: Types.ObjectId, prepId: Types.ObjectId,
             ).lean<PrepDoc>()
             if (saved) {
                 await postPrepCard(saved)
-                await cacheModule.savePrepCache({ campaign, characterId: claimed.characterId, sheetId: active.state.sheetId!, characterName: claimed.characterName, overlay, riders: rider.riders, catalogRefs: [...cacheRefs, ...reads.refs], prepId, combatId: claimed.combatId, preparedAt })
+                await cacheModule.savePrepCache({ campaign, characterId: claimed.characterId, sheetId: active.state.sheetId!, characterName: claimed.characterName, overlay, riders: rider.riders, catalogRefs: [...cacheRefs, ...reads.refs], prepId, combatId: claimed.combatId, preparedAt, readInvalidatedAt: verdict.cache ? (verdict.cache.invalidatedAt ?? null) : undefined })
                 if (verdict.cache || plan.kept) await auditPrepSource(campaign, saved, source)
             }
             if (interpretation.dropped) log.warn({ campaignId: String(campaignId), prepId: String(prepId), dropped: interpretation.dropped, droppedWithoutSource: interpretation.droppedWithoutSource }, "[maddox] itens da preparação descartados na validação")

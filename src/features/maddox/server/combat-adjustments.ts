@@ -125,6 +125,9 @@ async function runAdjustment(campaignId: Types.ObjectId, prepId: Types.ObjectId,
         const screen = await screenPlayerChoices(interpretation.sheetChanges, reads, [adjustment.text, ...prep.adjustments.map((item) => item.text), ...(await interviewPlayerTexts(campaign._id, prep.characterId))], await choiceSheetOf(state.sheetId))
         interpretation.sheetChanges = screen.allowed
         interpretation.refusals.push(...refusalsOf(screen.refused))
+        // DND-78: a ficha logo antes do ajuste (o cache só absorve a correção se ainda era a ficha preparada).
+        const { readPrepSnapshot, refreshPrepCacheOverlay } = await import("./combat-prep-cache")
+        const beforeAdjust = await readPrepSnapshot(state.sheetId).catch(() => null)
         const written = await applyInterpretation(interpretation, { sheetId: state.sheetId, campaign, characterName: prep.characterName, origin: "combat-adjust", requestedBy })
         const changes: CombatPrepChange[] = orderedChanges(interpretation, [...written.changes, ...interpretation.optionChanges])
         const sourced = { catalogRefs: reads.refs, droppedWithoutSource: interpretation.droppedWithoutSource }
@@ -155,8 +158,7 @@ async function runAdjustment(campaignId: Types.ObjectId, prepId: Types.ObjectId,
         await MaddoxCombatPrepModel.updateOne({ _id: prepId }, { $set: { overlay: merged } })
         await decide(prepId, adjustmentId, { status: "accepted", reason: response.reason, changes, ...sourced })
         // DND-78: o ajuste aceito entra no cache (o próximo combate já começa com ele, se a ficha não mudar depois).
-        const { refreshPrepCacheOverlay } = await import("./combat-prep-cache")
-        await refreshPrepCacheOverlay({ campaign, characterId: prep.characterId, sheetId: state.sheetId, characterName: prep.characterName, overlay: merged, riders: fresh?.riders ?? prep.riders ?? [], catalogRefs: reads.refs, prepId, combatId: prep.combatId })
+        await refreshPrepCacheOverlay({ campaign, characterId: prep.characterId, sheetId: state.sheetId, characterName: prep.characterName, overlay: merged, riders: fresh?.riders ?? prep.riders ?? [], catalogRefs: reads.refs, prepId, combatId: prep.combatId, before: beforeAdjust })
         log.info({ campaignId: String(campaignId), option: adjustment.optionId, changes: changes.length, ...audit, droppedWithoutSource: interpretation.droppedWithoutSource }, "[maddox] pedido de ajuste aceito")
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error)

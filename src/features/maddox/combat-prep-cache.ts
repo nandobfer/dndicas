@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto"
+import { plainText } from "./combat-options"
 import type { CombatSheetChange } from "./combat-prep-schemas"
 import type { CombatPrepOverlay, PreparedCombatOption } from "./combat-types"
 
@@ -57,7 +58,8 @@ export function prepFingerprint(snapshot: PrepSheetSnapshot, context: { version:
     const add = (kind: keyof typeof PART_LABELS, entry: { id: string; name: string }) => {
         const key = `${kind}:${entry.id}`
         parts[key] = stableHash(entry)
-        names[key] = `${PART_LABELS[kind]}: ${entry.name.trim() || "sem nome"}`
+        // O hash usa o dado cru; o rótulo (card e prompt) usa o texto limpo do nome, que a ficha guarda em HTML.
+        names[key] = `${PART_LABELS[kind]}: ${plainText(entry.name).trim() || "sem nome"}`
     }
     for (const attack of snapshot.attacks) add("attack", attack)
     for (const item of snapshot.items) add("item", item)

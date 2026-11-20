@@ -1196,6 +1196,9 @@ ficha; se algo mudou, o Maddox prepara **só o que mudou**. Sem permissão nova 
   constante** ao mudar o contrato da resposta, o prompt da revisão ou `interpretPrep`.
 - Catálogo **por entidade usada** (decisão do dono): hash do conteúdo de cada entidade citada pela ficha (`references` encontradas)
   ou lida pelo Maddox na preparação (`reads.refs`), relido na abertura (`catalogHashes` → `catalogDocsByIds`). Mudou = ficha inteira.
+  Leitura do catálogo que **falha** também = ficha inteira (`catalogStillMatches`), e a gravação do cache não acontece: "ausente"
+  só vale para entidade que saiu do catálogo, nunca para leitura que falhou.
+- Os rótulos do que mudou (card e prompt) usam o nome limpo (`plainText`); o hash usa o dado cru.
 
 **Decisão** (`decidePrepCache` + `prepPlan` em `runCombatPrep`, depois da conferência de quem está a 0 PV, que sempre roda):
 - `hit` → sem IA: `ready` com o overlay e os riders do cache, `source { kind: "cache", cachedAt, kept }`, auditoria `cache-hit`.
@@ -1212,7 +1215,11 @@ ficha; se algo mudou, o Maddox prepara **só o que mudou**. Sem permissão nova 
 **Gravação do cache** (`savePrepCache`): ao terminar `ready` (inclusive do cache), com a impressão lida **depois** das correções
 que o Maddox gravou; se a ficha mudar nesse meio-tempo (`readSheetStamp` antes/depois), não grava. Falha só vai ao log. Cada
 entrada do overlay leva `preparedAt` e, quando reaproveitada, `fromCache`. Pedido de ajuste aceito atualiza o cache
-(`refreshPrepCacheOverlay`). "Seguir sem preparação", falha e descarte não gravam. Reiniciar a campanha apaga o cache
+(`refreshPrepCacheOverlay`): a impressão e o catálogo só são regravados se a ficha lida logo antes do ajuste e o catálogo ainda
+batem com o cache; senão só o overlay e os riders mudam (a mudança da ficha ou do catálogo é preparada no próximo combate).
+"Repreparar ficha" pedido durante a preparação não é desfeito: a gravação só troca o cache se `invalidatedAt` ainda é o lido
+no veredito (`readInvalidatedAt`). A disponibilidade da IA é conferida antes da checagem de 0 PV (que gasta a marca
+`downedCheckedAt`), como antes da DND-78. "Seguir sem preparação", falha e descarte não gravam. Reiniciar a campanha apaga o cache
 (`clearCampaignPrepCache`); voltar a um turno não mexe nele (a impressão protege).
 
 **Repreparar ficha** (`POST …/game/combat/prep-cache/[characterId]/invalidate`, `invalidateCombatPrepCache`): só o dono
@@ -1227,7 +1234,8 @@ ganha o chip "do cache (dd/mm)" ou "preparado agora" (`option.adjusted.origin`).
 
 **Testes.** `tests/backend/maddox/combat-prep-cache.test.ts` (parte pura e escopo do `interpretPrep`), bloco DND-78 de
 `tests/backend/maddox/tactical-combat.test.ts` (acerto, parcial, só remoção, base/catálogo, isolamento, repreparar, seguir sem
-preparação, ajuste aceito), `campaign-reset.test.ts` e `tests/frontend/maddox/maddox-combat-prep-cache.test.tsx`.
+preparação, ajuste aceito; ficha mudando entre os carimbos, catálogo falhando, repreparar durante o job, ajuste sobre ficha ou
+catálogo alterados e provedor indisponível com 0 PV — ganchos `cacheHooks` sobre `readSheetStamp` e `catalogDocsByIds`), `campaign-reset.test.ts` e `tests/frontend/maddox/maddox-combat-prep-cache.test.tsx`.
 
 ## Catálogo como fonte, maestrias, furtivo depois do acerto, Esconder-se e PV (DND-49)
 

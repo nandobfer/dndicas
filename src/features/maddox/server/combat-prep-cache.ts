@@ -113,10 +113,8 @@ export async function catalogHashes(refs: readonly string[]): Promise<{ ref: str
     const { catalogDocsByIds } = await import("./catalog-references")
     const docs = new Map<string, unknown>()
     for (const [type, ids] of byType) {
-        const found = await catalogDocsByIds(type, ids).catch((error: unknown) => {
-            log.warn({ err: error instanceof Error ? error.message : String(error), type }, "[maddox] falha ao ler o catálogo para o cache da preparação")
-            return new Map<string, unknown>()
-        })
+        // Falha na leitura propaga: "ausente" só vale para entidade que de fato saiu do catálogo, nunca para leitura que falhou.
+        const found = await catalogDocsByIds(type, ids)
         for (const [id, doc] of found) docs.set(`${type}:${id}`, doc)
     }
     return unique.map((ref) => ({ ref, hash: stableHash(docs.get(ref) ?? "ausente") }))
@@ -139,11 +137,24 @@ export async function decidePrepCache(input: { campaignId: Id; characterId: Id; 
     if (cache.invalidatedAt) return { decision: { kind: "full", reason: PREP_FULL_REASONS.invalidated }, cache }
     const decision = diffPrepFingerprint(cache.fingerprint, input.fingerprint)
     if (decision.kind === "full") return { decision, cache }
-    const current = await catalogHashes((cache.catalog ?? []).map((entry) => entry.ref))
-    const saved = new Map((cache.catalog ?? []).map((entry) => [entry.ref, entry.hash]))
-    if (current.some((entry) => saved.get(entry.ref) !== entry.hash)) return { decision: { kind: "full", reason: PREP_FULL_REASONS.catalog }, cache }
+    if (!(await catalogStillMatches(cache))) return { decision: { kind: "full", reason: PREP_FULL_REASONS.catalog }, cache }
     return { decision, cache }
 }
+
+/** As entidades do catálogo guardadas no cache continuam iguais. Leitura que falhou conta como "mudou" (prepara inteira). */
+async function catalogStillMatches(cache: Pick<IMaddoxCombatPrepCache, "catalog" | "campaignId" | "characterName">): Promise<boolean> {
+    try {
+        const current = await catalogHashes((cache.catalog ?? []).map((entry) => entry.ref))
+        const saved = new Map((cache.catalog ?? []).map((entry) => [entry.ref, entry.hash]))
+        return current.every((entry) => saved.get(entry.ref) === entry.hash)
+    } catch (error) {
+        log.warn({ err: error instanceof Error ? error.message : String(error), campaignId: String(cache.campaignId), character: cache.characterName }, "[maddox] falha ao ler o catálogo para conferir o cache da preparação; a ficha é preparada inteira")
+        return false
+    }
+}
+
+/** A impressão guardada é a mesma que a atual (contexto, base e todas as partes). */
+const sameFingerprint = (a: PrepFingerprint, b: PrepFingerprint) => diffPrepFingerprint(a, b).kind === "hit"
 
 /** O overlay gravado no cache, sem a marca "veio do cache" (ela é posta ao reaproveitar). */
 const storedOverlay = (overlay: CombatPrepOverlay): CombatPrepOverlay => {
@@ -171,6 +182,11 @@ export async function savePrepCache(input: {
     prepId: Id | null
     combatId: Id | null
     preparedAt?: Date
+    /**
+     * `invalidatedAt` lido com o veredito (`null` = cache válido; `undefined` = não havia cache). Se o dono pedir "Repreparar
+     * ficha" enquanto a preparação roda, o valor no banco muda e a gravação não desfaz o pedido.
+     */
+    readInvalidatedAt?: Date | null
 }): Promise<void> {
     try {
         const { readSheetStamp } = await import("./combat-sheet-writes")
@@ -183,8 +199,11 @@ export async function savePrepCache(input: {
             log.info({ campaignId: String(input.campaign._id), character: input.characterName }, "[maddox] a ficha mudou ao gravar o cache da preparação; o cache não foi gravado")
             return
         }
-        await MaddoxCombatPrepCacheModel.updateOne(
-            { campaignId: oid(String(input.campaign._id)), characterId: oid(input.characterId) },
+        const key = { campaignId: oid(String(input.campaign._id)), characterId: oid(input.characterId) }
+        // Havia cache: só troca se a invalidação ainda é a lida no veredito. Não havia: só cria (a corrida cai no índice único).
+        const filter = input.readInvalidatedAt === undefined ? key : { ...key, invalidatedAt: input.readInvalidatedAt }
+        const result = await MaddoxCombatPrepCacheModel.updateOne(
+            filter,
             {
                 $set: {
                     sheetId: oid(input.sheetId),
@@ -200,22 +219,36 @@ export async function savePrepCache(input: {
                     invalidatedBy: null,
                 },
             },
-            { upsert: true },
+            { upsert: input.readInvalidatedAt === undefined },
         )
+        if (input.readInvalidatedAt !== undefined && result.matchedCount === 0) {
+            log.info({ campaignId: String(input.campaign._id), character: input.characterName }, "[maddox] o cache da preparação mudou (repreparação pedida) durante a preparação; não foi regravado")
+        }
     } catch (error) {
         // O cache é só economia: a falha nunca derruba a preparação (o próximo combate prepara de novo).
         log.warn({ err: error instanceof Error ? error.message : String(error), campaignId: String(input.campaign._id), character: input.characterName }, "[maddox] falha ao gravar o cache da preparação")
     }
 }
 
-/** Pedido de ajuste aceito: o cache passa a ter o overlay novo (e a ficha corrigida), se houver cache deste personagem. */
-export async function refreshPrepCacheOverlay(input: { campaign: Pick<IMaddoxCampaign, "_id" | "rigor">; characterId: Id; sheetId: Id; characterName: string; overlay: CombatPrepOverlay; riders: CombatPrepRider[]; catalogRefs: readonly string[]; prepId: Id; combatId: Id }): Promise<void> {
-    const cache = await MaddoxCombatPrepCacheModel.findOne({ campaignId: oid(String(input.campaign._id)), characterId: oid(input.characterId) })
-        .select("catalog invalidatedAt preparedAt")
-        .lean<Pick<IMaddoxCombatPrepCache, "catalog" | "invalidatedAt" | "preparedAt">>()
-        .catch(() => null)
-    if (!cache || cache.invalidatedAt) return
-    await savePrepCache({ ...input, catalogRefs: [...(cache.catalog ?? []).map((entry) => entry.ref), ...input.catalogRefs], preparedAt: cache.preparedAt })
+/**
+ * Pedido de ajuste aceito: o cache passa a ter o overlay novo. A impressão e o catálogo só são regravados se a ficha
+ * (lida logo antes de gravar o ajuste, `before`) e o catálogo ainda batem com o cache; senão o cache guarda só o overlay e
+ * os riders, e o próximo combate prepara o que mudou (a mudança da ficha ou do catálogo nunca é "absorvida" pelo ajuste).
+ */
+export async function refreshPrepCacheOverlay(input: { campaign: Pick<IMaddoxCampaign, "_id" | "rigor">; characterId: Id; sheetId: Id; characterName: string; overlay: CombatPrepOverlay; riders: CombatPrepRider[]; catalogRefs: readonly string[]; prepId: Id; combatId: Id; before: PrepSheetSnapshot | null }): Promise<void> {
+    try {
+        const cache = await MaddoxCombatPrepCacheModel.findOne({ campaignId: oid(String(input.campaign._id)), characterId: oid(input.characterId) }).lean<IMaddoxCombatPrepCache>()
+        if (!cache || cache.invalidatedAt || String(cache.sheetId) !== String(input.sheetId)) return
+        const matches = Boolean(input.before) && sameFingerprint(cache.fingerprint, prepFingerprint(input.before!, await prepCacheContext(input.campaign.rigor))) && (await catalogStillMatches(cache))
+        if (matches) {
+            await savePrepCache({ ...input, catalogRefs: [...(cache.catalog ?? []).map((entry) => entry.ref), ...input.catalogRefs], preparedAt: cache.preparedAt, readInvalidatedAt: null })
+            return
+        }
+        await MaddoxCombatPrepCacheModel.updateOne({ _id: cache._id, invalidatedAt: null }, { $set: { overlay: storedOverlay(input.overlay), riders: input.riders } })
+        log.info({ campaignId: String(input.campaign._id), character: input.characterName }, "[maddox] ajuste aceito com a ficha ou o catálogo diferentes do cache: só o overlay foi atualizado")
+    } catch (error) {
+        log.warn({ err: error instanceof Error ? error.message : String(error), campaignId: String(input.campaign._id), character: input.characterName }, "[maddox] falha ao atualizar o cache da preparação depois do ajuste")
+    }
 }
 
 /** Situação do cache de cada personagem da campanha (para o dono, no card "Na mesa"). */
