@@ -150,7 +150,7 @@ describe("Maddox 9 — o que é só do mestre não chega aos jogadores (critéri
             const result = await journal.searchJournal(c.id, { q }, c.player)
             expect(result.npcs.items, q).toEqual([])
             expect(result.memories.items, q).toEqual([])
-            expect(result.messages.items, q).toEqual([])
+            expect(result, q).not.toHaveProperty("messages")
         }
     })
 
@@ -190,7 +190,7 @@ describe("Maddox 9 — o que é só do mestre não chega aos jogadores (critéri
 })
 
 describe("Maddox 9 — busca por texto", () => {
-    it("encontra o local, o NPC e a narração, sem acento, sem caixa e por pedaço do nome", async () => {
+    it("encontra o local e o NPC, sem acento, sem caixa e por pedaço do nome; as falas da mesa não entram (DND-77)", async () => {
         const c = await campaignWithJournal()
         const javali = await journal.searchJournal(c.id, { q: "javali" }, c.player)
         expect(javali.memories.items.map((item) => item.id)).toContain(c.tavernaId)
@@ -199,22 +199,20 @@ describe("Maddox 9 — busca por texto", () => {
         const bart = await journal.searchJournal(c.id, { q: "bart" }, c.player)
         expect(bart.npcs.items.map((item) => item.id)).toEqual([c.bartolomeuId])
         expect(bart.npcs.items[0]!.excerpt).toBe("Taverneiro gordo e simpático.")
-        expect(bart.messages.items.map((item) => item.id)).toContain(c.narrationId)
+        expect(bart).not.toHaveProperty("messages")
 
         for (const q of ["taverna", "TAVÉRNA", "tavérna"]) {
             const result = await journal.searchJournal(c.id, { q }, c.player)
-            const hit = result.messages.items.find((item) => item.id === c.narrationId)
-            expect(hit, q).toBeDefined()
-            expect(hit!.turnNumber).toBe(1)
-            expect(hit!.characterName).toBeNull()
-            expect(hit!.excerpt).toBe("As chamas lambem as vigas da Tavérna enquanto Bartolomeu grita por água e conjura Raio de Gelo.")
+            expect(result.state?.excerpt, q).toContain("Taverna do Javali")
+            // A narração do turno 1 ("…vigas da Tavérna…") não volta mais na busca: a aba Histórico saiu do diário.
+            expect(JSON.stringify(result), q).not.toContain("lambem as vigas")
         }
     })
 
     it("encontra declarações com o personagem, a missão pela situação e os personagens do grupo", async () => {
         const c = await campaignWithJournal()
         const baldes = await journal.searchJournal(c.id, { q: "baldes" }, c.player)
-        expect(baldes.messages.items).toEqual([expect.objectContaining({ kind: "declaration", characterName: "Lyra" })])
+        expect(baldes).not.toHaveProperty("messages")
 
         const moleiro = await journal.searchJournal(c.id, { q: "moleiro" }, c.player)
         expect(moleiro.memories.items).toEqual([expect.objectContaining({ kind: "missao", status: "ativa" })])
@@ -225,14 +223,15 @@ describe("Maddox 9 — busca por texto", () => {
         expect(ombro.party.items.map((item) => item.characterName)).toEqual(["Aldric"])
     })
 
-    it("DND-74: a conversa com o mestre entra na busca como conversa (não pergunta do personagem); lembrança antiga e linha de resultado não entram", async () => {
+    it("DND-77: a conversa com o mestre, as lembranças e as linhas de resultado não entram na busca", async () => {
         const c = await campaignWithJournal()
         const campaignId = new mongoose.Types.ObjectId(c.id)
         await MaddoxCampaignMessageModel.create({ campaignId, turnNumber: 1, phase: "players", kind: "reminder", characterName: "Lyra", content: "O que tem no chão da cripta?", reminder: { status: "discarded", talk: true } })
         await MaddoxCampaignMessageModel.create({ campaignId, turnNumber: 1, phase: "players", kind: "reminder", characterName: "Lyra", content: "Lembre do chão da cripta antigo.", reminder: { status: "discarded" } })
         await MaddoxCampaignMessageModel.create({ campaignId, turnNumber: 1, phase: "players", kind: "master-fix", characterName: "Lyra", content: "Lembrança injetada: chão da cripta escorregadio", masterFix: { kind: "reminder", status: "discarded" } })
         const hits = await journal.searchJournal(c.id, { q: "chão da cripta" }, c.player)
-        expect(hits.messages.items).toEqual([expect.objectContaining({ kind: "talk", characterName: "Lyra", excerpt: expect.stringContaining("O que tem no chão da cripta?") })])
+        expect(hits).not.toHaveProperty("messages")
+        expect(JSON.stringify(hits, (key, value) => (key === "query" ? undefined : value))).not.toContain("chão da cripta")
     })
 
     it("busca pelas tags e não traz respostas que falharam", async () => {
@@ -240,12 +239,12 @@ describe("Maddox 9 — busca por texto", () => {
         const vila = await journal.searchJournal(c.id, { q: "vila" }, c.player)
         expect(vila.memories.items.map((item) => item.title)).toEqual(["Taverna do Javali"])
         const falha = await journal.searchJournal(c.id, { q: "Pergunte de novo" }, c.player)
-        expect(falha.messages.items).toEqual([])
+        expect(JSON.stringify(falha, (key, value) => (key === "query" ? undefined : value))).not.toContain("Pergunte de novo")
     })
 
     it("caracteres especiais do regex são literais", async () => {
         const c = await campaignWithJournal()
-        await expect(journal.searchJournal(c.id, { q: ".*" }, c.player)).resolves.toMatchObject({ npcs: { items: [] }, memories: { items: [] }, messages: { items: [] } })
+        await expect(journal.searchJournal(c.id, { q: ".*" }, c.player)).resolves.toMatchObject({ npcs: { items: [] }, memories: { items: [] } })
     })
 
     it("termo curto ou longo demais = 400", async () => {
@@ -409,27 +408,19 @@ describe("DND-22 — imagens do Maddox no diário", () => {
     })
 })
 
-describe("DND-36 — busca do Diário com as declarações dos outros ocultas", () => {
-    it("ligado: o texto da declaração de outro jogador sai da busca; a própria, perguntas, narração e o resumo do combate continuam", async () => {
+describe("DND-36 / DND-77 — busca do Diário sem o texto das declarações", () => {
+    it("com as declarações ocultas ligadas ou não, nenhuma fala da mesa sai pela busca", async () => {
         const c = await campaignWithJournal()
         await message(c.id, "declaration", "Seguro os baldes com a corda.", { memberId: new mongoose.Types.ObjectId(c.ownerMember), userId: c.owner, characterName: "Aldric", turnNumber: 2 })
-        await message(c.id, "question", "Os baldes têm furos?", { memberId: new mongoose.Types.ObjectId(c.playerMember), userId: c.player, characterName: "Lyra" })
-        await message(c.id, "declaration", "Vez de Lyra (rodada do combate)\n- Arremessa os baldes no goblin.", { memberId: new mongoose.Types.ObjectId(c.playerMember), userId: c.player, characterName: "Lyra", turnNumber: 4, combatTurn: true })
-        await message(c.id, "declaration", "Vez de Lyra (rodada do combate)\n- Esconde os baldes atrás do balcão.", { memberId: new mongoose.Types.ObjectId(c.playerMember), userId: c.player, characterName: "Lyra", turnNumber: 5 })
-        const contents = async (userId: string) => (await journal.searchJournal(c.id, { q: "baldes" }, userId)).messages.items.map((item) => item.excerpt).join(" | ")
+        const text = async (userId: string) => JSON.stringify(await journal.searchJournal(c.id, { q: "baldes" }, userId), (key, value) => (key === "query" ? undefined : value))
 
-        const before = await contents(c.owner)
-        expect(before).toContain("Corro para buscar baldes")
-
-        await MaddoxCampaignModel.updateOne({ _id: c.id }, { $set: { hidePlayerActions: true } })
-        const owner = await contents(c.owner)
-        expect(owner).not.toContain("Corro para buscar baldes")
-        expect(owner).toContain("Seguro os baldes")
-        expect(owner).toContain("Os baldes têm furos?")
-        expect(owner).toContain("Arremessa os baldes")
-        expect(owner).toContain("Esconde os baldes")
-        const player = await contents(c.player)
-        expect(player).toContain("Corro para buscar baldes")
-        expect(player).not.toContain("Seguro os baldes")
+        for (const hidden of [false, true]) {
+            await MaddoxCampaignModel.updateOne({ _id: c.id }, { $set: { hidePlayerActions: hidden } })
+            for (const userId of [c.owner, c.player]) {
+                const json = await text(userId)
+                expect(json).not.toContain("Seguro os baldes")
+                expect(json).not.toContain("Corro para buscar baldes")
+            }
+        }
     })
 })

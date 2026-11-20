@@ -24,7 +24,7 @@ export function JournalSearchDialog({ campaignId, color }: { campaignId: string;
                             <GlassModalTitle className="flex items-center gap-2">
                                 <Search className="h-4 w-4" style={{ color }} aria-hidden /> Buscar no diário
                             </GlassModalTitle>
-                            <GlassModalDescription>NPCs, locais, missões, anotações, o grupo e as falas da mesa — só o que os jogadores já sabem.</GlassModalDescription>
+                            <GlassModalDescription>NPCs, locais, missões, anotações, o grupo, as imagens e os capítulos — só o que os jogadores já sabem.</GlassModalDescription>
                         </GlassModalHeader>
                         <div className="max-h-[60vh] overflow-y-auto pr-1">
                             <JournalSearch campaignId={campaignId} color={color} autoFocus onNavigate={() => change(false)} />

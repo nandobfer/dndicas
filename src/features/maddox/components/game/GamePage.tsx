@@ -53,7 +53,7 @@ import { restBannerText } from "../../rest-view"
 import { useMaddoxRest } from "../../hooks/useMaddoxRest"
 import { CampaignChatHeader } from "../CampaignChatHeader"
 import { JournalSearchDialog } from "../journal/JournalSearchDialog"
-import { JournalLinkButton } from "../journal/JournalLinkButton"
+import { JournalWindowButton } from "../journal/JournalWindow"
 
 const errorStatus = (error: unknown) => (error as { response?: { status?: number } } | null)?.response?.status
 
@@ -253,7 +253,7 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
                         <SceneImageButton control={state.sceneImages} busy={sceneImage.isPending} onRequest={() => sceneImage.mutate()} />
 
                         <JournalSearchDialog campaignId={state.campaignId} color={color} />
-                        <JournalLinkButton campaignId={state.campaignId} />
+                        <JournalWindowButton campaignId={state.campaignId} />
                         <MySheetButton sheet={state.me.sheet} />
                     </>
                 }
