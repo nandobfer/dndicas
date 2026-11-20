@@ -5,7 +5,6 @@ import { api, unwrapApi } from "@/lib/api"
 import type { ApiResponse } from "@/lib/types/api"
 import { useDebounce } from "@/core/hooks/useDebounce"
 import type { MaddoxCampaignMemoryKind, MaddoxQuestStatus } from "../constants"
-import type { MaddoxGameMessagesPageDto } from "../game-types"
 import { MADDOX_JOURNAL_QUERY_MIN, type MaddoxJournalImageKind } from "../journal-schemas"
 import type { MaddoxJournalChapterDto, MaddoxJournalImageDto, MaddoxJournalMemoryDto, MaddoxJournalNpcDto, MaddoxJournalPageDto, MaddoxJournalPartyMemberDto, MaddoxJournalSearchDto, MaddoxJournalSummaryDto } from "../journal-types"
 import { MADDOX_CAMPAIGNS_KEY } from "./useMaddoxCampaigns"
@@ -89,18 +88,6 @@ export function useMaddoxJournalImages(campaignId: string, kind: MaddoxJournalIm
                 ).data,
             ),
         getNextPageParam: (last) => last.nextCursor,
-        enabled,
-    })
-}
-
-/** Histórico da mesa: a página mais recente e as anteriores pelo cursor (`…/game/messages?before=`). */
-export function useMaddoxJournalHistory(campaignId: string, enabled = true) {
-    return useInfiniteQuery({
-        queryKey: [...maddoxJournalKey(campaignId), "history"],
-        initialPageParam: null as string | null,
-        queryFn: async ({ pageParam }) =>
-            unwrapApi((await api.get<ApiResponse<MaddoxGameMessagesPageDto>>(`/maddox/campaigns/${campaignId}/game/messages`, { params: pageParam ? { before: pageParam } : {} })).data),
-        getNextPageParam: (last) => (last.hasMore && last.messages[0] ? last.messages[0].id : null),
         enabled,
     })
 }

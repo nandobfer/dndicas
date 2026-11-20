@@ -8,7 +8,8 @@ import { OpexNpcActions } from "../game/OpexNpcActions"
 import { cn } from "@/lib/utils"
 import { journalAnchor } from "./journal-links"
 import { JournalItemCard, JournalListState, JournalText, LoadMore, SeekNotice } from "./JournalLists"
-import { useJournalHash, useScrollToAnchor, useSeekAnchor } from "./use-journal-hash-target"
+import { useJournalAnchor } from "./journal-navigation"
+import { useScrollToAnchor, useSeekAnchor } from "./use-journal-hash-target"
 
 /**
  * NPCs que o grupo conhece: retrato, nome, situação e descrição pública (as notas do mestre nunca chegam aqui). NPC Opex
@@ -18,7 +19,7 @@ export function JournalNpcList({ campaignId, color, manageOpex = false }: { camp
     const npcs = useMaddoxJournalNpcs(campaignId)
     const items = npcs.data?.pages.flatMap((page) => page.items) ?? []
     const anchors = new Set(items.map((npc) => journalAnchor.npc(npc.id)))
-    const target = useJournalHash()
+    const target = useJournalAnchor()
     const found = anchors.has(target)
     useScrollToAnchor(target, found)
     const seek = useSeekAnchor({ wanted: target.startsWith("npc-"), found, hasNextPage: Boolean(npcs.hasNextPage), isFetchingNextPage: npcs.isFetchingNextPage, fetchNextPage: npcs.fetchNextPage, pages: npcs.data?.pages.length ?? 0, failed: npcs.isError })

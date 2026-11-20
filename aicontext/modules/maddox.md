@@ -1384,9 +1384,9 @@ obedecer ao prompt; o segredo tem lugar próprio (`masterNotes` ou `save_memory`
 **Busca.** Regex que ignora acentos e caixa (`accentInsensitivePattern`: cada vogal/ç/ñ vira a classe das variantes; o resto é
 escapado), também por pedaço de palavra, sempre filtrada pela campanha — o índice de texto antigo das memórias não é usado (não
 começa por `campaignId` e só acha palavras inteiras). Procura em NPCs (nome e descrição pública), memórias (título, texto e tags),
-falas da mesa (`narration`, `declaration`, `question`, `answer`, sem as respostas que falharam; com as declarações ocultas da
-DND-36, as dos outros jogadores ficam de fora pela mesma regra do chat), grupo (nome, perfil e condição) e
-situação atual. Termo de 2 a 100 caracteres (fora disso, 400). Até 20 por grupo (`hasMore`), cada um com um trecho de ~160
+grupo (nome, perfil e condição), situação atual, legendas das imagens e capítulos. Desde a DND-77 as **falas da mesa não entram
+na busca** (a aba Histórico saiu do diário): a resposta não tem mais o grupo `messages`, e o texto das declarações (ocultas ou não,
+DND-36) nunca sai por este caminho. Termo de 2 a 100 caracteres (fora disso, 400). Até 20 por grupo (`hasMore`), cada um com um trecho de ~160
 caracteres em texto corrido (sem `{{Tipo:Nome}}` nem ênfase do Markdown). O `search_memories` do narrador usa o mesmo regex.
 
 API (todas `GET`, `maddox.play`, usuário efetivo):
@@ -1396,16 +1396,16 @@ API (todas `GET`, `maddox.play`, usuário efetivo):
   inválido = 400; `kind` inválido = 400 com as opções). Missão sem situação gravada conta como `ativa`.
 - `GET …/journal/party` — personagens do grupo.
 - `GET …/journal/search?q=` — busca.
-- O histórico usa `GET …/game/messages` (sem `before` = página mais recente).
 
 Índice novo (pela `ensure-maddox-indexes`): `{ campaignId, visibility, _id: -1 }` em `maddox_npcs`. As anotações
 do Diário vêm do Engramind (seção "Memórias de campanha no Engramind").
 
 **Tela `/campanhas/[id]/diario`** (`pageAccess`): cabeçalho da campanha (`CampaignChatHeader`, cor do rigor, "Voltar à mesa"),
 card de busca com espera de 300 ms e resultados agrupados (Situação atual, NPCs, Locais, Missões, Outras anotações, Grupo,
-Histórico da mesa) com o termo destacado; abas `IntegrationTabs` (`?aba=historico|npcs|locais|missoes|anotacoes|grupo`):
-histórico em modo leitura (`GameMessageList readOnly`: nenhum card é "meu", então nada de rolar, cancelar ou reagir;
-`?msg=<id>` carrega até 10 páginas atrás da mensagem e a destaca, depois avisa "Mensagem muito antiga"), NPCs (um por linha; morto esmaecido),
+Imagens, Capítulos) com o termo destacado; abas `IntegrationTabs` na ordem de `MADDOX_JOURNAL_TABS`
+(`?aba=capitulos|imagens|npcs|locais|missoes|anotacoes|grupo`). A primeira, **Capítulos**, é a padrão (sem `?aba=`); valor
+desconhecido — inclusive o antigo `?aba=historico&msg=` — cai nela sem erro (`parseJournalTab`). A aba Histórico foi removida na
+DND-77 (o histórico completo continua na própria mesa). NPCs (um por linha; morto esmaecido),
 locais, missões (filtro por situação em `GlassSelector` com as cores de raridade, na URL `?situacao=` — o link de um resultado
 da busca o zera), anotações (`?tipo=evento|relacao|fato|outro`) e grupo. NPCs e anotações abertos por link fora da primeira
 página: a lista carrega as páginas seguintes até o item (até 10, `MADDOX_JOURNAL_SEEK_PAGES`) e depois avisa "Item muito antigo:
@@ -1413,6 +1413,22 @@ use “Carregar mais”". Ao lado, "Situação atual" (`JournalStateCard`, o mes
 destaque, chip "atualizada no turno N" e as missões ativas) e o cenário com "Ver o cenário completo" animado (`AnimatedExpand`). Cada item tem âncora
 (`#npc-…`, `#anotacao-…`, `#personagem-…`) e fica em destaque quando aberto por link. Em dia pelo `maddox.game.changed`
 (as chaves ficam sob `MADDOX_CAMPAIGNS_KEY`).
+
+**Diário em janela na mesa (DND-77).** O botão "Diário" do cabeçalho da mesa (`JournalWindowButton`, `data-testid="journal-link"`,
+em `components/journal/JournalWindow.tsx`) não navega: abre o diário num `GlassModal` sobre a mesa — tela cheia no celular,
+janela centralizada no desktop (`sm:max-w-6xl`, 85vh), título "Diário — <campanha>", X, Esc e clique fora, rolagem interna
+própria (`journal-window-scroll`) sem mover a mesa. O resumo só é buscado com a janela aberta e o estado zera ao fechar (reabre em
+Capítulos). Estrutura:
+
+- `JournalView` (`components/journal/JournalView.tsx`) é o corpo comum (busca, abas, situação e cenário); a página e a janela só
+  mudam a casca e o provedor de navegação.
+- `journal-navigation.tsx`: `JournalNavigation` (aba, filtros, âncora, `selectTab`/`select…`, `go(target)`). A página usa a
+  navegação pela URL (`?aba=`, `?tipo=`, `?situacao=`, `?imagens=`, âncora no `#`); a janela usa `useLocalJournalNavigation`
+  (estado local, nada na URL da mesa). As listas leem a âncora por `useJournalAnchor` (o `#` na página, o estado na janela).
+- Links internos usam `JournalTargetLink` + `journalLocation(target)` (função pura em `journal-links.ts`, a mesma regra do
+  `journalHref`): na página/fora do diário é um `<Link>`; na janela mantém o `href` mas o clique troca a aba e destaca o item ali.
+- Fora da janela, nada muda: "Buscar no diário" da mesa (`JournalSearchDialog`), o "Ver no diário" do painel de NPCs e o
+  `JournalLinkButton` do tutorial continuam levando à página `/campanhas/[id]/diario`.
 
 
 **Card da história no lobby (DND-37).** Em `/campanhas/[id]`, o `CampaignStoryCard` (`components/campaigns/`) substitui o
@@ -1661,9 +1677,9 @@ ganha `counts.images` (badge da aba), com o mesmo filtro. A busca do diário pro
 
 Tela: aba `imagens` (`?aba=imagens`, filtro `GlassSelector` "Todas | Cenas | Retratos" em `?imagens=`), `JournalImageGallery`: grade
 de cards com "Turno N", a origem (situação, "Pedido do dono", "Fim de batalha" ou "Retrato de <NPC>"), a figura da mesa
-(`GameSceneImage`: legenda e ampliar) e "Ver no histórico" (`?aba=historico&msg=`) ou "Ver NPC"; âncora `#imagem-<id>` com destaque
+(`GameSceneImage`: legenda e ampliar) e, nos retratos, "Ver NPC" (o "Ver no histórico" saiu com a aba Histórico, DND-77); âncora `#imagem-<id>` com destaque
 e procura nas páginas seguintes, como as outras listas. Atualiza pelo `maddox.game.changed` (chaves sob `MADDOX_CAMPAIGNS_KEY`).
-Imagens pendentes ou com falha continuam só na mesa e no histórico.
+Imagens pendentes ou com falha continuam só na mesa.
 
 Sem permissão nova: criar/editar já exigem `maddox.play` e ser o dono; o diário exige `maddox.play` e ser membro ativo.
 

@@ -1,7 +1,6 @@
 "use client"
 
-import Link from "next/link"
-import { Image as ImageIcon, MessageCircle, UserRound } from "lucide-react"
+import { Image as ImageIcon, UserRound } from "lucide-react"
 import { GlassSelector } from "@/components/ui/glass-selector"
 import type { MaddoxSceneImageSource } from "../../constants"
 import type { MaddoxGameSceneImageDto } from "../../game-types"
@@ -9,9 +8,10 @@ import type { MaddoxJournalImageKind } from "../../journal-schemas"
 import type { MaddoxJournalImageDto } from "../../journal-types"
 import { useMaddoxJournalImages } from "../../hooks/useMaddoxJournal"
 import { GameSceneImage } from "../game/GameSceneImage"
-import { journalAnchor, journalHref } from "./journal-links"
+import { journalAnchor } from "./journal-links"
 import { JournalItemCard, JournalListState, LoadMore, SeekNotice } from "./JournalLists"
-import { useJournalHash, useScrollToAnchor, useSeekAnchor } from "./use-journal-hash-target"
+import { JournalTargetLink, useJournalAnchor } from "./journal-navigation"
+import { useScrollToAnchor, useSeekAnchor } from "./use-journal-hash-target"
 
 /** Origem da imagem quando ela não tem situação (pedido manual) ou como complemento. */
 export const MADDOX_JOURNAL_IMAGE_SOURCE_LABELS: Record<MaddoxSceneImageSource, string> = {
@@ -45,7 +45,7 @@ export function JournalImageGallery({ campaignId, color, kind }: { campaignId: s
     const images = useMaddoxJournalImages(campaignId, kind)
     const items = images.data?.pages.flatMap((page) => page.items) ?? []
     const anchors = new Set(items.map((image) => journalAnchor.image(image.id)))
-    const target = useJournalHash()
+    const target = useJournalAnchor()
     const found = anchors.has(target)
     useScrollToAnchor(target, found)
     const seek = useSeekAnchor({ wanted: target.startsWith("imagem-"), found, hasNextPage: Boolean(images.hasNextPage), isFetchingNextPage: images.isFetchingNextPage, fetchNextPage: images.fetchNextPage, pages: images.data?.pages.length ?? 0, failed: images.isError })
@@ -68,14 +68,10 @@ export function JournalImageGallery({ campaignId, color, kind }: { campaignId: s
                                 <span className="text-white/60">{origin}</span>
                             </header>
                             <GameSceneImage image={{ ...asSceneImage(image), situationLabel: null }} color={color} />
-                            {image.messageId ? (
-                                <Link href={journalHref(campaignId, { messageId: image.messageId })} className="inline-flex items-center gap-1 text-xs text-white/70 hover:text-white" data-testid="journal-image-message-link">
-                                    <MessageCircle className="h-3.5 w-3.5" aria-hidden /> Ver no histórico
-                                </Link>
-                            ) : image.npc ? (
-                                <Link href={journalHref(campaignId, { npcId: image.npc.id })} className="inline-flex items-center gap-1 text-xs text-white/70 hover:text-white" data-testid="journal-image-npc-link">
+                            {image.npc ? (
+                                <JournalTargetLink campaignId={campaignId} target={{ npcId: image.npc.id }} className="inline-flex items-center gap-1 text-xs text-white/70 hover:text-white" data-testid="journal-image-npc-link">
                                     <UserRound className="h-3.5 w-3.5" aria-hidden /> Ver NPC
-                                </Link>
+                                </JournalTargetLink>
                             ) : null}
                         </JournalItemCard>
                     )

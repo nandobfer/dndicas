@@ -1082,7 +1082,6 @@ describe("mesa Maddox — testes pedidos pelo Maddox (Maddox 5)", () => {
             query: "bart",
             npcs: { items: [{ id: "n1", name: "Bartolomeu", portraitUrl: null, status: "active", excerpt: "Taverneiro gordo." }], hasMore: false },
             memories: { items: [], hasMore: false },
-            messages: { items: [{ id: "msg-9", kind: "narration", turnNumber: 4, characterName: null, excerpt: "Bartolomeu grita por água.", createdAt: "2026-10-31T10:00:00.000Z" }], hasMore: false },
             party: { items: [], hasMore: false },
             state: null,
         }
@@ -1091,16 +1090,18 @@ describe("mesa Maddox — testes pedidos pelo Maddox (Maddox 5)", () => {
         renderWithQueryClient(<GamePage campaignId="c1" />)
         await screen.findByTestId("game-page")
 
-        expect(screen.getByTestId("journal-link")).toHaveAttribute("href", "/campanhas/c1/diario")
+        // DND-77: "Diário" abre a janela sobre a mesa (botão, não link).
+        expect(screen.getByTestId("journal-link").tagName).toBe("BUTTON")
+        expect(screen.getByTestId("journal-link")).not.toHaveAttribute("href")
         expect(within(screen.getByTestId("npc-n1")).getByRole("link")).toHaveAttribute("href", "/campanhas/c1/diario?aba=npcs#npc-n1")
 
         fireEvent.click(screen.getByTestId("journal-search-open"))
         const dialog = await screen.findByRole("dialog")
         fireEvent.change(within(dialog).getByRole("searchbox", { name: "Buscar no diário" }), { target: { value: "bart" } })
         const hits = await within(dialog).findAllByTestId("journal-search-hit", {}, { timeout: 2000 })
-        expect(hits.map((hit) => hit.getAttribute("href"))).toEqual(["/campanhas/c1/diario?aba=npcs#npc-n1", "/campanhas/c1/diario?aba=historico&msg=msg-9"])
+        expect(hits.map((hit) => hit.getAttribute("href"))).toEqual(["/campanhas/c1/diario?aba=npcs#npc-n1"])
         expect(get).toHaveBeenCalledWith("/maddox/campaigns/c1/journal/search", { params: { q: "bart" } })
-        expect(within(dialog).getByTestId("search-group-messages")).toHaveTextContent("Turno 4")
+        expect(within(dialog).queryByTestId("search-group-messages")).toBeNull()
         fireEvent.click(hits[0]!)
         await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument())
     })

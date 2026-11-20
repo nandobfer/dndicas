@@ -210,7 +210,6 @@ describe("avatares fora dos links (DND-55)", () => {
             query: "grim",
             npcs: { items: [{ id: "n1", name: "Grimbold", portraitUrl: null, status: "active", excerpt: "ferreiro" }], hasMore: false },
             memories: empty,
-            messages: empty,
             party: empty,
             images: empty,
             state: null,

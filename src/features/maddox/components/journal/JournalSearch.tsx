@@ -1,18 +1,18 @@
 "use client"
 
 import { Fragment, useMemo, useState, type ReactNode } from "react"
-import Link from "next/link"
-import { BookMarked, BookOpen, Image as ImageIcon, Loader2, MapPin, MessageCircle, Search, ScrollText, Target, UserRound, Users } from "lucide-react"
+import { BookMarked, BookOpen, Image as ImageIcon, Loader2, MapPin, Search, ScrollText, Target, UserRound, Users } from "lucide-react"
 import { Input } from "@/components/ui/opex/input"
 import { rarityColors } from "@/lib/config/colors"
 import { cn } from "@/lib/utils"
-import { MADDOX_CAMPAIGN_MEMORY_KIND_LABELS, MADDOX_NPC_STATUS_LABELS, MADDOX_QUEST_STATUS_DEFS, MADDOX_AVATAR_CONTEXT, MADDOX_TALK_LABEL, npcAvatarContext } from "../../constants"
+import { MADDOX_CAMPAIGN_MEMORY_KIND_LABELS, MADDOX_NPC_STATUS_LABELS, MADDOX_QUEST_STATUS_DEFS, MADDOX_AVATAR_CONTEXT, npcAvatarContext } from "../../constants"
 import { accentInsensitivePattern } from "../../journal-search"
 import { MADDOX_JOURNAL_QUERY_MIN } from "../../journal-schemas"
 import type { MaddoxJournalSearchDto, MaddoxJournalSearchGroup } from "../../journal-types"
 import { useMaddoxJournalSearch } from "../../hooks/useMaddoxJournal"
 import { MemberAvatar, RarityChip } from "../campaigns/campaign-visuals"
-import { journalHref } from "./journal-links"
+import type { JournalTarget } from "./journal-links"
+import { JournalTargetLink } from "./journal-navigation"
 
 /** Destaca o termo no texto (sem acento e sem caixa, como a busca do servidor). */
 export function HighlightedText({ text, query }: { text: string; query: string }) {
@@ -34,8 +34,6 @@ export function HighlightedText({ text, query }: { text: string; query: string }
         </>
     )
 }
-
-const MESSAGE_KIND_LABELS = { narration: "Narração do Maddox", answer: "Resposta do Maddox", declaration: "Declaração", question: "Pergunta ao mestre", talk: MADDOX_TALK_LABEL } as const
 
 interface Props {
     campaignId: string
@@ -82,7 +80,7 @@ export function JournalSearch({ campaignId, color, onNavigate, autoFocus, term: 
 }
 
 function total(result: MaddoxJournalSearchDto) {
-    return result.npcs.items.length + result.memories.items.length + result.messages.items.length + result.party.items.length + (result.images?.items.length ?? 0) + (result.chapters?.items.length ?? 0) + (result.state ? 1 : 0)
+    return result.npcs.items.length + result.memories.items.length + result.party.items.length + (result.images?.items.length ?? 0) + (result.chapters?.items.length ?? 0) + (result.state ? 1 : 0)
 }
 
 export function JournalSearchResults({ campaignId, color, result, onNavigate }: { campaignId: string; color: string; result: MaddoxJournalSearchDto; onNavigate?: () => void }) {
@@ -110,14 +108,14 @@ export function JournalSearchResults({ campaignId, color, result, onNavigate }: 
             {unavailable}
             {result.state && (
                 <ResultGroup title="Situação atual" icon={Target} color={color} testId="search-group-state">
-                    <ResultLink href={journalHref(campaignId)} onNavigate={onNavigate} title="Situação atual" excerpt={result.state.excerpt} query={q} />
+                    <ResultLink campaignId={campaignId} target={{ tab: "capitulos" }} onNavigate={onNavigate} title="Situação atual" excerpt={result.state.excerpt} query={q} />
                 </ResultGroup>
             )}
             <Group group={result.npcs} title="NPCs" icon={UserRound} color={color} testId="search-group-npcs">
                 {(npc) => (
                     <ResultLink
                         key={npc.id}
-                        href={journalHref(campaignId, { npcId: npc.id })}
+                        campaignId={campaignId} target={{ npcId: npc.id }}
                         onNavigate={onNavigate}
                         title={npc.name}
                         badge={npc.status === "dead" || npc.status === "unknown" ? MADDOX_NPC_STATUS_LABELS[npc.status] : null}
@@ -128,13 +126,13 @@ export function JournalSearchResults({ campaignId, color, result, onNavigate }: 
                 )}
             </Group>
             <Group group={places} title="Locais" icon={MapPin} color={color} testId="search-group-places">
-                {(item) => <ResultLink key={item.id} href={journalHref(campaignId, { memoryId: item.id, kind: item.kind })} onNavigate={onNavigate} title={item.title} excerpt={item.excerpt} query={q} />}
+                {(item) => <ResultLink key={item.id} campaignId={campaignId} target={{ memoryId: item.id, kind: item.kind }} onNavigate={onNavigate} title={item.title} excerpt={item.excerpt} query={q} />}
             </Group>
             <Group group={quests} title="Missões" icon={ScrollText} color={color} testId="search-group-quests">
                 {(item) => (
                     <ResultLink
                         key={item.id}
-                        href={journalHref(campaignId, { memoryId: item.id, kind: item.kind })}
+                        campaignId={campaignId} target={{ memoryId: item.id, kind: item.kind }}
                         onNavigate={onNavigate}
                         title={item.title}
                         chip={item.status ? <RarityChip color={rarityColors[MADDOX_QUEST_STATUS_DEFS[item.status].rarity]}>{MADDOX_QUEST_STATUS_DEFS[item.status].label}</RarityChip> : null}
@@ -144,13 +142,13 @@ export function JournalSearchResults({ campaignId, color, result, onNavigate }: 
                 )}
             </Group>
             <Group group={notes} title="Outras anotações" icon={BookOpen} color={color} testId="search-group-notes">
-                {(item) => <ResultLink key={item.id} href={journalHref(campaignId, { memoryId: item.id, kind: item.kind })} onNavigate={onNavigate} title={item.title} badge={MADDOX_CAMPAIGN_MEMORY_KIND_LABELS[item.kind]} excerpt={item.excerpt} query={q} />}
+                {(item) => <ResultLink key={item.id} campaignId={campaignId} target={{ memoryId: item.id, kind: item.kind }} onNavigate={onNavigate} title={item.title} badge={MADDOX_CAMPAIGN_MEMORY_KIND_LABELS[item.kind]} excerpt={item.excerpt} query={q} />}
             </Group>
             <Group group={result.party} title="Grupo" icon={Users} color={color} testId="search-group-party">
                 {(member) => (
                     <ResultLink
                         key={member.memberId}
-                        href={journalHref(campaignId, { memberId: member.memberId })}
+                        campaignId={campaignId} target={{ memberId: member.memberId }}
                         onNavigate={onNavigate}
                         title={member.characterName}
                         excerpt={member.excerpt}
@@ -164,7 +162,7 @@ export function JournalSearchResults({ campaignId, color, result, onNavigate }: 
                     {(image) => (
                         <ResultLink
                             key={image.id}
-                            href={journalHref(campaignId, { imageId: image.id })}
+                            campaignId={campaignId} target={{ imageId: image.id }}
                             onNavigate={onNavigate}
                             title={image.npcName ? `Retrato de ${image.npcName}` : "Imagem da cena"}
                             badge={image.turnNumber > 0 ? `Turno ${image.turnNumber}` : null}
@@ -178,22 +176,9 @@ export function JournalSearchResults({ campaignId, color, result, onNavigate }: 
             )}
             {result.chapters && (
                 <Group group={result.chapters} title="Capítulos" icon={BookMarked} color={color} testId="search-group-chapters">
-                    {(chapter) => <ResultLink key={chapter.id} href={journalHref(campaignId, { tab: "capitulos" })} onNavigate={onNavigate} title={chapter.title} badge={`Turno ${chapter.turnNumber}`} excerpt={chapter.excerpt} query={q} />}
+                    {(chapter) => <ResultLink key={chapter.id} campaignId={campaignId} target={{ tab: "capitulos" }} onNavigate={onNavigate} title={chapter.title} badge={`Turno ${chapter.turnNumber}`} excerpt={chapter.excerpt} query={q} />}
                 </Group>
             )}
-            <Group group={result.messages} title="Histórico da mesa" icon={MessageCircle} color={color} testId="search-group-messages">
-                {(message) => (
-                    <ResultLink
-                        key={message.id}
-                        href={journalHref(campaignId, { messageId: message.id })}
-                        onNavigate={onNavigate}
-                        title={message.characterName ? `${message.characterName} · ${MESSAGE_KIND_LABELS[message.kind]}` : MESSAGE_KIND_LABELS[message.kind]}
-                        badge={`Turno ${message.turnNumber}`}
-                        excerpt={message.excerpt}
-                        query={q}
-                    />
-                )}
-            </Group>
         </div>
     )
 }
@@ -219,10 +204,10 @@ function ResultGroup({ title, icon: Icon, color, testId, children }: { title: st
     )
 }
 
-function ResultLink({ href, onNavigate, title, excerpt, query, badge, chip, avatar }: { href: string; onNavigate?: () => void; title: string; excerpt: string; query: string; badge?: string | null; chip?: ReactNode; avatar?: ReactNode }) {
+function ResultLink({ campaignId, target, onNavigate, title, excerpt, query, badge, chip, avatar }: { campaignId: string; target: JournalTarget; onNavigate?: () => void; title: string; excerpt: string; query: string; badge?: string | null; chip?: ReactNode; avatar?: ReactNode }) {
     return (
         <li className="relative">
-            <Link href={href} onClick={onNavigate} className={cn("flex items-start gap-2.5 px-3 py-2 transition-colors hover:bg-white/[0.05] focus-visible:bg-white/[0.05] focus-visible:outline-none", avatar && "pl-[3.125rem]")} data-testid="journal-search-hit">
+            <JournalTargetLink campaignId={campaignId} target={target} onClick={onNavigate} className={cn("flex items-start gap-2.5 px-3 py-2 transition-colors hover:bg-white/[0.05] focus-visible:bg-white/[0.05] focus-visible:outline-none", avatar && "pl-[3.125rem]")} data-testid="journal-search-hit">
                 <span className="min-w-0 flex-1 space-y-0.5">
                     <span className="flex flex-wrap items-center gap-1.5 text-sm font-medium text-white">
                         <HighlightedText text={title} query={query} />
@@ -235,7 +220,7 @@ function ResultLink({ href, onNavigate, title, excerpt, query, badge, chip, avat
                         </span>
                     )}
                 </span>
-            </Link>
+            </JournalTargetLink>
             {/* Avatar fora do link (DND-55): é um botão próprio (retrato grande) e não pode ficar aninhado na navegação. */}
             {avatar && <span className="absolute left-3 top-2 z-10 flex">{avatar}</span>}
         </li>

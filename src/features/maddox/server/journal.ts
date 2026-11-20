@@ -7,9 +7,8 @@ import { loggerFor } from "@/lib/logger"
 import { User } from "@/features/users/models/user"
 import { MADDOX_CAMPAIGN_MEMORY_KINDS, type MaddoxCampaignMemoryKind, type MaddoxCampaignStateField } from "../constants"
 import type { MaddoxSceneImagesSettings } from "../schemas"
-import { MaddoxCampaignMemberModel, MaddoxCampaignMessageModel, MaddoxCharacterModel, MaddoxNpcModel, MaddoxSceneImageModel, type IMaddoxCampaign, type IMaddoxCharacter, type IMaddoxNpc, type IMaddoxSceneImage } from "../models"
+import { MaddoxCampaignMemberModel, MaddoxCharacterModel, MaddoxNpcModel, MaddoxSceneImageModel, type IMaddoxCampaign, type IMaddoxCharacter, type IMaddoxNpc, type IMaddoxSceneImage } from "../models"
 import { accentInsensitivePattern, excerptAround } from "../journal-search"
-import { hiddenPlayerActionsFilter } from "../player-actions-visibility"
 import { maddoxJournalImagesSchema, maddoxJournalMemoriesSchema, maddoxJournalNpcsSchema, maddoxJournalSearchSchema, type MaddoxJournalImageKind } from "../journal-schemas"
 import type {
     MaddoxJournalImageDto,
@@ -45,7 +44,6 @@ const NPC_FIELDS = "name portraitUrl status publicDescription updatedAt opex.act
 
 export const MADDOX_JOURNAL_PAGE_SIZE = 30
 export const MADDOX_JOURNAL_SEARCH_LIMIT = 20
-const MADDOX_JOURNAL_SEARCHABLE_MESSAGES = ["narration", "declaration", "question", "answer"] as const
 
 type NpcDoc = Pick<IMaddoxNpc, "_id" | "name" | "portraitUrl" | "status" | "publicDescription" | "updatedAt" | "opex">
 type MemoryDoc = Pick<CampaignMemoryView, "id" | "kind" | "title" | "text" | "tags" | "status" | "turnNumber" | "updatedAt">
@@ -310,20 +308,18 @@ function group<T>(items: T[]): MaddoxJournalSearchGroup<T> {
 
 /**
  * Busca por texto (sem acento e sem caixa, também por pedaço de palavra) no que os jogadores sabem: NPCs (nome e
- * descrição pública), memórias públicas (título, texto e tags), falas da mesa, personagens do grupo, situação atual e a
+ * descrição pública), memórias públicas (título, texto e tags), personagens do grupo, situação atual e a
  * legenda das imagens (DND-22).
  */
 export async function searchJournal(campaignId: string, input: unknown, userId: string): Promise<MaddoxJournalSearchDto> {
     const { q } = parse(maddoxJournalSearchSchema, input)
-    const { campaign, member } = await loadJournalMembership(campaignId, userId)
-    // Declarações dos outros ocultas no chat (DND-36): o texto delas também não entra na busca.
-    const hiddenActions = campaign.hidePlayerActions ? hiddenPlayerActionsFilter(member._id) : {}
+    const campaign = await loadJournalCampaign(campaignId, userId)
     const pattern = accentInsensitivePattern(q)
     const match = { $regex: pattern, $options: "i" }
     const regex = new RegExp(pattern, "i")
     const take = MADDOX_JOURNAL_SEARCH_LIMIT + 1
 
-    const [npcs, memoryHits, messages, party, images] = await Promise.all([
+    const [npcs, memoryHits, party, images] = await Promise.all([
         MaddoxNpcModel.find({ campaignId: campaign._id, ...PLAYER_VISIBLE, $or: [{ name: match }, { publicDescription: match }] })
             .sort({ name: 1 })
             .limit(take)
@@ -333,12 +329,6 @@ export async function searchJournal(campaignId: string, input: unknown, userId: 
             .then(({ searchCampaignMemories }) => searchCampaignMemories(String(campaign._id), { query: q, scope: "players", reader: "app", limit: take }))
             .then((items): { items: MemoryDoc[]; unavailable: boolean } => ({ items, unavailable: false }))
             .catch((): { items: MemoryDoc[]; unavailable: boolean } => ({ items: [], unavailable: true })),
-        // DND-74: a conversa com o mestre (`reminder` com `talk`) também entra, com o rótulo próprio.
-        MaddoxCampaignMessageModel.find({ campaignId: campaign._id, $or: [{ kind: { $in: MADDOX_JOURNAL_SEARCHABLE_MESSAGES } }, { kind: "reminder", "reminder.talk": true }], error: null, content: match, ...hiddenActions })
-            .sort({ _id: -1 })
-            .limit(take)
-            .select("kind turnNumber characterName content createdAt")
-            .lean<{ _id: Types.ObjectId; kind: (typeof MADDOX_JOURNAL_SEARCHABLE_MESSAGES)[number] | "reminder"; turnNumber: number; characterName: string | null; content: string; createdAt: Date }[]>(),
         partyMembers(campaign._id),
         visibleImagesFilter(campaign._id, "todas").then((filter) =>
             MaddoxSceneImageModel.find({ ...filter, caption: match })
@@ -382,16 +372,6 @@ export async function searchJournal(campaignId: string, input: unknown, userId: 
                 const source = regex.test(memory.text ?? "") ? memory.text : regex.test(memory.title) ? memory.text || memory.title : (memory.tags ?? []).find((tag) => regex.test(tag)) ?? memory.text
                 return { id: memory.id, kind: memory.kind, title: memory.title, status: memory.kind === "missao" ? (memory.status ?? "ativa") : null, excerpt: excerptAround(source ?? "", q) }
             }),
-        ),
-        messages: group(
-            messages.map((message) => ({
-                id: String(message._id),
-                kind: message.kind === "reminder" ? ("talk" as const) : message.kind,
-                turnNumber: message.turnNumber,
-                characterName: message.kind === "narration" || message.kind === "answer" ? null : (message.characterName ?? null),
-                excerpt: excerptAround(message.content, q),
-                createdAt: iso(message.createdAt),
-            })),
         ),
         party: group(partyHits),
         images: group(imageHits),
